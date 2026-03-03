@@ -29,12 +29,11 @@ export const ticketStore = { // service store
 }; // store 結束
 
 export async function listTickets(): Promise<Ticket[]> { // 給 Page 用：取得列表
-    const res = await fetch("/api/tickets", { method: "GET", cache: "no-store" }); // 用相對路徑避免 env
-    const data = (await res.json()) as { tickets: Ticket[] }; // 解析
-    return data.tickets; // 回傳
+    return ticketStore.list(); // Server Component 直接走 service，避免 server 端相對 URL fetch 問題
 } // listTickets 結束
 
 export async function createTicket(): Promise<void> { // 給 Page 用：建立 ticket（server action）
-    await fetch("/api/tickets", { method: "POST" }); // 呼叫 API
+    "use server"; // 宣告為 Server Action，才能綁定到 <form action>
+    ticketStore.create(); // Server Action 直接走 service，避免 server 端相對 URL fetch 問題
     revalidatePath("/ticket"); // 刷新 ticket 頁
 } // createTicket 結束

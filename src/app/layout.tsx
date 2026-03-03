@@ -14,9 +14,9 @@ type RootLayoutProps = { // 定義 RootLayout 的 props 型別
 export default function RootLayout({ children }: RootLayoutProps) { // layout 可以 default export（規範允許 Page/layout default export）
   return ( // 回傳整個 HTML 結構
     <html lang="zh-Hant"> {/* 設定語系，讓瀏覽器/讀屏更準確 */}
-      <body> {/* body 不寫 inline style，不用 hard-coded 顏色 */}
+      <body>
         {children} {/* 渲染所有 route 的內容 */}
-      </body> {/* body 結束 */}
+      </body>
     </html> // html 結束
   ); // return 結束
 } // RootLayout 結束
