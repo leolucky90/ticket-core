@@ -57,6 +57,7 @@ const zhHant: Dict = { // 繁中翻譯
     [i18nKeys.common.create]: "新增",
     [i18nKeys.common.save]: "儲存",
     [i18nKeys.common.close]: "關閉",
+
 }; // zhHant 結束
 
 export function getDict(locale: Locale) { // 取得指定 locale 的 dictionary

@@ -1,0 +1,41 @@
+export const dict = {
+    "zh-TW": {
+        title: "登入 / 註冊",
+        email: "Email",
+        password: "密碼",
+        signIn: "登入",
+        signUp: "註冊",
+        or: "或",
+        google: "使用 Google 登入",
+        switchToSignUp: "沒有帳號？去註冊",
+        switchToSignIn: "已有帳號？去登入",
+        error: "發生錯誤",
+        dashboard: "控制台",
+        security: "安全性",
+        linkGoogle: "連結 Google 帳號",
+        linked: "已連結",
+        linkNow: "立即連結",
+        logout: "登出",
+    },
+    en: {
+        title: "Sign in / Sign up",
+        email: "Email",
+        password: "Password",
+        signIn: "Sign in",
+        signUp: "Sign up",
+        or: "OR",
+        google: "Continue with Google",
+        switchToSignUp: "No account? Sign up",
+        switchToSignIn: "Have an account? Sign in",
+        error: "Something went wrong",
+        dashboard: "Dashboard",
+        security: "Security",
+        linkGoogle: "Link Google account",
+        linked: "Linked",
+        linkNow: "Link now",
+        logout: "Sign out",
+    },
+} as const;
+
+export type Locale = keyof typeof dict;
+export type DictKey = keyof (typeof dict)["en"];

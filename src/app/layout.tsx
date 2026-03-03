@@ -1,6 +1,7 @@
 // src/app/layout.tsx
 import type { ReactNode } from "react"; // 引入 ReactNode 型別，用來描述 children 的型別
 import "@/styles/globals.css"; // 全域 CSS（含 Tailwind + CSS Variables theme）
+import "@/styles/auth.css";
 
 export const metadata = { // Next.js App Router 的 metadata，用來設定頁面基本資訊
   title: "Ticket Core", // 網站標題（不涉及顏色，符合規範）

@@ -1,0 +1,144 @@
+:root {
+    /* 只用你現有 CSS variables（如果你已有這些變數，這裡不會覆蓋值） */
+}
+
+.auth-page-shell {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+}
+
+.auth-page-main {
+    width: 100%;
+    max-width: 420px;
+}
+
+.auth-card {
+    border: 1px solid rgb(var(--border));
+    background: rgb(var(--panel));
+    border-radius: 16px;
+    padding: 16px;
+}
+
+.auth-divider {
+    height: 1px;
+    background: rgb(var(--border));
+    width: 100%;
+}
+
+.auth-input {
+    width: 100%;
+    border: 1px solid rgb(var(--border));
+    background: transparent;
+    color: rgb(var(--text));
+    border-radius: 12px;
+    padding: 10px 12px;
+    outline: none;
+}
+
+.auth-input:focus {
+    border-color: rgb(var(--accent));
+}
+
+.auth-btn {
+    width: 100%;
+    border: 1px solid rgb(var(--border));
+    background: transparent;
+    color: rgb(var(--text));
+    border-radius: 12px;
+    padding: 10px 12px;
+    cursor: pointer;
+}
+
+.auth-btn:hover {
+    border-color: rgb(var(--accent));
+}
+
+.auth-btn-primary {
+    border-color: rgb(var(--accent));
+}
+
+.auth-muted {
+    color: rgba(var(--text), 0.7);
+}
+
+.auth-link {
+    color: rgb(var(--accent));
+    text-decoration: none;
+}
+
+.auth-link:hover {
+    text-decoration: underline;
+}
+
+.auth-stack {
+    display: grid;
+    gap: 12px;
+}
+
+.auth-head {
+    display: grid;
+    gap: 4px;
+}
+
+.auth-title {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.auth-sub {
+    font-size: 13px;
+}
+
+.auth-row {
+    display: grid;
+    gap: 10px;
+}
+
+.auth-actions {
+    display: grid;
+    gap: 10px;
+}
+
+.auth-switch {
+    font-size: 13px;
+}
+
+.auth-error {
+    font-size: 13px;
+    color: rgba(var(--text), 0.85);
+}
+
+.auth-stack {
+    display: grid;
+    gap: 12px;
+}
+
+.auth-head {
+    display: grid;
+    gap: 4px;
+}
+
+.auth-title {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.auth-sub {
+    font-size: 13px;
+}
+
+.auth-row {
+    display: grid;
+    gap: 10px;
+}
+
+.auth-actions {
+    display: grid;
+    gap: 10px;
+}
+
+.auth-switch {
+    font-size: 13px;
+}
