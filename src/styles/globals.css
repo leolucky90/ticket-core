@@ -1,0 +1,35 @@
+/* src/styles/globals.css */
+@import "tailwindcss";
+
+:root {
+  /* root：定義 light theme 的 CSS variables（只用你允許的集合） */
+  --bg: 10 10 12;
+  /* 背景色（rgb 三通道，供 rgb(var(--bg)) 使用） */
+  --panel: 18 18 22;
+  /* 面板色 */
+  --panel2: 22 22 28;
+  /* 次面板色 */
+  --text: 235 235 245;
+  /* 主文字 */
+  --muted: 170 170 185;
+  /* 次文字 */
+  --border: 60 60 75;
+  /* 邊框 */
+  --accent: 120 180 255;
+  /* 強調色（可自行調，但仍是變數） */
+}
+
+html,
+body {
+  /* 全域基本設定 */
+  height: 100%;
+  /* 讓 min-h-dvh 等行為更一致 */
+}
+
+body {
+  /* body 只用 variables，不 hard-code */
+  background: rgb(var(--bg));
+  /* 背景使用 --bg */
+  color: rgb(var(--text));
+  /* 文字使用 --text */
+}
