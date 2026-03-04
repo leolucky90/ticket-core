@@ -1,29 +1,20 @@
-import { PageShell } from "@/components/ui/page-shell";
-import { Card } from "@/components/ui/card";
 import { headers } from "next/headers";
+import { cookies } from "next/headers";
 import { getLocaleFromHeader, t } from "@/lib/i18n/authIndex";
-import { LinkGoogleClient } from "@/components/auth/LinkGoogleClient";
+import { SecuritySettingsPanel } from "@/components/settings/SecuritySettingsPanel";
 
-const h = await headers();
-const locale = getLocaleFromHeader(h.get("accept-language"));
-export default function SecurityPage() {
-
+export default async function SecurityPage() {
+    const h = await headers();
+    const c = await cookies();
+    const langCookie = c.get("lang")?.value;
+    const locale = langCookie === "en" ? "en" : getLocaleFromHeader(h.get("accept-language"));
 
     return (
-        <PageShell>
-            <Card>
-                <div className="auth-stack">
-                    <div className="auth-title">{t(locale, "security")}</div>
-                    <div className="ui-muted">{t(locale, "linkGoogle")}</div>
-                    <LinkGoogleClient
-                        linkedLabel={t(locale, "linked")}
-                        linkNowLabel={t(locale, "linkNow")}
-                    />
-                    <a className="ui-link" href="/dashboard">
-                        ← {t(locale, "dashboard")}
-                    </a>
-                </div>
-            </Card>
-        </PageShell>
+        <SecuritySettingsPanel
+            title={t(locale, "security")}
+            linkGoogleTitle={t(locale, "linkGoogle")}
+            linkedLabel={t(locale, "linked")}
+            linkNowLabel={t(locale, "linkNow")}
+        />
     );
 }

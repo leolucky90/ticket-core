@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "verify": "pnpm -s lint && pnpm -s exec tsc --noEmit && pnpm -s exec next build --webpack"
   },
   "dependencies": {
     "firebase": "^12.10.0",

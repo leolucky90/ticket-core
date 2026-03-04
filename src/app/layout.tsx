@@ -1,5 +1,6 @@
 // src/app/layout.tsx
 import type { ReactNode } from "react"; // 引入 ReactNode 型別，用來描述 children 的型別
+import { cookies } from "next/headers";
 import "@/styles/globals.css"; // 全域 CSS（含 Tailwind + CSS Variables theme）
 import "@/styles/auth.css";
 
@@ -12,9 +13,26 @@ type RootLayoutProps = { // 定義 RootLayout 的 props 型別
   children: ReactNode; // children 是 ReactNode，代表可渲染的任何內容
 }; // props 型別結束
 
-export default function RootLayout({ children }: RootLayoutProps) { // layout 可以 default export（規範允許 Page/layout default export）
+const themeInitScript = `
+(() => {
+  try {
+    const stored = localStorage.getItem("theme");
+    const theme = stored === "light" || stored === "dark" ? stored : "dark";
+    document.documentElement.setAttribute("data-theme", theme);
+  } catch {}
+})();
+`;
+
+export default async function RootLayout({ children }: RootLayoutProps) { // layout 可以 default export（規範允許 Page/layout default export）
+  const cookieStore = await cookies();
+  const langCookie = cookieStore.get("lang")?.value;
+  const htmlLang = langCookie === "en" ? "en" : "zh-Hant";
+
   return ( // 回傳整個 HTML 結構
-    <html lang="zh-Hant">
+    <html lang={htmlLang} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body>
         {children}
       </body>

@@ -1,22 +1,26 @@
 /* src/styles/globals.css */
 @import "tailwindcss";
 
-:root {
-  /* root：定義 light theme 的 CSS variables（只用你允許的集合） */
+:root,
+:root[data-theme="dark"] {
+  /* root：預設 dark theme 的 CSS variables */
   --bg: 10 10 12;
-  /* 背景色（rgb 三通道，供 rgb(var(--bg)) 使用） */
   --panel: 18 18 22;
-  /* 面板色 */
   --panel2: 22 22 28;
-  /* 次面板色 */
   --text: 235 235 245;
-  /* 主文字 */
   --muted: 170 170 185;
-  /* 次文字 */
   --border: 60 60 75;
-  /* 邊框 */
   --accent: 120 180 255;
-  /* 強調色（可自行調，但仍是變數） */
+}
+
+:root[data-theme="light"] {
+  --bg: 247 249 252;
+  --panel: 255 255 255;
+  --panel2: 241 245 251;
+  --text: 26 31 44;
+  --muted: 95 106 130;
+  --border: 214 222 237;
+  --accent: 49 118 242;
 }
 
 html,
@@ -32,4 +36,5 @@ body {
   /* 背景使用 --bg */
   color: rgb(var(--text));
   /* 文字使用 --text */
+  transition: background-color 0.2s ease, color 0.2s ease;
 }

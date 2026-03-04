@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { UserInfo } from "firebase/auth";
 import { linkWithPopup, signOut } from "firebase/auth";
 import { fbAuth, fbGoogleProvider } from "@/lib/firebase-client/client";
@@ -13,17 +13,26 @@ export function LinkGoogleClient({
     linkedLabel: string;
     linkNowLabel: string;
 }) {
-    const [linked, setLinked] = useState(false);
-
-    useEffect(() => {
+    const [linked, setLinked] = useState<boolean>(() => {
         const u = fbAuth.currentUser;
-        if (!u) return;
+        if (!u) return false;
+        return (u.providerData ?? []).some((p: UserInfo) => p.providerId === "google.com");
+    });
 
-        const hasGoogle = (u.providerData ?? []).some((p: UserInfo) => p.providerId === "google.com");
-        setLinked(hasGoogle);
+    // keep linked state in sync if auth state changes
+    useEffect(() => {
+        const unsub = fbAuth.onAuthStateChanged((u) => {
+            if (!u) {
+                setLinked(false);
+                return;
+            }
+            const hasGoogle = (u.providerData ?? []).some((p: UserInfo) => p.providerId === "google.com");
+            setLinked(hasGoogle);
+        });
+        return () => unsub();
     }, []);
 
-    const disabled = useMemo(() => linked, [linked]);
+    const disabled = linked; // same as useMemo for simple value
 
     return (
         <AuthButton
