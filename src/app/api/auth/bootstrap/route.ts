@@ -1,20 +1,18 @@
 import { NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth/session.server";
-import { adminAuth } from "@/lib/firebase/admin";
+import { getSessionUser } from "@/lib/auth-enterprise/session.server";
+import { fbAdminAuth } from "@/lib/firebase-server";
 import { ensureUserDoc } from "@/lib/services/user.service";
 
 export async function POST() {
-    const user = await getSessionUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const session = await getSessionUser();
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const record = await adminAuth.getUser(user.uid);
-    const providers = (record.providerData ?? [])
-        .map((p) => p.providerId)
-        .filter(Boolean);
+    const record = await fbAdminAuth.getUser(session.uid);
+    const providers = (record.providerData ?? []).map((p) => p.providerId).filter(Boolean);
 
     const doc = await ensureUserDoc({
-        uid: user.uid,
-        email: user.email,
+        uid: session.uid,
+        email: session.email,
         providers,
     });
 

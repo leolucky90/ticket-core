@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui/Button";
+import { AuthButton } from "@/components/auth/ui/AuthButton";
 import { auth } from "@/lib/firebase/client";
 import { signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 export function LogoutButton({ label }: { label: string }) {
     const router = useRouter();
     return (
-        <Button
+        <AuthButton
             type="button"
             onClick={async () => {
                 await signOut(auth);
@@ -18,6 +18,6 @@ export function LogoutButton({ label }: { label: string }) {
             }}
         >
             {label}
-        </Button>
+        </AuthButton>
     );
 }

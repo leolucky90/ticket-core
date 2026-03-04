@@ -1,12 +1,13 @@
-import { PageShell } from "@/components/ui/PageShell";
-import { Card } from "@/components/ui/Card";
+import { PageShell } from "@/components/ui/page-shell";
+import { Card } from "@/components/ui/card";
 import { headers } from "next/headers";
-import { getLocaleFromHeader, t } from "@/lib/i18n";
+import { getLocaleFromHeader, t } from "@/lib/i18n/authIndex";
 import { LinkGoogleClient } from "@/components/auth/LinkGoogleClient";
 
-export default async function SecurityPage() {
-    const h = await headers();
-    const locale = getLocaleFromHeader(h.get("accept-language"));
+const h = await headers();
+const locale = getLocaleFromHeader(h.get("accept-language"));
+export default function SecurityPage() {
+
 
     return (
         <PageShell>

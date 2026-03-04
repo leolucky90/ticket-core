@@ -1,8 +1,8 @@
 "use client";
 
-import { Button } from "@/components/auth/ui/AuthButton";
-import { auth, googleProvider } from "@/lib/firebase-server/crud";
 import { signInWithPopup } from "firebase/auth";
+import { fbAuth, fbGoogleProvider } from "@/lib/firebase-client/client";
+import { AuthButton } from "@/components/auth/ui/AuthButton";
 
 export function GoogleAuthButton({
     label,
@@ -12,15 +12,15 @@ export function GoogleAuthButton({
     onAuthed: (idToken: string) => Promise<void>;
 }) {
     return (
-        <Button
+        <AuthButton
             type="button"
             onClick={async () => {
-                const cred = await signInWithPopup(auth, googleProvider);
+                const cred = await signInWithPopup(fbAuth, fbGoogleProvider);
                 const idToken = await cred.user.getIdToken(true);
                 await onAuthed(idToken);
             }}
         >
             {label}
-        </Button>
+        </AuthButton>
     );
 }

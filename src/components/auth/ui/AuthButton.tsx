@@ -3,9 +3,6 @@ export function AuthButton(
 ) {
     const { variant = "default", ...rest } = props;
     return (
-        <button
-            className={variant === "primary" ? "auth-btn auth-btn-primary" : "auth-btn"}
-            {...rest}
-        />
+        <button className={variant === "primary" ? "auth-btn auth-btn-primary" : "auth-btn"} {...rest} />
     );
 }

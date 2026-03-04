@@ -1,6 +1,4 @@
-:root {
-    /* 只用你現有 CSS variables（如果你已有這些變數，這裡不會覆蓋值） */
-}
+@import "@/styles/auth.css";
 
 .auth-page-shell {
     min-height: 100vh;
@@ -108,37 +106,4 @@
 .auth-error {
     font-size: 13px;
     color: rgba(var(--text), 0.85);
-}
-
-.auth-stack {
-    display: grid;
-    gap: 12px;
-}
-
-.auth-head {
-    display: grid;
-    gap: 4px;
-}
-
-.auth-title {
-    font-size: 18px;
-    font-weight: 700;
-}
-
-.auth-sub {
-    font-size: 13px;
-}
-
-.auth-row {
-    display: grid;
-    gap: 10px;
-}
-
-.auth-actions {
-    display: grid;
-    gap: 10px;
-}
-
-.auth-switch {
-    font-size: 13px;
 }

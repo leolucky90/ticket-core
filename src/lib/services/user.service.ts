@@ -1,13 +1,12 @@
 import "server-only";
-import { adminDb } from "@/lib/firebase/admin";
-import type { SessionRole } from "@/lib/auth/session.server";
+import { fbAdminDb } from "@/lib/firebase-server";
 
 export type UserDoc = {
     uid: string;
     email: string;
-    role: SessionRole;
+    role: "staff" | "manager" | "company_admin" | "owner" | "super_admin" | "viewer";
     createdAt: number;
-    providers: string[]; // e.g. ["password","google.com"]
+    providers: string[];
 };
 
 export async function ensureUserDoc(params: {
@@ -15,7 +14,7 @@ export async function ensureUserDoc(params: {
     email: string;
     providers: string[];
 }): Promise<UserDoc> {
-    const ref = adminDb.collection("users").doc(params.uid);
+    const ref = fbAdminDb.collection("users").doc(params.uid);
     const snap = await ref.get();
 
     if (!snap.exists) {
@@ -31,9 +30,7 @@ export async function ensureUserDoc(params: {
     }
 
     const existing = snap.data() as UserDoc;
-    const mergedProviders = Array.from(
-        new Set([...(existing.providers ?? []), ...params.providers]),
-    );
+    const mergedProviders = Array.from(new Set([...(existing.providers ?? []), ...params.providers]));
 
     const merged: UserDoc = {
         ...existing,
@@ -46,6 +43,6 @@ export async function ensureUserDoc(params: {
 }
 
 export async function getUserDoc(uid: string): Promise<UserDoc | null> {
-    const snap = await adminDb.collection("users").doc(uid).get();
+    const snap = await fbAdminDb.collection("users").doc(uid).get();
     return snap.exists ? (snap.data() as UserDoc) : null;
 }

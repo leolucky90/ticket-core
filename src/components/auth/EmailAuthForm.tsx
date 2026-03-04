@@ -1,36 +1,39 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Button } from "@/components/ui/Button";
-import { Divider } from "@/components/ui/Divider";
-import { Input } from "@/components/ui/Input";
-import { auth } from "@/lib/firebase/client";
+import type { ChangeEvent } from "react";
 import {
     createUserWithEmailAndPassword,
     sendEmailVerification,
     signInWithEmailAndPassword,
     signOut,
 } from "firebase/auth";
+import { fbAuth } from "@/lib/firebase-client/client";
+import { AuthButton } from "@/components/auth/ui/AuthButton";
+import { AuthDivider } from "@/components/auth/ui/AuthDivider";
+import { AuthInput } from "@/components/auth/ui/AuthInput";
 
 type Mode = "signIn" | "signUp";
+
+type Labels = {
+    email: string;
+    password: string;
+    signIn: string;
+    signUp: string;
+    switchToSignUp: string;
+    switchToSignIn: string;
+    error: string;
+    or: string;
+    verifyNeeded: string;
+    resendVerify: string;
+    verifySent: string;
+};
 
 export function EmailAuthForm({
     labels,
     onAuthed,
 }: {
-    labels: {
-        email: string;
-        password: string;
-        signIn: string;
-        signUp: string;
-        switchToSignUp: string;
-        switchToSignIn: string;
-        error: string;
-        or: string;
-        verifyNeeded: string;
-        resendVerify: string;
-        verifySent: string;
-    };
+    labels: Labels;
     onAuthed: (idToken: string) => Promise<void>;
 }) {
     const [mode, setMode] = useState<Mode>("signIn");
@@ -43,10 +46,17 @@ export function EmailAuthForm({
         [mode, labels],
     );
 
-    async function resendVerification() {
-        const u = auth.currentUser;
-        if (!u) return;
+    function onEmailChange(e: ChangeEvent<HTMLInputElement>) {
+        setEmail(e.target.value);
+    }
 
+    function onPwChange(e: ChangeEvent<HTMLInputElement>) {
+        setPw(e.target.value);
+    }
+
+    async function resendVerification() {
+        const u = fbAuth.currentUser;
+        if (!u) return;
         await sendEmailVerification(u);
         setMsg(labels.verifySent);
     }
@@ -54,52 +64,36 @@ export function EmailAuthForm({
     return (
         <div className="auth-actions">
             <div className="auth-row">
-                <Input
-                    placeholder={labels.email}
-                    autoComplete="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                />
-                <Input
+                <AuthInput placeholder={labels.email} autoComplete="email" value={email} onChange={onEmailChange} />
+                <AuthInput
                     placeholder={labels.password}
                     type="password"
                     autoComplete={mode === "signUp" ? "new-password" : "current-password"}
                     value={pw}
-                    onChange={(e) => setPw(e.target.value)}
+                    onChange={onPwChange}
                 />
             </div>
 
-            <Button
+            <AuthButton
                 variant="primary"
                 type="button"
                 onClick={async () => {
                     setMsg(null);
-
                     try {
                         if (mode === "signUp") {
-                            const cred = await createUserWithEmailAndPassword(auth, email, pw);
-
-                            // ✅ 註冊後立刻寄驗證信（官方做法）
-                            // https://firebase.google.com/docs/auth/web/manage-users#send_a_user_a_verification_email
+                            const cred = await createUserWithEmailAndPassword(fbAuth, email, pw);
                             await sendEmailVerification(cred.user);
-
-                            // ✅ 不建立 session；直接登出避免未驗證用戶持有登入態
-                            await signOut(auth);
-
+                            await signOut(fbAuth);
                             setMsg(labels.verifyNeeded);
                             return;
                         }
 
-                        // signIn
-                        const cred = await signInWithEmailAndPassword(auth, email, pw);
-
-                        // 重新抓 user 狀態（避免 stale）
+                        const cred = await signInWithEmailAndPassword(fbAuth, email, pw);
                         await cred.user.reload();
 
                         if (!cred.user.emailVerified) {
                             setMsg(labels.verifyNeeded);
-                            // 使用者仍停留在 client auth 狀態，立即登出（更安全）
-                            await signOut(auth);
+                            await signOut(fbAuth);
                             return;
                         }
 
@@ -111,22 +105,22 @@ export function EmailAuthForm({
                 }}
             >
                 {primaryLabel}
-            </Button>
+            </AuthButton>
 
             {msg ? <div className="auth-error">{msg}</div> : null}
 
             {msg === labels.verifyNeeded ? (
-                <Button type="button" onClick={resendVerification}>
+                <AuthButton type="button" onClick={resendVerification}>
                     {labels.resendVerify}
-                </Button>
+                </AuthButton>
             ) : null}
 
-            <Divider />
-            <div className="ui-muted auth-switch">{labels.or}</div>
+            <AuthDivider />
+            <div className="auth-muted auth-switch">{labels.or}</div>
 
             <button
                 type="button"
-                className="ui-link auth-switch"
+                className="auth-link auth-switch"
                 onClick={() => setMode((m) => (m === "signIn" ? "signUp" : "signIn"))}
             >
                 {mode === "signIn" ? labels.switchToSignUp : labels.switchToSignIn}
