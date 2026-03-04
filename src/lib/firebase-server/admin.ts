@@ -3,17 +3,39 @@ import { getApps, initializeApp, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 
-const projectId = process.env.FIREBASE_PROJECT_ID;
-const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+function loadServiceAccount(): { projectId: string; clientEmail: string; privateKey: string } {
+    const b64 = process.env.FIREBASE_ADMIN_JSON_BASE64;
+    if (!b64) throw new Error("Missing FIREBASE_ADMIN_JSON_BASE64");
 
-if (!projectId || !clientEmail || !privateKey) {
-    throw new Error("Missing Firebase Admin env");
+    const raw = Buffer.from(b64, "base64").toString("utf8");
+    const parsed = JSON.parse(raw) as {
+        project_id: string;
+        client_email: string;
+        private_key: string;
+    };
+
+    if (!parsed.project_id || !parsed.client_email || !parsed.private_key) {
+        throw new Error("Invalid FIREBASE_ADMIN_JSON_BASE64 content");
+    }
+
+    return {
+        projectId: parsed.project_id,
+        clientEmail: parsed.client_email,
+        privateKey: parsed.private_key,
+    };
 }
+
+const sa = loadServiceAccount();
 
 const app =
     getApps().length === 0
-        ? initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) })
+        ? initializeApp({
+            credential: cert({
+                projectId: sa.projectId,
+                clientEmail: sa.clientEmail,
+                privateKey: sa.privateKey,
+            }),
+        })
         : getApps()[0];
 
 export const fbAdminAuth = getAuth(app);

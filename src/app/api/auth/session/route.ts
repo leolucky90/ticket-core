@@ -7,11 +7,13 @@ const SESSION_EXPIRES_MS = SESSION_DAYS * 24 * 60 * 60 * 1000;
 export async function POST(req: Request) {
     try {
         const body = (await req.json()) as { idToken?: string };
-        if (!body.idToken) return NextResponse.json({ error: "Missing idToken" }, { status: 400 });
+        if (!body.idToken) {
+            return NextResponse.json({ error: "Missing idToken" }, { status: 400 });
+        }
 
+        // ✅ 真正會爆的地方通常在這裡：Admin SDK / env / project mismatch
         const decoded = await fbAdminAuth.verifyIdToken(body.idToken);
 
-        // ✅ Email/Password 必須驗證 email 才能建立 session（防攻擊）
         if (decoded.email && decoded.email_verified === false) {
             return NextResponse.json({ error: "EMAIL_NOT_VERIFIED" }, { status: 403 });
         }
@@ -23,14 +25,17 @@ export async function POST(req: Request) {
         const res = NextResponse.json({ ok: true });
         res.cookies.set("session", sessionCookie, {
             httpOnly: true,
-            secure: true,
+            secure: process.env.NODE_ENV === "production",
             sameSite: "lax",
             path: "/",
             maxAge: SESSION_EXPIRES_MS / 1000,
         });
+
         return res;
-    } catch {
-        return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        console.error("[api/auth/session] error:", err);
+        return NextResponse.json({ error: "SESSION_CREATE_FAILED", message }, { status: 500 });
     }
 }
 

@@ -1,5 +1,3 @@
-@import "@/styles/auth.css";
-
 .auth-page-shell {
     min-height: 100vh;
     display: grid;
