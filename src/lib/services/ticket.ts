@@ -447,6 +447,14 @@ export async function queryTickets(keyword?: string): Promise<Ticket[]> {
     return filterTickets(tickets, keyword);
 }
 
+export async function listTicketsByCustomerEmail(email: string): Promise<Ticket[]> {
+    const normalized = safeText(email, MAX_TEXT).toLowerCase();
+    if (!normalized) return [];
+
+    const tickets = await listTickets();
+    return tickets.filter((ticket) => ticket.customer.email.trim().toLowerCase() === normalized);
+}
+
 export async function createTicket(formData: FormData): Promise<void> {
     "use server";
 

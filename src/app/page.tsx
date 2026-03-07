@@ -1,27 +1,38 @@
-import { AuthPageShell } from "@/components/auth/ui/AuthPageShell";
-import { AuthShell } from "@/components/auth/AuthShell";
-import { AuthClientBlock } from "@/components/auth/AuthClientBlock";
+import { ShowHomePage } from "@/features/showcase/components/ShowHomePage";
+import { cookies } from "next/headers";
+import { getSessionUser } from "@/lib/auth-enterprise/session.server";
+import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getShowcasePreferences } from "@/features/showcase/services/showcasePreferences.server";
 
-export default function HomePage() {
-  const labels = {
-    email: "Email",
-    password: "密碼",
-    signIn: "登入",
-    signUp: "註冊",
-    switchToSignUp: "沒有帳號？去註冊",
-    switchToSignIn: "已有帳號？去登入",
-    error: "發生錯誤",
-    or: "或",
-    verifyNeeded: "請先到信箱完成 Email 驗證後再登入。",
-    resendVerify: "重寄驗證信",
-    verifySent: "已送出驗證信（請檢查收件匣/垃圾郵件）。",
-  };
+export default async function HomePage() {
+    const cookieStore = await cookies();
+    const langCookie = cookieStore.get("lang")?.value;
+    const lang: "zh" | "en" = langCookie === "en" ? "en" : "zh";
+    const sessionUser = await getSessionUser();
 
-  return (
-    <AuthPageShell>
-      <AuthShell title="登入 / 註冊">
-        <AuthClientBlock labels={labels} googleLabel="使用 Google 登入" />
-      </AuthShell>
-    </AuthPageShell>
-  );
+    if (!sessionUser) {
+        const preferences = await getShowcasePreferences({ tenantId: null });
+        return (
+            <ShowHomePage
+                navAccountType="guest"
+                lang={lang}
+                showThemeColors={preferences.themeColors}
+                showContentState={preferences.content}
+            />
+        );
+    }
+
+    const userDoc = await getUserDoc(sessionUser.uid);
+    const navAccountType = toAccountType(userDoc?.role ?? null);
+    const tenantId = getShowcaseTenantId(userDoc, sessionUser.uid);
+    const preferences = await getShowcasePreferences({ tenantId });
+
+    return (
+        <ShowHomePage
+            navAccountType={navAccountType}
+            lang={lang}
+            showThemeColors={preferences.themeColors}
+            showContentState={preferences.content}
+        />
+    );
 }

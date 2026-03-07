@@ -14,6 +14,7 @@ export async function POST() {
         uid: session.uid,
         email: session.email,
         providers,
+        defaultRole: "customer",
     });
 
     return NextResponse.json({ ok: true, user: doc });

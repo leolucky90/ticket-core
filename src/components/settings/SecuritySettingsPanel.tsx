@@ -1,12 +1,13 @@
 import { Card } from "@/components/ui/card";
 import { LinkGoogleClient } from "@/components/auth/LinkGoogleClient";
-import { ThemeModeToggle } from "@/components/settings/ThemeModeToggle";
+import { ThemeModeToggle, type ThemeModeToggleLabels } from "@/components/settings/ThemeModeToggle";
 
 type SecuritySettingsPanelProps = {
     title: string;
     linkGoogleTitle: string;
     linkedLabel: string;
     linkNowLabel: string;
+    themeLabels: ThemeModeToggleLabels;
 };
 
 export function SecuritySettingsPanel({
@@ -14,6 +15,7 @@ export function SecuritySettingsPanel({
     linkGoogleTitle,
     linkedLabel,
     linkNowLabel,
+    themeLabels,
 }: SecuritySettingsPanelProps) {
     return (
         <div className="grid max-w-2xl gap-4">
@@ -25,7 +27,7 @@ export function SecuritySettingsPanel({
                 </div>
             </Card>
             <Card>
-                <ThemeModeToggle />
+                <ThemeModeToggle labels={themeLabels} />
             </Card>
         </div>
     );

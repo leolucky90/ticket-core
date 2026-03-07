@@ -2,57 +2,148 @@
 
 import { useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
+import { ThemeColorPalette } from "@/components/settings/ThemeColorPalette";
+import {
+    applyThemeState,
+    DEFAULT_THEME_CUSTOM_COLORS,
+    getThemeStateFromClient,
+    rgbTripletToHex,
+    setThemeColor,
+    setThemeMode,
+    subscribeThemeState,
+} from "@/lib/services/themePreferences";
+import type { ThemeColorRole, ThemeMode } from "@/lib/types/theme";
 
-type Theme = "light" | "dark";
-const THEME_EVENT = "app-theme-change";
+export type ThemeModeToggleLabels = {
+    sectionTitle: string;
+    modeLight: string;
+    modeDark: string;
+    modeCustom: string;
+    scopeHint: string;
+    groupBaseTitle: string;
+    groupBaseHint: string;
+    groupAccentTitle: string;
+    groupAccentHint: string;
+    roleBg: string;
+    rolePanel: string;
+    rolePanel2: string;
+    roleNav: string;
+    roleText: string;
+    roleAccent: string;
+    roleBorder: string;
+    resetPalette: string;
+    customColor: string;
+};
 
-function applyTheme(theme: Theme) {
-    document.documentElement.setAttribute("data-theme", theme);
-    localStorage.setItem("theme", theme);
-    window.dispatchEvent(new Event(THEME_EVENT));
-}
+type ThemeModeToggleProps = {
+    labels: ThemeModeToggleLabels;
+};
 
-function getClientTheme(): Theme {
-    const attrTheme = document.documentElement.getAttribute("data-theme");
-    if (attrTheme === "light" || attrTheme === "dark") return attrTheme;
-    const stored = localStorage.getItem("theme");
-    return stored === "light" ? "light" : "dark";
-}
+const SERVER_THEME_STATE = {
+    mode: "dark" as const,
+    customColors: DEFAULT_THEME_CUSTOM_COLORS,
+};
 
-function subscribe(onStoreChange: () => void) {
-    window.addEventListener(THEME_EVENT, onStoreChange);
-    window.addEventListener("storage", onStoreChange);
-    return () => {
-        window.removeEventListener(THEME_EVENT, onStoreChange);
-        window.removeEventListener("storage", onStoreChange);
+export function ThemeModeToggle({ labels }: ThemeModeToggleProps) {
+    const themeState = useSyncExternalStore(
+        subscribeThemeState,
+        getThemeStateFromClient,
+        () => SERVER_THEME_STATE,
+    );
+
+    const modeOptions: Array<{ mode: ThemeMode; label: string }> = [
+        { mode: "light", label: labels.modeLight },
+        { mode: "dark", label: labels.modeDark },
+        { mode: "custom", label: labels.modeCustom },
+    ];
+
+    const roleLabels: Record<ThemeColorRole, string> = {
+        bg: labels.roleBg,
+        panel: labels.rolePanel,
+        panel2: labels.rolePanel2,
+        nav: labels.roleNav,
+        text: labels.roleText,
+        accent: labels.roleAccent,
+        border: labels.roleBorder,
     };
-}
 
-export function ThemeModeToggle() {
-    const theme = useSyncExternalStore(subscribe, getClientTheme, () => "dark");
+    const colorGroups: Array<{
+        id: "base" | "accent";
+        title: string;
+        hint: string;
+        roles: ThemeColorRole[];
+    }> = [
+        {
+            id: "base",
+            title: labels.groupBaseTitle,
+            hint: labels.groupBaseHint,
+            roles: ["bg", "panel", "panel2", "nav", "text"],
+        },
+        {
+            id: "accent",
+            title: labels.groupAccentTitle,
+            hint: labels.groupAccentHint,
+            roles: ["accent", "border"],
+        },
+    ];
 
-    function handleChange(nextTheme: Theme) {
-        applyTheme(nextTheme);
+    function handleModeChange(nextMode: ThemeMode) {
+        setThemeMode(nextMode);
+    }
+
+    function handleColorChange(role: ThemeColorRole, nextColor: string) {
+        setThemeColor(role, nextColor);
+    }
+
+    function handleResetCustomTheme() {
+        applyThemeState({
+            mode: "custom",
+            customColors: DEFAULT_THEME_CUSTOM_COLORS,
+        });
     }
 
     return (
-        <div className="grid gap-3">
-            <div className="text-sm text-[rgb(var(--muted))]">網站風格</div>
+        <div className="grid gap-4">
+            <div className="text-sm text-[rgb(var(--muted))]">{labels.sectionTitle}</div>
             <div className="flex flex-wrap gap-2">
-                <Button
-                    type="button"
-                    variant={theme === "light" ? "solid" : "ghost"}
-                    onClick={() => handleChange("light")}
-                >
-                    白天模式
-                </Button>
-                <Button
-                    type="button"
-                    variant={theme === "dark" ? "solid" : "ghost"}
-                    onClick={() => handleChange("dark")}
-                >
-                    黑夜模式
-                </Button>
+                {modeOptions.map(({ mode, label }) => (
+                    <Button
+                        key={mode}
+                        type="button"
+                        variant={themeState.mode === mode ? "solid" : "ghost"}
+                        onClick={() => handleModeChange(mode)}
+                    >
+                        {label}
+                    </Button>
+                ))}
+            </div>
+            <div className="grid gap-3 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                <div className="text-xs text-[rgb(var(--muted))]">{labels.scopeHint}</div>
+                {colorGroups.map((group) => (
+                    <div
+                        key={group.id}
+                        className="grid gap-2 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-3"
+                    >
+                        <div className="text-xs font-semibold">{group.title}</div>
+                        <div className="text-[11px] text-[rgb(var(--muted))]">{group.hint}</div>
+                        <div className="grid gap-2">
+                            {group.roles.map((role) => (
+                                <ThemeColorPalette
+                                    key={role}
+                                    label={roleLabels[role]}
+                                    customColorLabel={labels.customColor}
+                                    customHexValue={rgbTripletToHex(themeState.customColors[role], "#000000")}
+                                    onCustomColorChange={(color) => handleColorChange(role, color)}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                ))}
+                <div className="pt-1">
+                    <Button type="button" variant="ghost" onClick={handleResetCustomTheme}>
+                        {labels.resetPalette}
+                    </Button>
+                </div>
             </div>
         </div>
     );

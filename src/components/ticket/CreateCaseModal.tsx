@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Check, Plus, X } from "lucide-react";
 
 type CreateCaseModalLabels = {
     addBtn: string;
@@ -49,8 +50,18 @@ export function CreateCaseModal({ labels, createAction }: CreateCaseModalProps) 
 
     return (
         <>
-            <Button type="button" variant="ghost" onClick={() => setOpen(true)}>
-                {labels.addBtn}
+            <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setOpen(true)}
+                aria-label={labels.addBtn}
+                className="group relative h-10 w-10 !p-0 flex items-center justify-center"
+            >
+                <Plus className="h-6 w-6 transition-transform group-hover:scale-110" aria-hidden="true" />
+                <span className="sr-only">{labels.addBtn}</span>
+                <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                    {labels.addBtn}
+                </span>
             </Button>
 
             {open ? (
@@ -150,12 +161,27 @@ export function CreateCaseModal({ labels, createAction }: CreateCaseModalProps) 
                             <div className="mt-1 flex justify-end gap-2">
                                 <button
                                     type="button"
-                                    className="rounded-xl border border-[rgb(var(--border))] px-4 py-2 text-sm"
+                                    aria-label={labels.cancelBtn}
+                                    className="group relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[rgb(var(--border))] p-0 text-sm"
                                     onClick={() => setOpen(false)}
                                 >
-                                    {labels.cancelBtn}
+                                    <X className="h-4 w-4" aria-hidden="true" />
+                                    <span className="sr-only">{labels.cancelBtn}</span>
+                                    <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                                        {labels.cancelBtn}
+                                    </span>
                                 </button>
-                                <Button type="submit">{labels.submitCreate}</Button>
+                                <Button
+                                    type="submit"
+                                    aria-label={labels.submitCreate}
+                                    className="group relative h-10 w-10 !p-0 flex items-center justify-center"
+                                >
+                                    <Check className="h-6 w-6 transition-transform group-hover:scale-110" aria-hidden="true" />
+                                    <span className="sr-only">{labels.submitCreate}</span>
+                                    <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                                        {labels.submitCreate}
+                                    </span>
+                                </Button>
                             </div>
                         </form>
                     </div>

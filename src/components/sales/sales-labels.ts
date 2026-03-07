@@ -42,7 +42,7 @@ export function getSalesLabels(lang: "zh" | "en", count: number): SalesLabels {
             queryPlaceholder: "輸入物品、金額或付款方式",
             queryBtn: "查詢",
             clearBtn: "清除",
-            addBtn: "新增銷售",
+            addBtn: "新增",
             addWindowTitle: "建立銷售資料",
             item: "物品",
             amount: "金額",

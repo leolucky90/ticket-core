@@ -20,6 +20,14 @@ function withLangCookie(req: NextRequest, res: NextResponse): NextResponse {
     return res;
 }
 
+function nextWithPathname(req: NextRequest): NextResponse {
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set("x-pathname", req.nextUrl.pathname);
+    return NextResponse.next({
+        request: { headers: requestHeaders },
+    });
+}
+
 export function middleware(req: NextRequest) {
     const { pathname } = req.nextUrl;
 
@@ -28,7 +36,7 @@ export function middleware(req: NextRequest) {
         pathname.startsWith("/settings") ||
         pathname.startsWith("/ticket") ||
         pathname.startsWith("/sales");
-    if (!isProtected) return withLangCookie(req, NextResponse.next());
+    if (!isProtected) return withLangCookie(req, nextWithPathname(req));
 
     const hasSession = Boolean(req.cookies.get("session")?.value);
     if (!hasSession) {
@@ -38,7 +46,7 @@ export function middleware(req: NextRequest) {
         return withLangCookie(req, NextResponse.redirect(url));
     }
 
-    return withLangCookie(req, NextResponse.next());
+    return withLangCookie(req, nextWithPathname(req));
 }
 
 export const config = {

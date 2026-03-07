@@ -63,7 +63,7 @@ export function getTicketLabels(lang: "zh" | "en", count: number): TicketLabels 
             queryPlaceholder: "輸入客戶姓名、電話、設備、型號或案件 ID",
             queryBtn: "查詢",
             clearBtn: "清除",
-            addBtn: "新增案件",
+            addBtn: "新增",
             addWindowTitle: "建立新案件",
             customerName: "客戶姓名",
             customerPhone: "客戶電話",

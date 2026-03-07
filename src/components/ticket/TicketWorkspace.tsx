@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { LinkButton } from "@/components/ui/link-button";
+import Link from "next/link";
+import { Pencil, RefreshCw, Save, Search, Trash2, X } from "lucide-react";
 import type { QuoteStatus, Ticket, TicketStatus } from "@/lib/types/ticket";
 import { CreateCaseModal } from "@/components/ticket/CreateCaseModal";
 import type { TicketLabels } from "@/components/ticket/ticket-labels";
@@ -146,17 +147,39 @@ export function TicketWorkspace({
                             if (queryAtRef.current) queryAtRef.current.value = ts;
                         }}
                     >
-                        <Input
-                            type="text"
-                            name="q"
-                            defaultValue={keyword}
-                            placeholder={labels.queryPlaceholder}
-                        />
+                        <div className="relative w-full">
+                            <Input
+                                type="text"
+                                name="q"
+                                defaultValue={keyword}
+                                placeholder={labels.queryPlaceholder}
+                                className="pr-10"
+                            />
+                            <Link
+                                href="/ticket"
+                                aria-label={labels.clearBtn}
+                                className="group absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-[rgb(var(--muted))] hover:bg-[rgb(var(--panel2))] hover:text-[rgb(var(--text))]"
+                            >
+                                <X className="h-4 w-4" aria-hidden="true" />
+                                <span className="sr-only">{labels.clearBtn}</span>
+                                <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                                    {labels.clearBtn}
+                                </span>
+                            </Link>
+                        </div>
                         <input ref={queryAtRef} type="hidden" name="qt" defaultValue={queryAt} />
-                        <Button type="submit" variant="ghost">
-                            {labels.queryBtn}
+                        <Button
+                            type="submit"
+                            variant="ghost"
+                            aria-label={labels.queryBtn}
+                            className="group relative h-10 w-10 shrink-0 !p-0 flex items-center justify-center"
+                        >
+                            <Search className="h-6 w-6 transition-transform group-hover:scale-110" aria-hidden="true" />
+                            <span className="sr-only">{labels.queryBtn}</span>
+                            <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                                {labels.queryBtn}
+                            </span>
                         </Button>
-                        <LinkButton href="/ticket">{labels.clearBtn}</LinkButton>
                     </form>
                     <CreateCaseModal
                         createAction={createAction}
@@ -262,22 +285,34 @@ export function TicketWorkspace({
                                                 <Button
                                                     type="button"
                                                     variant="ghost"
+                                                    aria-label={labels.editBtn}
+                                                    className="group relative h-10 w-10 !p-0 flex items-center justify-center"
                                                     onClick={() => {
                                                         setEditingId(t.id);
                                                         setQuickUpdateId(null);
                                                     }}
                                                 >
-                                                    {labels.editBtn}
+                                                    <Pencil className="h-6 w-6 transition-transform group-hover:scale-110" aria-hidden="true" />
+                                                    <span className="sr-only">{labels.editBtn}</span>
+                                                    <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                                                        {labels.editBtn}
+                                                    </span>
                                                 </Button>
                                                 <Button
                                                     type="button"
                                                     variant="ghost"
+                                                    aria-label={labels.quickUpdateBtn}
+                                                    className="group relative h-10 w-10 !p-0 flex items-center justify-center"
                                                     onClick={() => {
                                                         setQuickUpdateId((prev) => (prev === t.id ? null : t.id));
                                                         setEditingId(null);
                                                     }}
                                                 >
-                                                    {labels.quickUpdateBtn}
+                                                    <RefreshCw className="h-6 w-6 transition-transform group-hover:scale-110" aria-hidden="true" />
+                                                    <span className="sr-only">{labels.quickUpdateBtn}</span>
+                                                    <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                                                        {labels.quickUpdateBtn}
+                                                    </span>
                                                 </Button>
                                                 <form
                                                     action={deleteAction}
@@ -288,7 +323,17 @@ export function TicketWorkspace({
                                                     }}
                                                 >
                                                     <input type="hidden" name="id" value={t.id} />
-                                                    <Button type="submit">{labels.deleteBtn}</Button>
+                                                    <Button
+                                                        type="submit"
+                                                        aria-label={labels.deleteBtn}
+                                                        className="group relative h-10 w-10 !p-0 flex items-center justify-center"
+                                                    >
+                                                        <Trash2 className="h-6 w-6 transition-transform group-hover:scale-110" aria-hidden="true" />
+                                                        <span className="sr-only">{labels.deleteBtn}</span>
+                                                        <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                                                            {labels.deleteBtn}
+                                                        </span>
+                                                    </Button>
                                                 </form>
                                             </div>
                                             {isQuickUpdating ? (
@@ -354,15 +399,30 @@ export function TicketWorkspace({
                                                         />
                                                     </FieldRow>
                                                     <div className="flex flex-wrap gap-2">
-                                                        <Button type="submit" variant="ghost">
-                                                            {labels.quickUpdateBtn}
+                                                        <Button
+                                                            type="submit"
+                                                            variant="ghost"
+                                                            aria-label={labels.quickUpdateBtn}
+                                                            className="group relative h-10 w-10 !p-0 flex items-center justify-center"
+                                                        >
+                                                            <RefreshCw className="h-6 w-6 transition-transform group-hover:scale-110" aria-hidden="true" />
+                                                            <span className="sr-only">{labels.quickUpdateBtn}</span>
+                                                            <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                                                                {labels.quickUpdateBtn}
+                                                            </span>
                                                         </Button>
                                                         <Button
                                                             type="button"
                                                             variant="ghost"
+                                                            aria-label={labels.cancelEditBtn}
+                                                            className="group relative h-10 w-10 !p-0 flex items-center justify-center"
                                                             onClick={() => setQuickUpdateId(null)}
                                                         >
-                                                            {labels.cancelEditBtn}
+                                                            <X className="h-4 w-4" aria-hidden="true" />
+                                                            <span className="sr-only">{labels.cancelEditBtn}</span>
+                                                            <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                                                                {labels.cancelEditBtn}
+                                                            </span>
                                                         </Button>
                                                     </div>
                                                 </form>
@@ -483,11 +543,30 @@ export function TicketWorkspace({
                                                 />
                                             </FieldRow>
                                             <div className="flex flex-wrap gap-2">
-                                                <Button type="submit" variant="ghost">
-                                                    {labels.updateBtn}
+                                                <Button
+                                                    type="submit"
+                                                    variant="ghost"
+                                                    aria-label={labels.updateBtn}
+                                                    className="group relative h-10 w-10 !p-0 flex items-center justify-center"
+                                                >
+                                                    <Save className="h-6 w-6 transition-transform group-hover:scale-110" aria-hidden="true" />
+                                                    <span className="sr-only">{labels.updateBtn}</span>
+                                                    <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                                                        {labels.updateBtn}
+                                                    </span>
                                                 </Button>
-                                                <Button type="button" variant="ghost" onClick={() => setEditingId(null)}>
-                                                    {labels.cancelEditBtn}
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    aria-label={labels.cancelEditBtn}
+                                                    className="group relative h-10 w-10 !p-0 flex items-center justify-center"
+                                                    onClick={() => setEditingId(null)}
+                                                >
+                                                    <X className="h-4 w-4" aria-hidden="true" />
+                                                    <span className="sr-only">{labels.cancelEditBtn}</span>
+                                                    <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                                                        {labels.cancelEditBtn}
+                                                    </span>
                                                 </Button>
                                             </div>
                                         </form>

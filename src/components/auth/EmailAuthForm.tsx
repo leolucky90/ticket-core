@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent } from "react";
 import {
     createUserWithEmailAndPassword,
@@ -14,6 +14,7 @@ import { AuthDivider } from "@/components/auth/ui/AuthDivider";
 import { AuthInput } from "@/components/auth/ui/AuthInput";
 
 type Mode = "signIn" | "signUp";
+type SignUpAccountType = "customer" | "company";
 
 type Labels = {
     email: string;
@@ -32,14 +33,24 @@ type Labels = {
 export function EmailAuthForm({
     labels,
     onAuthed,
+    initialMode = "signIn",
+    showModeSwitch = true,
+    signUpAccountType = "customer",
 }: {
     labels: Labels;
     onAuthed: (idToken: string) => Promise<void>;
+    initialMode?: Mode;
+    showModeSwitch?: boolean;
+    signUpAccountType?: SignUpAccountType;
 }) {
-    const [mode, setMode] = useState<Mode>("signIn");
+    const [mode, setMode] = useState<Mode>(initialMode);
     const [email, setEmail] = useState("");
     const [pw, setPw] = useState("");
     const [msg, setMsg] = useState<string | null>(null);
+
+    useEffect(() => {
+        setMode(initialMode);
+    }, [initialMode]);
 
     const primaryLabel = useMemo(
         () => (mode === "signIn" ? labels.signIn : labels.signUp),
@@ -82,6 +93,15 @@ export function EmailAuthForm({
                     try {
                         if (mode === "signUp") {
                             const cred = await createUserWithEmailAndPassword(fbAuth, email, pw);
+                            const signUpToken = await cred.user.getIdToken();
+                            const roleResponse = await fetch("/api/auth/register-profile", {
+                                method: "POST",
+                                headers: { "content-type": "application/json" },
+                                body: JSON.stringify({ idToken: signUpToken, accountType: signUpAccountType }),
+                            });
+                            if (!roleResponse.ok) {
+                                throw new Error("failed to setup account profile");
+                            }
                             await sendEmailVerification(cred.user);
                             await signOut(fbAuth);
                             setMsg(labels.verifyNeeded);
@@ -118,13 +138,15 @@ export function EmailAuthForm({
             <AuthDivider />
             <div className="auth-muted auth-switch">{labels.or}</div>
 
-            <button
-                type="button"
-                className="auth-link auth-switch"
-                onClick={() => setMode((m) => (m === "signIn" ? "signUp" : "signIn"))}
-            >
-                {mode === "signIn" ? labels.switchToSignUp : labels.switchToSignIn}
-            </button>
+            {showModeSwitch ? (
+                <button
+                    type="button"
+                    className="auth-link auth-switch"
+                    onClick={() => setMode((m) => (m === "signIn" ? "signUp" : "signIn"))}
+                >
+                    {mode === "signIn" ? labels.switchToSignUp : labels.switchToSignIn}
+                </button>
+            ) : null}
         </div>
     );
 }

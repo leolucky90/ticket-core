@@ -6,21 +6,42 @@
   /* root：預設 dark theme 的 CSS variables */
   --bg: 10 10 12;
   --panel: 18 18 22;
+  --nav: 18 18 22;
   --panel2: 22 22 28;
   --text: 235 235 245;
   --muted: 170 170 185;
   --border: 60 60 75;
   --accent: 120 180 255;
+  --showcase-page-bg: 255 253 246;
+  --showcase-header-bg: 255 203 45;
+  --showcase-hero-bg: 25 24 21;
+  --showcase-about-bg: 255 255 255;
+  --showcase-services-bg: 243 238 225;
+  --showcase-contact-bg: 255 253 246;
+  --showcase-ad-bg: 25 24 21;
+  --showcase-footer-bg: 255 203 45;
 }
 
 :root[data-theme="light"] {
   --bg: 247 249 252;
   --panel: 255 255 255;
+  --nav: 255 255 255;
   --panel2: 241 245 251;
   --text: 26 31 44;
   --muted: 95 106 130;
   --border: 214 222 237;
   --accent: 49 118 242;
+}
+
+:root[data-theme="custom"] {
+  --bg: var(--custom-bg, 10 10 12);
+  --panel: var(--custom-panel, 18 18 22);
+  --nav: var(--custom-nav, 18 18 22);
+  --panel2: var(--custom-panel2, 22 22 28);
+  --text: var(--custom-text, 235 235 245);
+  --muted: var(--custom-muted, 170 176 190);
+  --border: var(--custom-border, 60 60 75);
+  --accent: var(--custom-accent, 120 180 255);
 }
 
 html,
@@ -37,4 +58,20 @@ body {
   color: rgb(var(--text));
   /* 文字使用 --text */
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.ui-select,
+.ui-select option,
+.ui-select optgroup {
+  color: rgb(var(--text));
+  background: rgb(var(--panel));
+}
+
+:root[data-theme="light"] .ui-select {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] .ui-select,
+:root[data-theme="custom"] .ui-select {
+  color-scheme: dark;
 }
