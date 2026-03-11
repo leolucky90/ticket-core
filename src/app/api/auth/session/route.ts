@@ -1,21 +1,47 @@
 import { NextResponse } from "next/server";
 import { fbAdminAuth } from "@/lib/firebase-server";
+import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 
 const SESSION_DAYS = 14;
 const SESSION_EXPIRES_MS = SESSION_DAYS * 24 * 60 * 60 * 1000;
 
+function normalizeTenantId(value: unknown): string | null {
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (/[/?#]/.test(trimmed)) return null;
+    return trimmed;
+}
+
 export async function POST(req: Request) {
     try {
-        const body = (await req.json()) as { idToken?: string };
+        const body = (await req.json()) as { idToken?: string; tenantId?: string };
         if (!body.idToken) {
             return NextResponse.json({ error: "Missing idToken" }, { status: 400 });
         }
+        const tenantId = normalizeTenantId(body.tenantId);
 
         // ✅ 真正會爆的地方通常在這裡：Admin SDK / env / project mismatch
         const decoded = await fbAdminAuth.verifyIdToken(body.idToken);
 
         if (decoded.email && decoded.email_verified === false) {
             return NextResponse.json({ error: "EMAIL_NOT_VERIFIED" }, { status: 403 });
+        }
+
+        if (tenantId) {
+            const userDoc = await getUserDoc(decoded.uid);
+            if (!userDoc) {
+                return NextResponse.json({ error: "TENANT_USER_NOT_BOUND" }, { status: 403 });
+            }
+
+            if (toAccountType(userDoc.role) !== "customer") {
+                return NextResponse.json({ error: "TENANT_LOGIN_FORBIDDEN" }, { status: 403 });
+            }
+
+            const boundTenantId = getShowcaseTenantId(userDoc, decoded.uid);
+            if (!boundTenantId || boundTenantId !== tenantId) {
+                return NextResponse.json({ error: "TENANT_SCOPE_MISMATCH" }, { status: 403 });
+            }
         }
 
         const sessionCookie = await fbAdminAuth.createSessionCookie(body.idToken, {

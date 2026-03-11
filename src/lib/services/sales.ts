@@ -2,12 +2,18 @@ import "server-only";
 import type { PaymentMethod, Sale } from "@/lib/types/sale";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { getSessionUser } from "@/lib/auth-enterprise/session.server";
+import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 
-const memory: { sales: Sale[] } = { sales: [] };
+const memory: { salesByCompany: Record<string, Sale[]> } = { salesByCompany: {} };
 
 const MAX_TEXT = 160;
 const MAX_QUERY = 120;
 const MAX_MONEY = 100000000;
+
+type SessionScope = {
+    companyId: string;
+};
 
 function now() {
     return Date.now();
@@ -23,6 +29,14 @@ function toStr(v: unknown): string {
 
 function safeText(value: string, max: number): string {
     return value.replace(/[\u0000-\u001F\u007F]/g, "").slice(0, max).trim();
+}
+
+function normalizeCompanyId(value: unknown): string | null {
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (/[/?#]/.test(trimmed)) return null;
+    return trimmed;
 }
 
 function parseMoney(v: unknown): number {
@@ -48,12 +62,17 @@ function parseCheckoutAt(v: unknown): number {
 function normalizeSale(input: Partial<Sale> & { id: string }): Sale {
     const createdAt = typeof input.createdAt === "number" ? input.createdAt : now();
     const checkoutAt = typeof input.checkoutAt === "number" ? input.checkoutAt : createdAt;
+
+    const extra = input as Record<string, unknown>;
+    const companyId = safeText(toStr(extra.companyId), 120);
+
     return {
         id: input.id,
         item: safeText(toStr(input.item), MAX_TEXT) || "Untitled Item",
         amount: parseMoney(input.amount),
         checkoutAt,
         paymentMethod: parsePaymentMethod(input.paymentMethod),
+        companyId: companyId || undefined,
         createdAt,
         updatedAt: typeof input.updatedAt === "number" ? input.updatedAt : createdAt,
     };
@@ -79,6 +98,22 @@ function validateInput(payload: {
     return { item, amount, checkoutAt, paymentMethod };
 }
 
+async function resolveSessionScope(requireCompany = true): Promise<SessionScope | null> {
+    const session = await getSessionUser();
+    if (!session) return null;
+
+    const user = await getUserDoc(session.uid);
+    if (!user) return null;
+
+    const accountType = toAccountType(user.role);
+    if (requireCompany && accountType !== "company") return null;
+
+    const companyId = normalizeCompanyId(getShowcaseTenantId(user, session.uid));
+    if (!companyId) return null;
+
+    return { companyId };
+}
+
 async function getFirestoreDb() {
     try {
         const mod = await import("@/lib/firebase-server");
@@ -88,23 +123,44 @@ async function getFirestoreDb() {
     }
 }
 
-function listFromMemory(): Sale[] {
-    return [...memory.sales].sort((a, b) => b.checkoutAt - a.checkoutAt);
+function companySalesRef(db: Awaited<ReturnType<typeof getFirestoreDb>>, companyId: string) {
+    return db!.collection(`companies/${companyId}/sales`);
 }
 
-async function listFromFirebase(): Promise<Sale[] | null> {
+function listFromMemory(companyId: string): Sale[] {
+    return [...(memory.salesByCompany[companyId] ?? [])].sort((a, b) => b.checkoutAt - a.checkoutAt);
+}
+
+function upsertMemorySale(companyId: string, sale: Sale): void {
+    const list = memory.salesByCompany[companyId] ?? [];
+    memory.salesByCompany[companyId] = [sale, ...list.filter((item) => item.id !== sale.id)];
+}
+
+function removeMemorySale(companyId: string, saleId: string): boolean {
+    const list = memory.salesByCompany[companyId] ?? [];
+    const next = list.filter((sale) => sale.id !== saleId);
+    const removed = next.length !== list.length;
+    memory.salesByCompany[companyId] = next;
+    return removed;
+}
+
+async function listFromFirebase(companyId: string): Promise<Sale[] | null> {
     const db = await getFirestoreDb();
     if (!db) return null;
-    const snap = await db.collection("sales").orderBy("checkoutAt", "desc").limit(200).get();
+
+    const snap = await companySalesRef(db, companyId).orderBy("checkoutAt", "desc").limit(200).get();
     return snap.docs.map((doc) => normalizeSale({ id: doc.id, ...(doc.data() as Partial<Sale>) }));
 }
 
-async function createInMemory(params: {
-    item: string;
-    amount: number;
-    checkoutAt: number;
-    paymentMethod: PaymentMethod;
-}): Promise<Sale> {
+async function createInMemory(
+    companyId: string,
+    params: {
+        item: string;
+        amount: number;
+        checkoutAt: number;
+        paymentMethod: PaymentMethod;
+    },
+): Promise<Sale> {
     const ts = now();
     const sale: Sale = {
         id: id(),
@@ -112,19 +168,23 @@ async function createInMemory(params: {
         amount: params.amount,
         checkoutAt: params.checkoutAt,
         paymentMethod: params.paymentMethod,
+        companyId,
         createdAt: ts,
         updatedAt: ts,
     };
-    memory.sales = [sale, ...memory.sales];
+    upsertMemorySale(companyId, sale);
     return sale;
 }
 
-async function createInFirebase(params: {
-    item: string;
-    amount: number;
-    checkoutAt: number;
-    paymentMethod: PaymentMethod;
-}): Promise<Sale | null> {
+async function createInFirebase(
+    companyId: string,
+    params: {
+        item: string;
+        amount: number;
+        checkoutAt: number;
+        paymentMethod: PaymentMethod;
+    },
+): Promise<Sale | null> {
     const db = await getFirestoreDb();
     if (!db) return null;
 
@@ -136,40 +196,38 @@ async function createInFirebase(params: {
         amount: params.amount,
         checkoutAt: params.checkoutAt,
         paymentMethod: params.paymentMethod,
+        companyId,
         createdAt: ts,
         updatedAt: ts,
     };
 
-    await db.collection("sales").doc(docId).set(sale, { merge: false });
+    await companySalesRef(db, companyId).doc(docId).set(sale, { merge: false });
     return sale;
 }
 
-async function deleteInMemory(saleId: string): Promise<boolean> {
-    const next = memory.sales.filter((s) => s.id !== saleId);
-    const removed = next.length !== memory.sales.length;
-    memory.sales = next;
-    return removed;
-}
-
-async function deleteInFirebase(saleId: string): Promise<boolean | null> {
+async function deleteInFirebase(companyId: string, saleId: string): Promise<boolean | null> {
     const db = await getFirestoreDb();
     if (!db) return null;
 
-    const ref = db.collection("sales").doc(saleId);
+    const ref = companySalesRef(db, companyId).doc(saleId);
     const snap = await ref.get();
     if (!snap.exists) return false;
     await ref.delete();
     return true;
 }
 
-async function updateInMemory(params: {
-    id: string;
-    item?: string;
-    amount?: number;
-    checkoutAt?: number;
-    paymentMethod?: PaymentMethod;
-}): Promise<Sale | null> {
-    const target = memory.sales.find((s) => s.id === params.id);
+async function updateInMemory(
+    companyId: string,
+    params: {
+        id: string;
+        item?: string;
+        amount?: number;
+        checkoutAt?: number;
+        paymentMethod?: PaymentMethod;
+    },
+): Promise<Sale | null> {
+    const list = memory.salesByCompany[companyId] ?? [];
+    const target = list.find((sale) => sale.id === params.id);
     if (!target) return null;
 
     if (params.item && params.item.trim()) target.item = params.item.trim();
@@ -177,20 +235,24 @@ async function updateInMemory(params: {
     if (params.checkoutAt !== undefined) target.checkoutAt = params.checkoutAt;
     if (params.paymentMethod !== undefined) target.paymentMethod = params.paymentMethod;
     target.updatedAt = now();
+    upsertMemorySale(companyId, target);
     return target;
 }
 
-async function updateInFirebase(params: {
-    id: string;
-    item?: string;
-    amount?: number;
-    checkoutAt?: number;
-    paymentMethod?: PaymentMethod;
-}): Promise<Sale | null> {
+async function updateInFirebase(
+    companyId: string,
+    params: {
+        id: string;
+        item?: string;
+        amount?: number;
+        checkoutAt?: number;
+        paymentMethod?: PaymentMethod;
+    },
+): Promise<Sale | null> {
     const db = await getFirestoreDb();
     if (!db) return null;
 
-    const ref = db.collection("sales").doc(params.id);
+    const ref = companySalesRef(db, companyId).doc(params.id);
     const snap = await ref.get();
     if (!snap.exists) return null;
 
@@ -201,6 +263,7 @@ async function updateInFirebase(params: {
         amount: params.amount !== undefined ? params.amount : current.amount,
         checkoutAt: params.checkoutAt !== undefined ? params.checkoutAt : current.checkoutAt,
         paymentMethod: params.paymentMethod !== undefined ? params.paymentMethod : current.paymentMethod,
+        companyId,
         updatedAt: now(),
     };
 
@@ -211,8 +274,16 @@ async function updateInFirebase(params: {
 function filterSales(sales: Sale[], keyword?: string): Sale[] {
     const q = safeText(keyword ?? "", MAX_QUERY).toLowerCase();
     if (!q) return sales;
-    return sales.filter((s) => {
-        const haystack = [s.id, s.item, String(s.amount), s.paymentMethod, String(s.checkoutAt), String(s.updatedAt)]
+    return sales.filter((sale) => {
+        const haystack = [
+            sale.id,
+            sale.item,
+            String(sale.amount),
+            sale.paymentMethod,
+            String(sale.checkoutAt),
+            String(sale.updatedAt),
+            sale.companyId ?? "",
+        ]
             .join(" ")
             .toLowerCase();
         return haystack.includes(q);
@@ -220,13 +291,17 @@ function filterSales(sales: Sale[], keyword?: string): Sale[] {
 }
 
 export async function listSales(): Promise<Sale[]> {
+    const scope = await resolveSessionScope(true);
+    if (!scope) return [];
+
     try {
-        const firebaseSales = await listFromFirebase();
+        const firebaseSales = await listFromFirebase(scope.companyId);
         if (firebaseSales) return firebaseSales;
     } catch {
         // fallback to memory
     }
-    return listFromMemory();
+
+    return listFromMemory(scope.companyId);
 }
 
 export async function querySales(keyword?: string): Promise<Sale[]> {
@@ -236,6 +311,11 @@ export async function querySales(keyword?: string): Promise<Sale[]> {
 
 export async function createSale(formData: FormData): Promise<void> {
     "use server";
+
+    const scope = await resolveSessionScope(true);
+    if (!scope) {
+        redirect(`/sales?flash=invalid&ts=${Date.now()}`);
+    }
 
     const validated = validateInput({
         item: toStr(formData.get("item")),
@@ -248,10 +328,10 @@ export async function createSale(formData: FormData): Promise<void> {
     }
 
     try {
-        const created = await createInFirebase(validated);
-        if (!created) await createInMemory(validated);
+        const created = await createInFirebase(scope.companyId, validated);
+        if (!created) await createInMemory(scope.companyId, validated);
     } catch {
-        await createInMemory(validated);
+        await createInMemory(scope.companyId, validated);
     }
 
     revalidatePath("/sales");
@@ -260,6 +340,11 @@ export async function createSale(formData: FormData): Promise<void> {
 
 export async function updateSale(formData: FormData): Promise<void> {
     "use server";
+
+    const scope = await resolveSessionScope(true);
+    if (!scope) {
+        redirect(`/sales?flash=invalid&ts=${Date.now()}`);
+    }
 
     const saleId = safeText(toStr(formData.get("id")), 80);
     if (!saleId) {
@@ -271,16 +356,14 @@ export async function updateSale(formData: FormData): Promise<void> {
         item: formData.has("item") ? safeText(toStr(formData.get("item")), MAX_TEXT) : undefined,
         amount: formData.has("amount") ? parseMoney(formData.get("amount")) : undefined,
         checkoutAt: formData.has("checkoutAt") ? parseCheckoutAt(formData.get("checkoutAt")) : undefined,
-        paymentMethod: formData.has("paymentMethod")
-            ? parsePaymentMethod(formData.get("paymentMethod"))
-            : undefined,
+        paymentMethod: formData.has("paymentMethod") ? parsePaymentMethod(formData.get("paymentMethod")) : undefined,
     };
 
     try {
-        const updated = await updateInFirebase(payload);
-        if (!updated) await updateInMemory(payload);
+        const updated = await updateInFirebase(scope.companyId, payload);
+        if (!updated) await updateInMemory(scope.companyId, payload);
     } catch {
-        await updateInMemory(payload);
+        await updateInMemory(scope.companyId, payload);
     }
 
     revalidatePath("/sales");
@@ -290,16 +373,21 @@ export async function updateSale(formData: FormData): Promise<void> {
 export async function deleteSale(formData: FormData): Promise<void> {
     "use server";
 
+    const scope = await resolveSessionScope(true);
+    if (!scope) {
+        redirect(`/sales?flash=invalid&ts=${Date.now()}`);
+    }
+
     const saleId = safeText(toStr(formData.get("id")), 80);
     if (!saleId) {
         redirect(`/sales?flash=invalid&ts=${Date.now()}`);
     }
 
     try {
-        const removed = await deleteInFirebase(saleId);
-        if (removed === null) await deleteInMemory(saleId);
+        const removed = await deleteInFirebase(scope.companyId, saleId);
+        if (removed === null) removeMemorySale(scope.companyId, saleId);
     } catch {
-        await deleteInMemory(saleId);
+        removeMemorySale(scope.companyId, saleId);
     }
 
     revalidatePath("/sales");

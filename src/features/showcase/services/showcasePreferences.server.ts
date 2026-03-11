@@ -28,6 +28,10 @@ function tenantShowcaseDocPath(tenantId: string): string {
     return `companies/${tenantId}/app_config/showcase`;
 }
 
+function tenantCompanyDocPath(tenantId: string): string {
+    return `companies/${tenantId}`;
+}
+
 function toShowcasePreferences(input: unknown): ShowcasePreferences {
     const candidate = (input ?? {}) as Partial<ShowcasePreferences> & {
         themeColors?: unknown;
@@ -46,6 +50,12 @@ export async function getShowcasePreferences(options?: { tenantId?: string | nul
     if (tenantId) {
         const tenantSnap = await fbAdminDb.doc(tenantShowcaseDocPath(tenantId)).get();
         if (tenantSnap.exists) return toShowcasePreferences(tenantSnap.data());
+        return {
+            themeColors: DEFAULT_SHOW_THEME_COLORS,
+            content: cloneDefaultContent(),
+            updatedAt: 0,
+            updatedBy: "",
+        };
     }
 
     const legacySnap = await fbAdminDb.doc(LEGACY_SHOWCASE_PREFERENCES_DOC).get();
@@ -78,6 +88,18 @@ export async function saveShowcasePreferences(params: {
         updatedAt: Date.now(),
         updatedBy: params.updatedBy,
     };
-    await fbAdminDb.doc(tenantShowcaseDocPath(tenantId)).set(next, { merge: true });
+    const batch = fbAdminDb.batch();
+    batch.set(fbAdminDb.doc(tenantShowcaseDocPath(tenantId)), next, { merge: true });
+    // Ensure tenant root doc is visible in Firestore console even when only subcollections are used.
+    batch.set(
+        fbAdminDb.doc(tenantCompanyDocPath(tenantId)),
+        {
+            id: tenantId,
+            lastShowcaseUpdatedAt: next.updatedAt,
+            lastUpdatedBy: params.updatedBy,
+        },
+        { merge: true },
+    );
+    await batch.commit();
     return next;
 }

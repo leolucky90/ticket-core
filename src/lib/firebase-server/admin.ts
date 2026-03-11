@@ -26,6 +26,10 @@ function loadServiceAccount(): { projectId: string; clientEmail: string; private
 }
 
 const sa = loadServiceAccount();
+const storageBucket =
+    process.env.FIREBASE_STORAGE_BUCKET?.trim() ||
+    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET?.trim() ||
+    `${sa.projectId}.firebasestorage.app`;
 
 const app =
     getApps().length === 0
@@ -35,6 +39,7 @@ const app =
                 clientEmail: sa.clientEmail,
                 privateKey: sa.privateKey,
             }),
+            storageBucket,
         })
         : getApps()[0];
 

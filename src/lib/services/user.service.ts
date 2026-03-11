@@ -6,6 +6,7 @@ export type UserDoc = {
     email: string;
     role: "staff" | "manager" | "company_admin" | "owner" | "super_admin" | "viewer" | "customer";
     companyId: string | null;
+    customerId: string | null;
     createdAt: number;
     providers: string[];
 };
@@ -37,6 +38,12 @@ function resolveCompanyId(role: UserDoc["role"], candidate: unknown, uidFallback
     return normalized;
 }
 
+function normalizeCustomerId(value: unknown): string | null {
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
 export function toAccountType(role: UserDoc["role"] | null | undefined): AccountType {
     if (!role) return "customer";
     if (role === "customer") return "customer";
@@ -47,7 +54,7 @@ export function getShowcaseTenantId(userDoc: Pick<UserDoc, "uid" | "role" | "com
     if (!userDoc) return null;
     const companyId = normalizeCompanyId(userDoc.companyId);
     if (toAccountType(userDoc.role) === "company") return companyId ?? userDoc.uid ?? uidFallback ?? null;
-    return companyId;
+    return companyId ?? userDoc.uid ?? uidFallback ?? null;
 }
 
 export async function ensureUserDoc(params: {
@@ -67,6 +74,7 @@ export async function ensureUserDoc(params: {
             email: params.email,
             role,
             companyId: resolveCompanyId(role, null, params.uid),
+            customerId: null,
             createdAt: Date.now(),
             providers: params.providers,
         };
@@ -87,6 +95,7 @@ export async function ensureUserDoc(params: {
         email: params.email || (typeof existing.email === "string" ? existing.email : ""),
         role,
         companyId: resolveCompanyId(role, existing.companyId, uid),
+        customerId: normalizeCustomerId(existing.customerId),
         createdAt: typeof existing.createdAt === "number" ? existing.createdAt : Date.now(),
         providers: mergedProviders,
     };
@@ -105,6 +114,7 @@ export async function getUserDoc(uid: string): Promise<UserDoc | null> {
         email: typeof raw.email === "string" ? raw.email : "",
         role,
         companyId: resolveCompanyId(role, raw.companyId, uid),
+        customerId: normalizeCustomerId(raw.customerId),
         createdAt: typeof raw.createdAt === "number" ? raw.createdAt : 0,
         providers: Array.isArray(raw.providers)
             ? raw.providers.filter((provider): provider is string => typeof provider === "string" && provider.length > 0)

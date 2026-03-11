@@ -1,7 +1,18 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { ShowcaseLanguageSwitcher } from "@/features/showcase/components/ShowcaseLanguageSwitcher";
-import type { ShowContentBlock, ShowContentBlockId, ShowContentBodyScale, ShowContentFontFamily, ShowContentState, ShowContentTitleScale } from "@/features/showcase/types/showContent";
+import { MOCK_HOME_SERVICE_IMAGE_URLS } from "@/mock/homeServiceImages";
+import type {
+    ShowContentBlock,
+    ShowContentBlockId,
+    ShowContentBodyScale,
+    ShowContentFontFamily,
+    ShowContentState,
+    ShowContentTitleScale,
+    ShowServiceCard,
+    ShowServiceImagePosition,
+    ShowServiceImageStyle,
+} from "@/features/showcase/types/showContent";
 import type { ShowThemeColors } from "@/features/showcase/types/showTheme";
 
 type ShowHomePageProps = {
@@ -9,6 +20,8 @@ type ShowHomePageProps = {
     lang: "zh" | "en";
     showThemeColors: ShowThemeColors;
     showContentState: ShowContentState;
+    homeHref?: string;
+    authTenantId?: string | null;
 };
 
 const uiByLang = {
@@ -79,7 +92,60 @@ function renderPoints(points: string[], textClass: string) {
     );
 }
 
-export function ShowHomePage({ navAccountType, lang, showThemeColors, showContentState }: ShowHomePageProps) {
+function isHorizontalImagePosition(position: ShowServiceImagePosition) {
+    return position === "left" || position === "right";
+}
+
+function getServiceCardLayoutClass(position: ShowServiceImagePosition) {
+    if (position === "left") return "flex-row";
+    if (position === "right") return "flex-row-reverse";
+    if (position === "bottom") return "flex-col-reverse";
+    return "flex-col";
+}
+
+function getServiceImageClass(style: ShowServiceImageStyle, position: ShowServiceImagePosition) {
+    const horizontal = isHorizontalImagePosition(position);
+    if (style === "circle") {
+        return horizontal
+            ? "h-20 w-20 shrink-0 rounded-full object-cover sm:h-24 sm:w-24"
+            : "h-24 w-24 self-center rounded-full object-cover sm:h-28 sm:w-28";
+    }
+    return horizontal
+        ? "h-20 w-20 shrink-0 rounded-xl object-cover sm:h-24 sm:w-24"
+        : "h-32 w-full rounded-xl object-cover";
+}
+
+function getServicePlaceholderClass(style: ShowServiceImageStyle, position: ShowServiceImagePosition) {
+    const horizontal = isHorizontalImagePosition(position);
+    if (style === "circle") {
+        return horizontal
+            ? "grid h-20 w-20 shrink-0 place-items-center rounded-full border border-dashed border-[#1d1b16]/30 text-[10px] text-[#7b745e] sm:h-24 sm:w-24"
+            : "grid h-24 w-24 place-items-center self-center rounded-full border border-dashed border-[#1d1b16]/30 text-[10px] text-[#7b745e] sm:h-28 sm:w-28";
+    }
+    return horizontal
+        ? "grid h-20 w-20 shrink-0 place-items-center rounded-xl border border-dashed border-[#1d1b16]/30 text-[10px] text-[#7b745e] sm:h-24 sm:w-24"
+        : "grid h-32 w-full place-items-center rounded-xl border border-dashed border-[#1d1b16]/30 text-[10px] text-[#7b745e]";
+}
+
+function renderServicePlaceholder(style: ShowServiceImageStyle, position: ShowServiceImagePosition) {
+    return (
+        <div className={getServicePlaceholderClass(style, position)}>
+            <div className="grid gap-1 text-center">
+                <span>No Image</span>
+                <span>need upgrade project ,demo only</span>
+            </div>
+        </div>
+    );
+}
+
+export function ShowHomePage({
+    navAccountType,
+    lang,
+    showThemeColors,
+    showContentState,
+    homeHref = "/",
+    authTenantId = null,
+}: ShowHomePageProps) {
     const ui = uiByLang[lang];
     const currentYear = new Date().getFullYear();
     const localeContent = showContentState.locale[lang];
@@ -95,12 +161,28 @@ export function ShowHomePage({ navAccountType, lang, showThemeColors, showConten
         ["--showcase-footer-bg" as string]: showThemeColors.footer,
     };
 
+    const normalizeTenantId = (value: string | null | undefined) => {
+        if (!value) return null;
+        const trimmed = value.trim();
+        if (!trimmed) return null;
+        if (/[/?#]/.test(trimmed)) return null;
+        return trimmed;
+    };
+    const safeAuthTenantId = normalizeTenantId(authTenantId);
+    const withTenant = (path: string) => {
+        if (!safeAuthTenantId) return path;
+        const query = new URLSearchParams({ tenant: safeAuthTenantId });
+        return `${path}${path.includes("?") ? "&" : "?"}${query.toString()}`;
+    };
+    const loginHref = withTenant("/login");
+    const signUpHref = withTenant("/register/customer");
+
     const cta =
         navAccountType === "company"
             ? { href: "/dashboard", label: ui.ctaCompany }
             : navAccountType === "customer"
               ? { href: "/ticket/history", label: ui.ctaCustomer }
-              : { href: "/login", label: ui.ctaGuest };
+              : { href: loginHref, label: ui.ctaGuest };
 
     const servicesAnchor = localeContent.services.enabled ? "#services" : localeContent.contact.enabled ? "#contact" : "#hero";
     const orderedVisibleBlocks = showContentState.order.filter((blockId) => localeContent[blockId].enabled);
@@ -176,7 +258,24 @@ export function ShowHomePage({ navAccountType, lang, showThemeColors, showConten
         }
 
         if (blockId === "services") {
-            const serviceItems = block.points.length > 0 ? block.points : [block.body];
+            const fallbackItems = block.points.length > 0 ? block.points : [block.body];
+            const serviceRows = block.serviceRows === 1 || block.serviceRows === 2 || block.serviceRows === 3 ? block.serviceRows : 2;
+            const visibleCardCount = serviceRows * 3;
+            const serviceCards: ShowServiceCard[] =
+                block.serviceCards.length > 0
+                    ? block.serviceCards
+                    : fallbackItems.slice(0, 9).map((title) => ({
+                          title,
+                          body: "",
+                          imageUrl: "",
+                          imageStyle: "square",
+                          imagePosition: "top",
+                          showImage: true,
+                          showTitle: true,
+                          showBody: true,
+                      }));
+            const visibleServiceCards = serviceCards.slice(0, visibleCardCount);
+
             return (
                 <section key={blockId} id="services" className="bg-[rgb(var(--showcase-services-bg))] py-12 md:py-16">
                     <div className="mx-auto w-full max-w-6xl px-4 md:px-6">
@@ -186,11 +285,35 @@ export function ShowHomePage({ navAccountType, lang, showThemeColors, showConten
                             <p className={`mt-3 text-[#3b382f] ${bodyClass}`}>{block.body}</p>
                         </div>
                         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                            {serviceItems.map((item, index) => (
-                                <article key={`${item}-${index}`} className="rounded-2xl border-2 border-[#1d1b16] bg-white p-5">
-                                    <h3 className={`font-bold text-[#191815] ${fontClass} ${bodyClass}`}>{item}</h3>
-                                </article>
-                            ))}
+                            {visibleServiceCards.map((card, index) => {
+                                const resolvedTitle = card.title || fallbackItems[index] || block.body;
+                                const showImage = card.showImage;
+                                const showTitle = card.showTitle && resolvedTitle.trim().length > 0;
+                                const showBody = card.showBody && card.body.trim().length > 0;
+                                const layoutClass = showImage ? getServiceCardLayoutClass(card.imagePosition) : "flex-col";
+                                const resolvedImageUrl = card.imageUrl.trim() || MOCK_HOME_SERVICE_IMAGE_URLS[index] || "";
+
+                                return (
+                                    <article
+                                        key={`${card.title || "service"}-${index}`}
+                                        className={`flex gap-3 rounded-2xl border-2 border-[#1d1b16] bg-white p-5 ${layoutClass}`}
+                                    >
+                                        {showImage ? (
+                                            resolvedImageUrl ? (
+                                                <img
+                                                    src={resolvedImageUrl}
+                                                    alt={resolvedTitle || `service-${index + 1}`}
+                                                    className={getServiceImageClass(card.imageStyle, card.imagePosition)}
+                                                />
+                                            ) : renderServicePlaceholder(card.imageStyle, card.imagePosition)
+                                        ) : null}
+                                        <div className="grid content-center gap-2">
+                                            {showTitle ? <h3 className={`font-bold text-[#191815] ${fontClass} ${bodyClass}`}>{resolvedTitle}</h3> : null}
+                                            {showBody ? <p className={`text-[#3b382f] ${fontClass} text-sm`}>{card.body}</p> : null}
+                                        </div>
+                                    </article>
+                                );
+                            })}
                         </div>
                     </div>
                 </section>
@@ -251,7 +374,7 @@ export function ShowHomePage({ navAccountType, lang, showThemeColors, showConten
         >
             <header className="sticky top-0 z-20 border-b border-[#1d1b16] bg-[rgb(var(--showcase-header-bg))]">
                 <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 md:px-6">
-                    <Link href="/" className="text-lg font-black uppercase tracking-[0.16em] text-[#191815]">
+                    <Link href={homeHref} className="text-lg font-black uppercase tracking-[0.16em] text-[#191815]">
                         LOGO
                     </Link>
 
@@ -265,13 +388,13 @@ export function ShowHomePage({ navAccountType, lang, showThemeColors, showConten
                             <>
                                 <Link
                                     className="rounded-full border border-[#191815] px-4 py-1.5 hover:bg-[#191815] hover:text-[#ffcb2d]"
-                                    href="/login"
+                                    href={loginHref}
                                 >
                                     {ui.navLogin}
                                 </Link>
                                 <Link
                                     className="rounded-full bg-[#191815] px-4 py-1.5 text-[#ffcb2d] hover:bg-black"
-                                    href="/login?mode=signUp"
+                                    href={signUpHref}
                                 >
                                     {ui.navSignUp}
                                 </Link>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { ThemeColorPalette } from "@/components/settings/ThemeColorPalette";
 import {
@@ -44,11 +44,45 @@ const SERVER_THEME_STATE = {
     customColors: DEFAULT_THEME_CUSTOM_COLORS,
 };
 
+async function saveThemeToFirebase() {
+    const theme = getThemeStateFromClient();
+    try {
+        await fetch("/api/dashboard/preferences", {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ theme }),
+        });
+    } catch {
+        // Keep local theme even when remote save fails.
+    }
+}
+
 export function ThemeModeToggle({ labels }: ThemeModeToggleProps) {
     const themeState = useSyncExternalStore(
         subscribeThemeState,
         getThemeStateFromClient,
         () => SERVER_THEME_STATE,
+    );
+    const saveTimerRef = useRef<number | null>(null);
+
+    function scheduleThemeSave() {
+        if (typeof window === "undefined") return;
+        if (saveTimerRef.current !== null) {
+            window.clearTimeout(saveTimerRef.current);
+        }
+        saveTimerRef.current = window.setTimeout(() => {
+            saveTimerRef.current = null;
+            void saveThemeToFirebase();
+        }, 220);
+    }
+
+    useEffect(
+        () => () => {
+            if (saveTimerRef.current !== null) {
+                window.clearTimeout(saveTimerRef.current);
+            }
+        },
+        [],
     );
 
     const modeOptions: Array<{ mode: ThemeMode; label: string }> = [
@@ -89,10 +123,12 @@ export function ThemeModeToggle({ labels }: ThemeModeToggleProps) {
 
     function handleModeChange(nextMode: ThemeMode) {
         setThemeMode(nextMode);
+        scheduleThemeSave();
     }
 
     function handleColorChange(role: ThemeColorRole, nextColor: string) {
         setThemeColor(role, nextColor);
+        scheduleThemeSave();
     }
 
     function handleResetCustomTheme() {
@@ -100,6 +136,7 @@ export function ThemeModeToggle({ labels }: ThemeModeToggleProps) {
             mode: "custom",
             customColors: DEFAULT_THEME_CUSTOM_COLORS,
         });
+        scheduleThemeSave();
     }
 
     return (

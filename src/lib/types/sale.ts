@@ -6,6 +6,7 @@ export type Sale = {
     amount: number;
     checkoutAt: number;
     paymentMethod: PaymentMethod;
+    companyId?: string;
     createdAt: number;
     updatedAt: number;
 };

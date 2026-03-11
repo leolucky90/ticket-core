@@ -75,3 +75,35 @@ body {
 :root[data-theme="custom"] .ui-select {
   color-scheme: dark;
 }
+
+@keyframes bizFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.biz-fade-up {
+  opacity: 0;
+  animation: bizFadeUp 0.75s cubic-bezier(0.2, 0.65, 0.2, 1) forwards;
+}
+
+.biz-delay-1 {
+  animation-delay: 0.08s;
+}
+
+.biz-delay-2 {
+  animation-delay: 0.16s;
+}
+
+.biz-delay-3 {
+  animation-delay: 0.24s;
+}
+
+.biz-delay-4 {
+  animation-delay: 0.32s;
+}

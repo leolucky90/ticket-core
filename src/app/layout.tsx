@@ -25,7 +25,7 @@ export default async function RootLayout({ children }: RootLayoutProps) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
-      <body>
+      <body suppressHydrationWarning>
         {children}
       </body>
     </html>

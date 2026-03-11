@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Section } from "@/components/ui/section";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
 import { listTicketsByCustomerEmail } from "@/lib/services/ticket";
-import { getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 
 function formatDateTime(timestamp: number): string {
     if (!Number.isFinite(timestamp) || timestamp <= 0) return "-";
@@ -28,7 +28,8 @@ export default async function CustomerTicketHistoryPage() {
         redirect("/ticket");
     }
 
-    const tickets = await listTicketsByCustomerEmail(session.email);
+    const companyId = getShowcaseTenantId(user, session.uid);
+    const tickets = await listTicketsByCustomerEmail(session.email, companyId);
 
     return (
         <Section title="Ticket 紀錄">

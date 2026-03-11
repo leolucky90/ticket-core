@@ -8,11 +8,29 @@ type Labels = Parameters<typeof EmailAuthForm>[0]["labels"];
 type AuthMode = "signIn" | "signUp";
 type SignUpAccountType = "customer" | "company";
 
+function normalizeTenantId(value: string | null | undefined): string | null {
+    if (!value) return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (/[/?#]/.test(trimmed)) return null;
+    return trimmed;
+}
+
+function normalizeAuthTenantId(value: string | null | undefined): string | null {
+    if (!value) return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (!/^[a-zA-Z0-9-]+$/.test(trimmed)) return null;
+    return trimmed;
+}
+
 export function AuthClientBlock({
     labels,
     googleLabel,
     modeOverride,
     signUpAccountType = "customer",
+    tenantContextId,
+    firebaseAuthTenantId,
     showGoogle = true,
     showTicketLink = true,
 }: {
@@ -20,6 +38,8 @@ export function AuthClientBlock({
     googleLabel: string;
     modeOverride?: AuthMode;
     signUpAccountType?: SignUpAccountType;
+    tenantContextId?: string | null;
+    firebaseAuthTenantId?: string | null;
     showGoogle?: boolean;
     showTicketLink?: boolean;
 }) {
@@ -27,12 +47,32 @@ export function AuthClientBlock({
     const sp = useSearchParams();
     const next = sp.get("next");
     const mode = modeOverride ?? (sp.get("mode") === "signUp" ? "signUp" : "signIn");
+    const tenantId = normalizeTenantId(tenantContextId ?? sp.get("tenant"));
+    const authTenantId = normalizeAuthTenantId(firebaseAuthTenantId ?? sp.get("authTenant"));
 
     async function onAuthed(idToken: string) {
+        if (mode === "signUp") {
+            const roleResponse = await fetch("/api/auth/register-profile", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                    idToken,
+                    accountType: signUpAccountType,
+                    tenantId: tenantId ?? undefined,
+                    authTenantId: authTenantId ?? undefined,
+                }),
+            });
+            if (!roleResponse.ok) return;
+        }
+
         const r = await fetch("/api/auth/session", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ idToken }),
+            body: JSON.stringify({
+                idToken,
+                tenantId: tenantId ?? undefined,
+                authTenantId: authTenantId ?? undefined,
+            }),
         });
         if (!r.ok) return;
 
@@ -58,8 +98,10 @@ export function AuthClientBlock({
                 initialMode={mode}
                 showModeSwitch={false}
                 signUpAccountType={signUpAccountType}
+                signUpTenantId={tenantId}
+                firebaseAuthTenantId={authTenantId}
             />
-            {showGoogle ? <GoogleAuthButton label={googleLabel} onAuthed={onAuthed} /> : null}
+            {showGoogle ? <GoogleAuthButton label={googleLabel} onAuthed={onAuthed} firebaseAuthTenantId={authTenantId} /> : null}
             {showTicketLink ? (
                 <a className="auth-link auth-switch" href="/ticket">
                     前往 Ticket

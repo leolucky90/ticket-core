@@ -18,6 +18,8 @@ export type Ticket = { // Ticket 型別定義
     id: string; // 唯一 ID
     title: string; // 標題
     status: TicketStatus; // 狀態
+    companyId?: string;
+    customerId?: string;
     customer: TicketCustomer;
     device: TicketDevice;
     repairReason: string;

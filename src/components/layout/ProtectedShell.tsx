@@ -5,8 +5,10 @@ import { SignOutButton } from "@/components/layout/SignOutButton";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
 import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
 import { DraggableNavCards } from "@/components/layout/DraggableNavCards";
-import { getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 import { cookies, headers } from "next/headers";
+import { DashboardThemeSync } from "@/components/settings/DashboardThemeSync";
+import { resolveCustomerHomepageUrl } from "@/lib/services/homepage-url.service";
 
 type ProtectedShellProps = {
     children: ReactNode;
@@ -21,6 +23,10 @@ function isCompanyOnlyPath(pathname: string): boolean {
     if (pathname === "/settings/dashboard" || pathname.startsWith("/settings/dashboard/")) return true;
     if (pathname === "/settings/showcase" || pathname.startsWith("/settings/showcase/")) return true;
     return false;
+}
+
+function isExternalHref(href: string): boolean {
+    return href.startsWith("http://") || href.startsWith("https://");
 }
 
 export async function ProtectedShell({ children }: ProtectedShellProps) {
@@ -50,6 +56,7 @@ export async function ProtectedShell({ children }: ProtectedShellProps) {
         lang === "zh"
             ? {
                   nav: "導航",
+                  publicHome: "首頁",
                   dashboard: "儀表板",
                   ticket: "案件",
                   sales: "銷售",
@@ -65,6 +72,7 @@ export async function ProtectedShell({ children }: ProtectedShellProps) {
               }
             : {
                   nav: "Navigation",
+                  publicHome: "Homepage",
                   dashboard: "Dashboard",
                   ticket: "Cases",
                   sales: "Sales",
@@ -79,9 +87,15 @@ export async function ProtectedShell({ children }: ProtectedShellProps) {
                   signOut: "Sign out",
               };
     const homeHref = accountType === "company" ? "/dashboard" : "/ticket/history";
+    const customerTenantId = accountType === "customer" ? getShowcaseTenantId(userDoc, sessionUser.uid) : null;
+    const customerHomepageHref = accountType === "customer" ? await resolveCustomerHomepageUrl(customerTenantId) : null;
+    const publicHomeHref = accountType === "company" ? "/company-home" : customerHomepageHref;
+    const hasPublicHomeLink = typeof publicHomeHref === "string" && publicHomeHref.length > 0;
+    const publicHomeIsExternal = hasPublicHomeLink ? isExternalHref(publicHomeHref) : false;
 
     return (
         <div className="min-h-dvh bg-[rgb(var(--bg))] text-[rgb(var(--text))]">
+            {accountType === "company" ? <DashboardThemeSync /> : null}
             <header className="border-b border-[rgb(var(--border))] bg-[rgb(var(--nav))]">
                 <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
                     <Link href={homeHref} className="text-base font-semibold">
@@ -152,12 +166,30 @@ export async function ProtectedShell({ children }: ProtectedShellProps) {
                                         </div>
                                     </details>
                                     <SignOutButton className="w-full text-left" label={labels.signOut} />
-                                    <Link
-                                        href="/"
-                                        className="rounded-md px-2 py-1.5 text-sm hover:bg-[rgb(var(--panel2))]"
-                                    >
-                                        {labels.backHome}
-                                    </Link>
+                                    {hasPublicHomeLink ? (
+                                        publicHomeIsExternal ? (
+                                            <a
+                                                href={publicHomeHref}
+                                                className="rounded-md px-2 py-1.5 text-sm hover:bg-[rgb(var(--panel2))]"
+                                            >
+                                                {labels.publicHome}
+                                            </a>
+                                        ) : (
+                                            <Link
+                                                href={publicHomeHref}
+                                                className="rounded-md px-2 py-1.5 text-sm hover:bg-[rgb(var(--panel2))]"
+                                            >
+                                                {labels.publicHome}
+                                            </Link>
+                                        )
+                                    ) : (
+                                        <Link
+                                            href="/"
+                                            className="rounded-md px-2 py-1.5 text-sm hover:bg-[rgb(var(--panel2))]"
+                                        >
+                                            {labels.backHome}
+                                        </Link>
+                                    )}
                                 </div>
                             </div>
                         </details>
@@ -186,6 +218,23 @@ export async function ProtectedShell({ children }: ProtectedShellProps) {
                             </>
                         ) : (
                             <>
+                                {hasPublicHomeLink ? (
+                                    publicHomeIsExternal ? (
+                                        <a
+                                            href={publicHomeHref}
+                                            className="rounded-lg px-2 py-2 text-sm hover:bg-[rgb(var(--panel2))]"
+                                        >
+                                            {labels.publicHome}
+                                        </a>
+                                    ) : (
+                                        <Link
+                                            href={publicHomeHref}
+                                            className="rounded-lg px-2 py-2 text-sm hover:bg-[rgb(var(--panel2))]"
+                                        >
+                                            {labels.publicHome}
+                                        </Link>
+                                    )
+                                ) : null}
                                 <Link
                                     href="/ticket/history"
                                     className="rounded-lg px-2 py-2 text-sm hover:bg-[rgb(var(--panel2))]"

@@ -131,6 +131,23 @@ function isThemeMode(value: string | null | undefined): value is ThemeMode {
     return value === "light" || value === "dark" || value === "custom";
 }
 
+export function normalizeThemeMode(value: unknown, fallback: ThemeMode = DEFAULT_THEME_MODE): ThemeMode {
+    if (typeof value === "string" && isThemeMode(value)) return value;
+    return fallback;
+}
+
+export function normalizeThemeCustomColors(input: Partial<ThemeCustomColors> | null | undefined): ThemeCustomColors {
+    return normalizeCustomColors(input);
+}
+
+export function normalizeThemeState(candidate: unknown): ThemeState {
+    const source = (candidate ?? {}) as Partial<ThemeState>;
+    return {
+        mode: normalizeThemeMode(source.mode),
+        customColors: normalizeThemeCustomColors(source.customColors),
+    };
+}
+
 function getStoredCustomColors(storage: Storage): ThemeCustomColors {
     const raw = storage.getItem(CUSTOM_COLORS_STORAGE_KEY);
     if (!raw) return DEFAULT_THEME_CUSTOM_COLORS;
@@ -214,14 +231,16 @@ export function getThemeStateFromClient(): ThemeState {
 export function applyThemeState(nextState: ThemeState) {
     if (typeof window === "undefined") return;
 
-    const mode = isThemeMode(nextState.mode) ? nextState.mode : DEFAULT_THEME_MODE;
-    const customColors = normalizeCustomColors(nextState.customColors);
+    const normalizedState = normalizeThemeState(nextState);
+    const mode = normalizedState.mode;
+    const customColors = normalizedState.customColors;
     const root = document.documentElement;
 
     syncThemeToDocument(root, mode, customColors);
 
     localStorage.setItem(THEME_STORAGE_KEY, mode);
     localStorage.setItem(CUSTOM_COLORS_STORAGE_KEY, JSON.stringify(customColors));
+    cachedThemeState = normalizedState;
     window.dispatchEvent(new Event(THEME_EVENT));
 }
 

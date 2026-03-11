@@ -7,6 +7,7 @@
     "dev:clean": "rm -rf .next && next dev --webpack",
     "dev:fullclean": "rm -rf .next ../.next && next dev --webpack --port 3000",
     "dev:turbo": "next dev",
+    "reset:firebase": "node scripts/reset-firebase-data.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
