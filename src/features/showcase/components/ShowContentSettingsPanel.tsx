@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { type DragEvent, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -578,9 +579,12 @@ export function ShowContentSettingsPanel({ labels, initialState }: ShowContentSe
                                                 <span className="text-xs text-[rgb(var(--muted))]">{labels.fieldServiceCardImage}</span>
                                                 {previewSrc ? (
                                                     <div className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-2">
-                                                        <img
+                                                        <Image
                                                             src={previewSrc}
                                                             alt={card.title || `Service card ${index + 1}`}
+                                                            width={96}
+                                                            height={96}
+                                                            unoptimized
                                                             className={`mx-auto h-24 w-24 object-cover ${imageShapeClass}`}
                                                         />
                                                     </div>

@@ -44,7 +44,7 @@ function normalizeSubdomain(value: unknown): string | null {
 }
 
 function buildInternalSitePath(tenantId: string): string {
-    return `/site/${encodeURIComponent(tenantId)}`;
+    return `/${encodeURIComponent(tenantId)}`;
 }
 
 export async function resolveCustomerHomepageUrl(companyId: string | null | undefined): Promise<string | null> {

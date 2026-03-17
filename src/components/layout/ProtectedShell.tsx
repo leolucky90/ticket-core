@@ -17,8 +17,6 @@ type ProtectedShellProps = {
 function isCompanyOnlyPath(pathname: string): boolean {
     if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) return true;
     if (pathname === "/sales" || pathname.startsWith("/sales/")) return true;
-    if (pathname === "/ticket") return true;
-    if (pathname.startsWith("/ticket/") && !pathname.startsWith("/ticket/history")) return true;
     if (pathname === "/settings/security" || pathname.startsWith("/settings/security/")) return true;
     if (pathname === "/settings/dashboard" || pathname.startsWith("/settings/dashboard/")) return true;
     if (pathname === "/settings/showcase" || pathname.startsWith("/settings/showcase/")) return true;
@@ -45,8 +43,10 @@ export async function ProtectedShell({ children }: ProtectedShellProps) {
 
     const userDoc = await getUserDoc(sessionUser.uid);
     const accountType = toAccountType(userDoc?.role ?? null);
+    const customerTenantId = accountType === "customer" ? getShowcaseTenantId(userDoc, sessionUser.uid) : null;
+    const customerDashboardHref = customerTenantId ? `/${encodeURIComponent(customerTenantId)}/dashboard` : "/customer-dashboard";
     if (accountType === "customer" && isCompanyOnlyPath(pathname)) {
-        redirect("/ticket/history");
+        redirect(customerDashboardHref);
     }
 
     const accountName = sessionUser.email.split("@")[0] || "使用者";
@@ -58,11 +58,18 @@ export async function ProtectedShell({ children }: ProtectedShellProps) {
                   nav: "導航",
                   publicHome: "首頁",
                   dashboard: "儀表板",
+                  customerDashboard: "客戶儀錶板",
+                  customers: "客戶",
                   ticket: "案件",
-                  sales: "銷售",
+                  activities: "活動促銷",
+                  inventory: "庫存管理",
+                  productManagement: "產品管理",
+                  checkout: "結帳",
+                  receipts: "收據",
+                  marketing: "商店營銷設置",
                   settings: "帳號設定",
                   account: "帳戶資訊",
-                  history: "Ticket 紀錄",
+                  attributeSettings: "屬性設置",
                   dashboardSettings: "儀表板設定",
                   showcaseSettings: "展示頁設定",
                   styleSettings: "樣式設定",
@@ -74,11 +81,18 @@ export async function ProtectedShell({ children }: ProtectedShellProps) {
                   nav: "Navigation",
                   publicHome: "Homepage",
                   dashboard: "Dashboard",
+                  customerDashboard: "Customer Dashboard",
+                  customers: "Customers",
                   ticket: "Cases",
-                  sales: "Sales",
+                  activities: "Campaigns",
+                  inventory: "Inventory",
+                  productManagement: "Product Management",
+                  checkout: "Checkout",
+                  receipts: "Receipts",
+                  marketing: "Store Marketing",
                   settings: "Account Settings",
                   account: "Account",
-                  history: "Ticket History",
+                  attributeSettings: "Attribute Settings",
                   dashboardSettings: "Dashboard Settings",
                   showcaseSettings: "Showcase Settings",
                   styleSettings: "Style Settings",
@@ -86,8 +100,7 @@ export async function ProtectedShell({ children }: ProtectedShellProps) {
                   backHome: "Back Home",
                   signOut: "Sign out",
               };
-    const homeHref = accountType === "company" ? "/dashboard" : "/ticket/history";
-    const customerTenantId = accountType === "customer" ? getShowcaseTenantId(userDoc, sessionUser.uid) : null;
+    const homeHref = accountType === "company" ? "/dashboard" : customerDashboardHref;
     const customerHomepageHref = accountType === "customer" ? await resolveCustomerHomepageUrl(customerTenantId) : null;
     const publicHomeHref = accountType === "company" ? "/company-home" : customerHomepageHref;
     const hasPublicHomeLink = typeof publicHomeHref === "string" && publicHomeHref.length > 0;
@@ -135,6 +148,12 @@ export async function ProtectedShell({ children }: ProtectedShellProps) {
                                             </Link>
                                             {accountType === "company" ? (
                                                 <>
+                                                    <Link
+                                                        href="/settings/account/attributes"
+                                                        className="rounded-md px-2 py-1.5 text-sm hover:bg-[rgb(var(--panel))]"
+                                                    >
+                                                        {labels.attributeSettings}
+                                                    </Link>
                                                     <Link
                                                         href="/settings/dashboard"
                                                         className="rounded-md px-2 py-1.5 text-sm hover:bg-[rgb(var(--panel))]"
@@ -205,15 +224,20 @@ export async function ProtectedShell({ children }: ProtectedShellProps) {
                     <nav className="grid gap-2">
                         {accountType === "company" ? (
                             <>
-                                <Link href="/dashboard" className="rounded-lg px-2 py-2 text-sm hover:bg-[rgb(var(--panel2))]">
-                                    {labels.dashboard}
-                                </Link>
                                 <DraggableNavCards
-                                    labels={{
-                                        ticket: labels.ticket,
-                                        sales: labels.sales,
-                                    }}
                                     lang={lang}
+                                    storageKey="company-sidebar-cards"
+                                    items={[
+                                        { id: "dashboard", href: "/dashboard?tab=dashboard", label: labels.dashboard },
+                                        { id: "customers", href: "/dashboard?tab=customers", label: labels.customers },
+                                        { id: "cases", href: "/dashboard?tab=cases", label: labels.ticket },
+                                        { id: "activities", href: "/dashboard?tab=activities", label: labels.activities },
+                                        { id: "inventory", href: "/dashboard?tab=inventory", label: labels.inventory },
+                                        { id: "product_management", href: "/dashboard?tab=inventory&inventoryView=product-management", label: labels.productManagement },
+                                        { id: "checkout", href: "/dashboard/checkout", label: labels.checkout },
+                                        { id: "receipts", href: "/dashboard/receipts", label: labels.receipts },
+                                        { id: "marketing", href: "/dashboard?tab=marketing", label: labels.marketing },
+                                    ]}
                                 />
                             </>
                         ) : (
@@ -235,18 +259,14 @@ export async function ProtectedShell({ children }: ProtectedShellProps) {
                                         </Link>
                                     )
                                 ) : null}
-                                <Link
-                                    href="/ticket/history"
-                                    className="rounded-lg px-2 py-2 text-sm hover:bg-[rgb(var(--panel2))]"
-                                >
-                                    {labels.history}
-                                </Link>
-                                <Link
-                                    href="/settings/account"
-                                    className="rounded-lg px-2 py-2 text-sm hover:bg-[rgb(var(--panel2))]"
-                                >
-                                    {labels.account}
-                                </Link>
+                                <DraggableNavCards
+                                    lang={lang}
+                                    storageKey="customer-sidebar-cards"
+                                    items={[
+                                        { id: "customer_dashboard", href: customerDashboardHref, label: labels.customerDashboard },
+                                        { id: "account", href: "/settings/account", label: labels.account },
+                                    ]}
+                                />
                             </>
                         )}
                     </nav>

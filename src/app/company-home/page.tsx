@@ -14,10 +14,13 @@ export default async function CompanyHomePage() {
     if (!sessionUser) redirect("/login?next=/company-home");
 
     const userDoc = await getUserDoc(sessionUser.uid);
-    const navAccountType = toAccountType(userDoc?.role ?? null);
-    if (navAccountType !== "company") redirect("/ticket/history");
-
     const tenantId = getShowcaseTenantId(userDoc, sessionUser.uid);
+    const navAccountType = toAccountType(userDoc?.role ?? null);
+    if (navAccountType !== "company") {
+        if (tenantId) redirect(`/${encodeURIComponent(tenantId)}/dashboard`);
+        redirect("/customer-dashboard");
+    }
+
     const preferences = await getShowcasePreferences({ tenantId });
 
     return (
@@ -25,8 +28,10 @@ export default async function CompanyHomePage() {
             navAccountType="company"
             lang={lang}
             showThemeColors={preferences.themeColors}
+            storefrontSettings={preferences.storefront}
             showContentState={preferences.content}
             homeHref="/company-home"
+            authTenantId={tenantId}
         />
     );
 }

@@ -4,14 +4,21 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { AuthClientBlock } from "@/components/auth/AuthClientBlock";
 import { AuthPageShell } from "@/components/auth/ui/AuthPageShell";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
-import { getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 
 export default async function CompanyRegisterPage() {
     const session = await getSessionUser();
     if (session) {
         const userDoc = await getUserDoc(session.uid);
         const accountType = toAccountType(userDoc?.role ?? null);
-        redirect(accountType === "company" ? "/dashboard" : "/ticket/history");
+        if (accountType === "company") {
+            redirect("/dashboard");
+        }
+        const tenantId = getShowcaseTenantId(userDoc, session.uid);
+        if (tenantId) {
+            redirect(`/${encodeURIComponent(tenantId)}/dashboard`);
+        }
+        redirect("/customer-dashboard");
     }
 
     const labels = {
@@ -57,7 +64,6 @@ export default async function CompanyRegisterPage() {
                         googleLabel="使用 Google 登入"
                         modeOverride="signUp"
                         signUpAccountType="company"
-                        showTicketLink={false}
                     />
                     <div className="pt-2 text-center text-xs text-[rgb(var(--muted))]">
                         <Link className="text-[rgb(var(--accent))] hover:underline" href="/login">

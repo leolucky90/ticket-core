@@ -32,7 +32,6 @@ export function AuthClientBlock({
     tenantContextId,
     firebaseAuthTenantId,
     showGoogle = true,
-    showTicketLink = true,
 }: {
     labels: Labels;
     googleLabel: string;
@@ -41,7 +40,6 @@ export function AuthClientBlock({
     tenantContextId?: string | null;
     firebaseAuthTenantId?: string | null;
     showGoogle?: boolean;
-    showTicketLink?: boolean;
 }) {
     const router = useRouter();
     const sp = useSearchParams();
@@ -76,14 +74,14 @@ export function AuthClientBlock({
         });
         if (!r.ok) return;
 
-        let fallbackPath = "/ticket/history";
+        let fallbackPath = tenantId ? `/${encodeURIComponent(tenantId)}/dashboard` : "/customer-dashboard";
         const bootstrapResponse = await fetch("/api/auth/bootstrap", { method: "POST" });
         if (bootstrapResponse.ok) {
             const payload = (await bootstrapResponse.json().catch(() => null)) as
                 | { user?: { role?: string | null } | null }
                 | null;
             const role = payload?.user?.role;
-            fallbackPath = role && role !== "customer" ? "/dashboard" : "/ticket/history";
+            fallbackPath = role && role !== "customer" ? "/dashboard" : fallbackPath;
         }
 
         router.replace(next || fallbackPath);
@@ -102,11 +100,6 @@ export function AuthClientBlock({
                 firebaseAuthTenantId={authTenantId}
             />
             {showGoogle ? <GoogleAuthButton label={googleLabel} onAuthed={onAuthed} firebaseAuthTenantId={authTenantId} /> : null}
-            {showTicketLink ? (
-                <a className="auth-link auth-switch" href="/ticket">
-                    前往 Ticket
-                </a>
-            ) : null}
         </div>
     );
 }

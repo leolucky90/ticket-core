@@ -2,8 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { DEFAULT_SHOW_THEME_COLORS, normalizeShowThemeColors } from "@/features/showcase/services/showThemePreferences";
-import type { ShowThemeColorRole, ShowThemeColors } from "@/features/showcase/types/showTheme";
+import {
+    DEFAULT_SHOW_THEME_COLORS,
+    DEFAULT_STOREFRONT_SETTINGS,
+    normalizeShowThemeColors,
+    normalizeStorefrontSettings,
+} from "@/features/showcase/services/showThemePreferences";
+import type { ShowThemeColorRole, ShowThemeColors, StorefrontSettings } from "@/features/showcase/types/showTheme";
 import { rgbTripletToHex } from "@/lib/services/themePreferences";
 
 export type ShowStyleLabels = {
@@ -23,11 +28,22 @@ export type ShowStyleLabels = {
     roleContact: string;
     roleAd: string;
     roleFooter: string;
+    roleShopPage: string;
+    roleShopHeader: string;
+    roleShopHero: string;
+    roleShopGrid: string;
+    roleShopFooter: string;
+    storefrontTitle: string;
+    storefrontHint: string;
+    storefrontShoppingEnabled: string;
+    storefrontAutoRedirect: string;
+    storefrontShowCart: string;
 };
 
 type ShowStyleSettingsPanelProps = {
     labels: ShowStyleLabels;
     initialColors: ShowThemeColors;
+    initialStorefront: StorefrontSettings;
 };
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -40,8 +56,9 @@ function hexToRgbTriplet(hex: string): `${number} ${number} ${number}` {
     return `${r} ${g} ${b}`;
 }
 
-export function ShowStyleSettingsPanel({ labels, initialColors }: ShowStyleSettingsPanelProps) {
+export function ShowStyleSettingsPanel({ labels, initialColors, initialStorefront }: ShowStyleSettingsPanelProps) {
     const [colors, setColors] = useState<ShowThemeColors>(() => normalizeShowThemeColors(initialColors));
+    const [storefront, setStorefront] = useState<StorefrontSettings>(() => normalizeStorefrontSettings(initialStorefront));
     const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
 
     const roleLabels: Record<ShowThemeColorRole, string> = {
@@ -53,8 +70,27 @@ export function ShowStyleSettingsPanel({ labels, initialColors }: ShowStyleSetti
         contact: labels.roleContact,
         ad: labels.roleAd,
         footer: labels.roleFooter,
+        shopPage: labels.roleShopPage,
+        shopHeader: labels.roleShopHeader,
+        shopHero: labels.roleShopHero,
+        shopGrid: labels.roleShopGrid,
+        shopFooter: labels.roleShopFooter,
     };
-    const roles: ShowThemeColorRole[] = ["page", "header", "hero", "about", "services", "contact", "ad", "footer"];
+    const roles: ShowThemeColorRole[] = [
+        "page",
+        "header",
+        "hero",
+        "about",
+        "services",
+        "contact",
+        "ad",
+        "footer",
+        "shopPage",
+        "shopHeader",
+        "shopHero",
+        "shopGrid",
+        "shopFooter",
+    ];
 
     const saveStatusText = useMemo(() => {
         if (saveStatus === "saving") return labels.saving;
@@ -79,7 +115,7 @@ export function ShowStyleSettingsPanel({ labels, initialColors }: ShowStyleSetti
             const response = await fetch("/api/showcase/preferences", {
                 method: "PUT",
                 headers: { "content-type": "application/json" },
-                body: JSON.stringify({ themeColors: colors }),
+                body: JSON.stringify({ themeColors: colors, storefront }),
             });
             if (!response.ok) throw new Error("save failed");
             setSaveStatus("saved");
@@ -130,8 +166,52 @@ export function ShowStyleSettingsPanel({ labels, initialColors }: ShowStyleSetti
                             );
                         })}
                     </div>
+                    <div className="grid gap-2 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                        <div className="text-sm font-medium">{labels.storefrontTitle}</div>
+                        <div className="text-xs text-[rgb(var(--muted))]">{labels.storefrontHint}</div>
+                        <label className="flex items-center gap-2 text-sm">
+                            <input
+                                type="checkbox"
+                                checked={storefront.shoppingEnabled}
+                                onChange={(event) => {
+                                    setSaveStatus("idle");
+                                    setStorefront((prev) => ({ ...prev, shoppingEnabled: event.target.checked }));
+                                }}
+                            />
+                            <span>{labels.storefrontShoppingEnabled}</span>
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                            <input
+                                type="checkbox"
+                                checked={storefront.autoRedirectToShopForCustomer}
+                                onChange={(event) => {
+                                    setSaveStatus("idle");
+                                    setStorefront((prev) => ({ ...prev, autoRedirectToShopForCustomer: event.target.checked }));
+                                }}
+                            />
+                            <span>{labels.storefrontAutoRedirect}</span>
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                            <input
+                                type="checkbox"
+                                checked={storefront.showCartOnNavForCustomer}
+                                onChange={(event) => {
+                                    setSaveStatus("idle");
+                                    setStorefront((prev) => ({ ...prev, showCartOnNavForCustomer: event.target.checked }));
+                                }}
+                            />
+                            <span>{labels.storefrontShowCart}</span>
+                        </label>
+                    </div>
                     <div className="flex flex-wrap items-center gap-2">
-                        <Button type="button" variant="ghost" onClick={() => setColors(DEFAULT_SHOW_THEME_COLORS)}>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => {
+                                setColors(DEFAULT_SHOW_THEME_COLORS);
+                                setStorefront(DEFAULT_STOREFRONT_SETTINGS);
+                            }}
+                        >
                             {labels.reset}
                         </Button>
                         <Button type="button" onClick={saveToFirebase} disabled={saveStatus === "saving"}>

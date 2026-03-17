@@ -19,6 +19,7 @@ export default async function ShowcaseStylePage() {
     return (
         <ShowStyleSettingsPanel
             initialColors={preferences.themeColors}
+            initialStorefront={preferences.storefront}
             labels={{
                 title: t(locale, "showcaseStyleTitle"),
                 hint: t(locale, "showcaseStyleHint"),
@@ -36,6 +37,23 @@ export default async function ShowcaseStylePage() {
                 roleContact: t(locale, "showcaseRoleContact"),
                 roleAd: t(locale, "showcaseRoleAd"),
                 roleFooter: t(locale, "showcaseRoleFooter"),
+                roleShopPage: locale === "en" ? "Shop Page Background" : "購物頁背景",
+                roleShopHeader: locale === "en" ? "Shop Header Background" : "購物頁導覽列背景",
+                roleShopHero: locale === "en" ? "Shop Hero Background" : "購物頁 Hero 背景",
+                roleShopGrid: locale === "en" ? "Shop Product Grid Background" : "購物頁商品區塊背景",
+                roleShopFooter: locale === "en" ? "Shop Footer Background" : "購物頁 Footer 背景",
+                storefrontTitle: locale === "en" ? "Storefront Settings" : "購物頁功能設定",
+                storefrontHint:
+                    locale === "en"
+                        ? "Control whether customer navigation shows shop/cart and auto redirect behavior."
+                        : "控制是否開啟線上購物、顯示購物車 icon 與客戶自動導購。",
+                storefrontShoppingEnabled: locale === "en" ? "Enable Online Shopping" : "開啟線上購物",
+                storefrontAutoRedirect:
+                    locale === "en"
+                        ? "Auto redirect customer to shopping page after login"
+                        : "客戶登入後自動導向線上購物",
+                storefrontShowCart:
+                    locale === "en" ? "Show cart icon + customer icon in homepage nav" : "首頁導覽列顯示購物車 + 客戶 icon",
             }}
         />
     );

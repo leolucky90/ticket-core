@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { ShowcaseLanguageSwitcher } from "@/features/showcase/components/ShowcaseLanguageSwitcher";
@@ -13,12 +14,13 @@ import type {
     ShowServiceImagePosition,
     ShowServiceImageStyle,
 } from "@/features/showcase/types/showContent";
-import type { ShowThemeColors } from "@/features/showcase/types/showTheme";
+import type { ShowThemeColors, StorefrontSettings } from "@/features/showcase/types/showTheme";
 
 type ShowHomePageProps = {
     navAccountType: "guest" | "company" | "customer";
     lang: "zh" | "en";
     showThemeColors: ShowThemeColors;
+    storefrontSettings: StorefrontSettings;
     showContentState: ShowContentState;
     homeHref?: string;
     authTenantId?: string | null;
@@ -29,10 +31,13 @@ const uiByLang = {
         navAbout: "關於我們",
         navServices: "服務項目",
         navContact: "聯絡方式",
+        navLocation: "地點位置",
+        navShop: "線上購物",
         navLogin: "登入",
         navSignUp: "註冊",
         navDashboard: "儀表板",
         navMyAccount: "我的帳戶",
+        navCart: "購物車",
         ctaCompany: "前往儀表板",
         ctaCustomer: "我的帳戶",
         ctaGuest: "預約 / 登入",
@@ -46,10 +51,13 @@ const uiByLang = {
         navAbout: "About",
         navServices: "Services",
         navContact: "Contact",
+        navLocation: "Location",
+        navShop: "Shop",
         navLogin: "Log In",
         navSignUp: "Sign Up",
         navDashboard: "Dashboard",
         navMyAccount: "My Account",
+        navCart: "Cart",
         ctaCompany: "Open Dashboard",
         ctaCustomer: "My Account",
         ctaGuest: "Book / Log In",
@@ -115,6 +123,13 @@ function getServiceImageClass(style: ShowServiceImageStyle, position: ShowServic
         : "h-32 w-full rounded-xl object-cover";
 }
 
+function getServiceImageDimensions(style: ShowServiceImageStyle, position: ShowServiceImagePosition) {
+    const horizontal = isHorizontalImagePosition(position);
+    if (horizontal) return { width: 96, height: 96 };
+    if (style === "circle") return { width: 112, height: 112 };
+    return { width: 640, height: 256 };
+}
+
 function getServicePlaceholderClass(style: ShowServiceImageStyle, position: ShowServiceImagePosition) {
     const horizontal = isHorizontalImagePosition(position);
     if (style === "circle") {
@@ -142,6 +157,7 @@ export function ShowHomePage({
     navAccountType,
     lang,
     showThemeColors,
+    storefrontSettings,
     showContentState,
     homeHref = "/",
     authTenantId = null,
@@ -159,6 +175,11 @@ export function ShowHomePage({
         ["--showcase-contact-bg" as string]: showThemeColors.contact,
         ["--showcase-ad-bg" as string]: showThemeColors.ad,
         ["--showcase-footer-bg" as string]: showThemeColors.footer,
+        ["--showcase-shop-page-bg" as string]: showThemeColors.shopPage,
+        ["--showcase-shop-header-bg" as string]: showThemeColors.shopHeader,
+        ["--showcase-shop-hero-bg" as string]: showThemeColors.shopHero,
+        ["--showcase-shop-grid-bg" as string]: showThemeColors.shopGrid,
+        ["--showcase-shop-footer-bg" as string]: showThemeColors.shopFooter,
     };
 
     const normalizeTenantId = (value: string | null | undefined) => {
@@ -176,20 +197,29 @@ export function ShowHomePage({
     };
     const loginHref = withTenant("/login");
     const signUpHref = withTenant("/register/customer");
+    const customerDashboardHref = safeAuthTenantId ? `/${encodeURIComponent(safeAuthTenantId)}/dashboard` : "/customer-dashboard";
+    const shopHref = safeAuthTenantId ? `/${encodeURIComponent(safeAuthTenantId)}/shop` : "/shop";
 
     const cta =
         navAccountType === "company"
             ? { href: "/dashboard", label: ui.ctaCompany }
             : navAccountType === "customer"
-              ? { href: "/ticket/history", label: ui.ctaCustomer }
+              ? {
+                    href:
+                        storefrontSettings.shoppingEnabled && storefrontSettings.autoRedirectToShopForCustomer
+                            ? shopHref
+                            : customerDashboardHref,
+                    label: ui.ctaCustomer,
+                }
               : { href: loginHref, label: ui.ctaGuest };
 
     const servicesAnchor = localeContent.services.enabled ? "#services" : localeContent.contact.enabled ? "#contact" : "#hero";
     const orderedVisibleBlocks = showContentState.order.filter((blockId) => localeContent[blockId].enabled);
     const navLinks = [
-        { id: "about", label: ui.navAbout, enabled: localeContent.about.enabled },
-        { id: "services", label: ui.navServices, enabled: localeContent.services.enabled },
-        { id: "contact", label: ui.navContact, enabled: localeContent.contact.enabled },
+        { id: "about", anchor: "about", label: ui.navAbout, enabled: localeContent.about.enabled },
+        { id: "services", anchor: "services", label: ui.navServices, enabled: localeContent.services.enabled },
+        { id: "contact", anchor: "contact", label: ui.navContact, enabled: localeContent.contact.enabled },
+        { id: "location", anchor: "contact", label: ui.navLocation, enabled: localeContent.contact.enabled },
     ].filter((item) => item.enabled);
 
     function renderBlock(blockId: ShowContentBlockId, block: ShowContentBlock) {
@@ -292,6 +322,7 @@ export function ShowHomePage({
                                 const showBody = card.showBody && card.body.trim().length > 0;
                                 const layoutClass = showImage ? getServiceCardLayoutClass(card.imagePosition) : "flex-col";
                                 const resolvedImageUrl = card.imageUrl.trim() || MOCK_HOME_SERVICE_IMAGE_URLS[index] || "";
+                                const imageDimensions = getServiceImageDimensions(card.imageStyle, card.imagePosition);
 
                                 return (
                                     <article
@@ -300,9 +331,12 @@ export function ShowHomePage({
                                     >
                                         {showImage ? (
                                             resolvedImageUrl ? (
-                                                <img
+                                                <Image
                                                     src={resolvedImageUrl}
                                                     alt={resolvedTitle || `service-${index + 1}`}
+                                                    width={imageDimensions.width}
+                                                    height={imageDimensions.height}
+                                                    unoptimized
                                                     className={getServiceImageClass(card.imageStyle, card.imagePosition)}
                                                 />
                                             ) : renderServicePlaceholder(card.imageStyle, card.imagePosition)
@@ -380,12 +414,20 @@ export function ShowHomePage({
 
                     <nav className="flex flex-wrap items-center justify-end gap-2 text-xs font-semibold tracking-[0.08em] md:text-sm">
                         {navLinks.map((item) => (
-                            <a key={item.id} className="rounded-full px-3 py-1.5 hover:bg-[#191815] hover:text-[#ffcb2d]" href={`#${item.id}`}>
+                            <a key={item.id} className="rounded-full px-3 py-1.5 hover:bg-[#191815] hover:text-[#ffcb2d]" href={`#${item.anchor}`}>
                                 {item.label}
                             </a>
                         ))}
                         {navAccountType === "guest" ? (
                             <>
+                                {storefrontSettings.shoppingEnabled ? (
+                                    <Link
+                                        className="rounded-full border border-[#191815] px-4 py-1.5 hover:bg-[#191815] hover:text-[#ffcb2d]"
+                                        href={shopHref}
+                                    >
+                                        {ui.navShop}
+                                    </Link>
+                                ) : null}
                                 <Link
                                     className="rounded-full border border-[#191815] px-4 py-1.5 hover:bg-[#191815] hover:text-[#ffcb2d]"
                                     href={loginHref}
@@ -401,14 +443,32 @@ export function ShowHomePage({
                             </>
                         ) : null}
                         {navAccountType === "company" ? (
-                            <Link className="rounded-full bg-[#191815] px-4 py-1.5 text-[#ffcb2d] hover:bg-black" href="/dashboard">
-                                {ui.navDashboard}
-                            </Link>
+                            <>
+                                {storefrontSettings.shoppingEnabled ? (
+                                    <Link className="rounded-full border border-[#191815] px-4 py-1.5 hover:bg-[#191815] hover:text-[#ffcb2d]" href={shopHref}>
+                                        {ui.navShop}
+                                    </Link>
+                                ) : null}
+                                <Link className="rounded-full bg-[#191815] px-4 py-1.5 text-[#ffcb2d] hover:bg-black" href="/dashboard">
+                                    {ui.navDashboard}
+                                </Link>
+                            </>
                         ) : null}
                         {navAccountType === "customer" ? (
-                            <Link className="rounded-full bg-[#191815] px-4 py-1.5 text-[#ffcb2d] hover:bg-black" href="/ticket/history">
-                                {ui.navMyAccount}
-                            </Link>
+                            storefrontSettings.shoppingEnabled && storefrontSettings.showCartOnNavForCustomer ? (
+                                <>
+                                    <Link className="rounded-full border border-[#191815] px-4 py-1.5 hover:bg-[#191815] hover:text-[#ffcb2d]" href={shopHref}>
+                                        {ui.navCart} 🛒
+                                    </Link>
+                                    <Link className="rounded-full bg-[#191815] px-4 py-1.5 text-[#ffcb2d] hover:bg-black" href={customerDashboardHref}>
+                                        {ui.navMyAccount} 👤
+                                    </Link>
+                                </>
+                            ) : (
+                                <Link className="rounded-full bg-[#191815] px-4 py-1.5 text-[#ffcb2d] hover:bg-black" href={customerDashboardHref}>
+                                    {ui.navMyAccount}
+                                </Link>
+                            )
                         ) : null}
                         <ShowcaseLanguageSwitcher currentLang={lang} />
                     </nav>

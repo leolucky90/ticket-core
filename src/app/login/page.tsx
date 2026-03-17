@@ -4,7 +4,7 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { AuthClientBlock } from "@/components/auth/AuthClientBlock";
 import { AuthPageShell } from "@/components/auth/ui/AuthPageShell";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
-import { getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 
 type LoginPageSearchParams = {
   tenant?: string | string[];
@@ -46,7 +46,15 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   if (session) {
     const userDoc = await getUserDoc(session.uid);
     const accountType = toAccountType(userDoc?.role ?? null);
-    redirect(accountType === "company" ? "/dashboard" : "/ticket/history");
+    if (accountType === "company") {
+      redirect("/dashboard");
+    }
+    const sessionTenantId = getShowcaseTenantId(userDoc, session.uid);
+    const targetTenantId = authTenantId ?? tenantId ?? sessionTenantId;
+    if (targetTenantId) {
+      redirect(`/${encodeURIComponent(targetTenantId)}/dashboard`);
+    }
+    redirect("/customer-dashboard");
   }
 
   const labels = {
@@ -79,7 +87,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     <div className="min-h-dvh bg-[#191815] text-[#f5f1df]">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-5 md:px-6">
         <Link
-          href={tenantId ? `/site/${encodeURIComponent(tenantId)}` : "/"}
+          href={tenantId ? `/${encodeURIComponent(tenantId)}` : "/"}
           className="rounded-full border border-[#ffcb2d] px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.1em] text-[#ffcb2d] hover:bg-[#ffcb2d] hover:text-[#191815]"
         >
           Back Home

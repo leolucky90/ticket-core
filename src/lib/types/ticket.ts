@@ -1,6 +1,8 @@
 // src/lib/types/ticket.ts
-export type TicketStatus = "new" | "in_progress" | "waiting_customer" | "resolved" | "closed";
-export type QuoteStatus = "inspection_estimate" | "quoted" | "rejected" | "accepted";
+export type KnownTicketStatus = "new" | "in_progress" | "waiting_customer" | "resolved" | "closed";
+export type KnownQuoteStatus = "inspection_estimate" | "quoted" | "rejected" | "accepted";
+export type TicketStatus = KnownTicketStatus | (string & {});
+export type QuoteStatus = KnownQuoteStatus | (string & {});
 
 export type TicketCustomer = {
     name: string;

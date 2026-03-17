@@ -4,7 +4,7 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { AuthClientBlock } from "@/components/auth/AuthClientBlock";
 import { AuthPageShell } from "@/components/auth/ui/AuthPageShell";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
-import { getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 
 type RegisterCustomerSearchParams = {
     tenant?: string | string[];
@@ -46,7 +46,15 @@ export default async function CustomerRegisterPage({ searchParams }: { searchPar
     if (session) {
         const userDoc = await getUserDoc(session.uid);
         const accountType = toAccountType(userDoc?.role ?? null);
-        redirect(accountType === "company" ? "/dashboard" : "/ticket/history");
+        if (accountType === "company") {
+            redirect("/dashboard");
+        }
+        const sessionTenantId = getShowcaseTenantId(userDoc, session.uid);
+        const targetTenantId = authTenantId ?? tenantId ?? sessionTenantId;
+        if (targetTenantId) {
+            redirect(`/${encodeURIComponent(targetTenantId)}/dashboard`);
+        }
+        redirect("/customer-dashboard");
     }
 
     const labels = {
@@ -94,7 +102,6 @@ export default async function CustomerRegisterPage({ searchParams }: { searchPar
                         signUpAccountType="customer"
                         tenantContextId={tenantId}
                         firebaseAuthTenantId={authTenantId}
-                        showTicketLink={false}
                     />
                     <div className="pt-2 text-center text-xs text-[rgb(var(--muted))]">
                         <Link

@@ -49,11 +49,13 @@ function shouldRewriteToTenantByHost(req: NextRequest): boolean {
 
 export function middleware(req: NextRequest) {
     const { pathname } = req.nextUrl;
+    const isTenantDashboardPath = /^\/[^/]+\/dashboard(?:\/)?$/.test(pathname);
 
     const isProtected =
         pathname.startsWith("/dashboard") ||
+        pathname.startsWith("/customer-dashboard") ||
+        isTenantDashboardPath ||
         pathname.startsWith("/settings") ||
-        pathname.startsWith("/ticket") ||
         pathname.startsWith("/sales");
     if (!isProtected) {
         if (shouldRewriteToTenantByHost(req)) {

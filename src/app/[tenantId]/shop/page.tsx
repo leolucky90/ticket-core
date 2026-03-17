@@ -1,0 +1,50 @@
+import { cookies } from "next/headers";
+import { notFound } from "next/navigation";
+import { TenantShopPage } from "@/features/showcase/components/TenantShopPage";
+import { getShowcasePreferences } from "@/features/showcase/services/showcasePreferences.server";
+import { getSessionUser } from "@/lib/auth-enterprise/session.server";
+import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { listPublicProductsByTenant } from "@/lib/services/commerce";
+
+function normalizeTenantId(value: string): string | null {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (/[/?#]/.test(trimmed)) return null;
+    return trimmed;
+}
+
+export default async function TenantShopRoutePage({ params }: { params: Promise<{ tenantId: string }> }) {
+    const { tenantId: rawTenantId } = await params;
+    const tenantId = normalizeTenantId(rawTenantId);
+    if (!tenantId) notFound();
+
+    const cookieStore = await cookies();
+    const langCookie = cookieStore.get("lang")?.value;
+    const lang: "zh" | "en" = langCookie === "en" ? "en" : "zh";
+
+    const [preferences, products] = await Promise.all([
+        getShowcasePreferences({ tenantId }),
+        listPublicProductsByTenant(tenantId),
+    ]);
+
+    let navAccountType: "guest" | "company" | "customer" = "guest";
+    const sessionUser = await getSessionUser();
+    if (sessionUser) {
+        const userDoc = await getUserDoc(sessionUser.uid);
+        const sessionTenantId = getShowcaseTenantId(userDoc, sessionUser.uid);
+        if (sessionTenantId === tenantId) {
+            navAccountType = toAccountType(userDoc?.role ?? null);
+        }
+    }
+
+    return (
+        <TenantShopPage
+            tenantId={tenantId}
+            lang={lang}
+            products={products}
+            showThemeColors={preferences.themeColors}
+            storefrontSettings={preferences.storefront}
+            navAccountType={navAccountType}
+        />
+    );
+}

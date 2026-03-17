@@ -1,18 +1,23 @@
 import "server-only";
-import type { QuoteStatus, Ticket, TicketStatus } from "@/lib/types/ticket";
+import type { KnownTicketStatus, QuoteStatus, Ticket, TicketStatus } from "@/lib/types/ticket";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
 import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import {
+    DEFAULT_CASE_STATUSES,
+    DEFAULT_QUOTE_STATUSES,
+    getTicketAttributePreferences,
+} from "@/lib/services/ticketAttributes";
 
 const memory: { ticketsByCompany: Record<string, Ticket[]> } = { ticketsByCompany: {} };
 
 const MAX_TEXT = 120;
 const MAX_ADDRESS = 300;
 const MAX_DETAIL = 1000;
-const MAX_QUERY = 120;
 const MAX_MONEY = 100000000;
 const MAX_ID = 120;
+const MAX_STATUS = 40;
 const PHONE_RE = /^[0-9+\-()\s]{6,24}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -71,9 +76,30 @@ function composeTitle(customerName: string, deviceName: string): string {
     return `${left} - ${right}`;
 }
 
-function parseQuoteStatus(v: unknown): QuoteStatus {
-    if (v === "quoted" || v === "rejected" || v === "accepted") return v;
-    return "inspection_estimate";
+function normalizeStatusValue(value: unknown): string {
+    return safeText(toStr(value), MAX_STATUS);
+}
+
+function parseQuoteStatus(value: unknown): QuoteStatus {
+    const normalized = normalizeStatusValue(value);
+    if (!normalized) return "inspection_estimate";
+    return normalized as QuoteStatus;
+}
+
+function parseTicketStatus(value: unknown): TicketStatus {
+    const normalized = normalizeStatusValue(value);
+    if (!normalized) return "new";
+    return normalized as TicketStatus;
+}
+
+function isKnownTicketStatus(value: string): value is KnownTicketStatus {
+    return (
+        value === "new" ||
+        value === "in_progress" ||
+        value === "waiting_customer" ||
+        value === "resolved" ||
+        value === "closed"
+    );
 }
 
 function parseMoney(v: unknown): number {
@@ -88,7 +114,7 @@ function computePendingFee(repairAmount: number, inspectionFee: number): number 
     return repairAmount - inspectionFee;
 }
 
-const workflow: Record<TicketStatus, TicketStatus[]> = {
+const workflow: Record<KnownTicketStatus, KnownTicketStatus[]> = {
     new: ["in_progress", "closed"],
     in_progress: ["waiting_customer", "resolved", "closed"],
     waiting_customer: ["in_progress", "resolved", "closed"],
@@ -98,19 +124,13 @@ const workflow: Record<TicketStatus, TicketStatus[]> = {
 
 function canTransition(current: TicketStatus, next: TicketStatus): boolean {
     if (current === next) return true;
+    if (!isKnownTicketStatus(current) || !isKnownTicketStatus(next)) return true;
     return workflow[current].includes(next);
 }
 
 function normalizeTicket(input: Partial<Ticket> & { id: string }): Ticket {
     const createdAt = typeof input.createdAt === "number" ? input.createdAt : now();
-    const status: TicketStatus =
-        input.status === "new" ||
-        input.status === "in_progress" ||
-        input.status === "waiting_customer" ||
-        input.status === "resolved" ||
-        input.status === "closed"
-            ? input.status
-            : "new";
+    const status = parseTicketStatus(input.status);
 
     const customerName = safeText(toStr(input.customer?.name), MAX_TEXT) || "未命名客戶";
     const customerPhone = safeText(toStr(input.customer?.phone), MAX_TEXT);
@@ -184,7 +204,7 @@ function validateInput(payload: {
     note: string;
     repairAmount: number;
     inspectionFee: number;
-    quoteStatus: QuoteStatus;
+    quoteStatus: string;
 } | null {
     const customerName = safeText(payload.customerName, MAX_TEXT);
     const customerPhone = safeText(payload.customerPhone, MAX_TEXT);
@@ -197,7 +217,7 @@ function validateInput(payload: {
     const note = safeText(payload.note, MAX_DETAIL);
     const repairAmount = parseMoney(payload.repairAmount);
     const inspectionFee = parseMoney(payload.inspectionFee);
-    const quoteStatus = parseQuoteStatus(payload.quoteStatus);
+    const quoteStatus = normalizeStatusValue(payload.quoteStatus);
 
     if (!customerName || !customerPhone || !deviceName || !deviceModel) return null;
     if (!PHONE_RE.test(customerPhone)) return null;
@@ -217,6 +237,32 @@ function validateInput(payload: {
         inspectionFee,
         quoteStatus,
     };
+}
+
+function firstOrFallback(options: string[], fallback: string): string {
+    for (const option of options) {
+        const cleaned = normalizeStatusValue(option);
+        if (cleaned) return cleaned;
+    }
+    return fallback;
+}
+
+function resolveAllowedStatus(input: unknown, options: string[], fallback: string): string {
+    const allowed = options
+        .map((item) => normalizeStatusValue(item))
+        .filter((item) => item.length > 0);
+    const normalizedInput = normalizeStatusValue(input);
+    if (normalizedInput && allowed.includes(normalizedInput)) return normalizedInput;
+    return firstOrFallback(allowed, fallback);
+}
+
+function isAllowedStatus(input: unknown, options: string[]): boolean {
+    const normalizedInput = normalizeStatusValue(input);
+    if (!normalizedInput) return false;
+    return options
+        .map((item) => normalizeStatusValue(item))
+        .filter((item) => item.length > 0)
+        .includes(normalizedInput);
 }
 
 async function resolveSessionScope(requireCompany = true): Promise<SessionScope | null> {
@@ -256,14 +302,6 @@ function listFromMemory(companyId: string): Ticket[] {
 function upsertMemoryTicket(companyId: string, ticket: Ticket): void {
     const list = memory.ticketsByCompany[companyId] ?? [];
     memory.ticketsByCompany[companyId] = [ticket, ...list.filter((item) => item.id !== ticket.id)];
-}
-
-function removeMemoryTicket(companyId: string, ticketId: string): boolean {
-    const list = memory.ticketsByCompany[companyId] ?? [];
-    const next = list.filter((ticket) => ticket.id !== ticketId);
-    const removed = next.length !== list.length;
-    memory.ticketsByCompany[companyId] = next;
-    return removed;
 }
 
 function companyCasesRef(db: Awaited<ReturnType<typeof getFirestoreDb>>, companyId: string) {
@@ -352,13 +390,14 @@ async function createInMemory(
         repairAmount: number;
         inspectionFee: number;
         quoteStatus: QuoteStatus;
+        status: TicketStatus;
     },
 ): Promise<Ticket> {
     const ts = now();
     const ticket: Ticket = {
         id: id(),
         title: composeTitle(params.customerName, params.deviceName),
-        status: "new",
+        status: params.status,
         customer: {
             name: params.customerName,
             phone: params.customerPhone,
@@ -400,6 +439,7 @@ async function createInFirebase(
         repairAmount: number;
         inspectionFee: number;
         quoteStatus: QuoteStatus;
+        status: TicketStatus;
     },
 ): Promise<Ticket | null> {
     const db = await getFirestoreDb();
@@ -417,7 +457,7 @@ async function createInFirebase(
     const ticket: Ticket = {
         id: docId,
         title: composeTitle(params.customerName, params.deviceName),
-        status: "new",
+        status: params.status,
         customer: {
             name: params.customerName,
             phone: params.customerPhone,
@@ -462,17 +502,6 @@ async function createInFirebase(
     );
     await batch.commit();
     return ticket;
-}
-
-async function deleteInFirebase(companyId: string, ticketId: string): Promise<boolean | null> {
-    const db = await getFirestoreDb();
-    if (!db) return null;
-
-    const ref = companyCasesRef(db, companyId).doc(ticketId);
-    const snap = await ref.get();
-    if (!snap.exists) return false;
-    await ref.delete();
-    return true;
 }
 
 async function updateInMemory(
@@ -582,35 +611,6 @@ async function updateInFirebase(
     return next;
 }
 
-function filterTickets(tickets: Ticket[], keyword?: string): Ticket[] {
-    const q = safeText(keyword ?? "", MAX_QUERY).toLowerCase();
-    if (!q) return tickets;
-    return tickets.filter((ticket) => {
-        const haystack = [
-            ticket.id,
-            ticket.title,
-            ticket.customer.name,
-            ticket.customer.phone,
-            ticket.customer.address,
-            ticket.customer.email,
-            ticket.device.name,
-            ticket.device.model,
-            ticket.repairReason,
-            ticket.repairSuggestion,
-            ticket.note,
-            String(ticket.repairAmount),
-            String(ticket.inspectionFee),
-            String(ticket.pendingFee),
-            ticket.quoteStatus,
-            ticket.customerId ?? "",
-            ticket.companyId ?? "",
-        ]
-            .join(" ")
-            .toLowerCase();
-        return haystack.includes(q);
-    });
-}
-
 export async function listTickets(): Promise<Ticket[]> {
     const scope = await resolveSessionScope(true);
     if (!scope) return [];
@@ -622,11 +622,6 @@ export async function listTickets(): Promise<Ticket[]> {
         // fallback to memory
     }
     return listFromMemory(scope.companyId);
-}
-
-export async function queryTickets(keyword?: string): Promise<Ticket[]> {
-    const tickets = await listTickets();
-    return filterTickets(tickets, keyword);
 }
 
 export async function listTicketsByCustomerEmail(email: string, companyId?: string | null): Promise<Ticket[]> {
@@ -650,13 +645,46 @@ export async function listTicketsByCustomerEmail(email: string, companyId?: stri
     return tickets.filter((ticket) => ticket.customer.email.trim().toLowerCase() === normalized);
 }
 
+export async function setTicketStatusById(ticketId: string, status: TicketStatus): Promise<boolean> {
+    const scope = await resolveSessionScope(true);
+    if (!scope) return false;
+
+    const cleanedId = safeText(ticketId, 80);
+    if (!cleanedId) return false;
+
+    try {
+        const updated = await updateInFirebase(scope.companyId, {
+            id: cleanedId,
+            status,
+        });
+        if (updated) return true;
+    } catch {
+        // fallback to memory
+    }
+
+    const updatedInMemory = await updateInMemory(scope.companyId, {
+        id: cleanedId,
+        status,
+    });
+    return Boolean(updatedInMemory);
+}
+
 export async function createTicket(formData: FormData): Promise<void> {
     "use server";
 
+    const redirectPath = safeText(toStr(formData.get("redirectPath")), 120);
+    const redirectTab = safeText(toStr(formData.get("redirectTab")), 40) || "cases";
+    const useDashboardRedirect = redirectPath === "/dashboard";
+    const redirectWithFlash = (flash: "invalid" | "created"): never => {
+        const tab = useDashboardRedirect ? redirectTab : "cases";
+        redirect(`/dashboard?tab=${encodeURIComponent(tab)}&flash=${flash}&ts=${Date.now()}`);
+    };
+
     const scope = await resolveSessionScope(true);
-    if (!scope) {
-        redirect(`/ticket?flash=invalid&ts=${Date.now()}`);
-    }
+    const ensuredScope = scope ?? redirectWithFlash("invalid");
+    const ticketAttributePreferences = await getTicketAttributePreferences({ tenantId: ensuredScope.companyId });
+    const allowedCaseStatuses = ticketAttributePreferences.caseStatuses;
+    const allowedQuoteStatuses = ticketAttributePreferences.quoteStatuses;
 
     const validated = validateInput({
         customerName: toStr(formData.get("customerName")),
@@ -672,70 +700,66 @@ export async function createTicket(formData: FormData): Promise<void> {
         inspectionFee: toStr(formData.get("inspectionFee")),
         quoteStatus: toStr(formData.get("quoteStatus")),
     });
-
-    if (!validated) {
-        redirect(`/ticket?flash=invalid&ts=${Date.now()}`);
-    }
-
-    try {
-        const created = await createInFirebase(scope.companyId, validated);
-        if (!created) await createInMemory(scope.companyId, validated);
-    } catch {
-        await createInMemory(scope.companyId, validated);
-    }
-
-    revalidatePath("/ticket");
-    redirect(`/ticket?flash=created&ts=${Date.now()}`);
-}
-
-export async function deleteTicket(formData: FormData): Promise<void> {
-    "use server";
-
-    const scope = await resolveSessionScope(true);
-    if (!scope) {
-        redirect(`/ticket?flash=invalid&ts=${Date.now()}`);
-    }
-
-    const rawId = toStr(formData.get("id"));
-    const ticketId = safeText(rawId, 80);
-    if (!ticketId) {
-        redirect(`/ticket?flash=invalid&ts=${Date.now()}`);
-    }
+    const ensuredValidated = validated ?? redirectWithFlash("invalid");
+    const selectedCaseStatus = resolveAllowedStatus(allowedCaseStatuses[0], allowedCaseStatuses, DEFAULT_CASE_STATUSES[0]) as TicketStatus;
+    const selectedQuoteStatus = resolveAllowedStatus(
+        ensuredValidated.quoteStatus,
+        allowedQuoteStatuses,
+        DEFAULT_QUOTE_STATUSES[0],
+    ) as QuoteStatus;
+    const payload = {
+        ...ensuredValidated,
+        status: selectedCaseStatus,
+        quoteStatus: selectedQuoteStatus,
+    };
 
     try {
-        const removed = await deleteInFirebase(scope.companyId, ticketId);
-        if (removed === null) removeMemoryTicket(scope.companyId, ticketId);
+        const created = await createInFirebase(ensuredScope.companyId, payload);
+        if (!created) await createInMemory(ensuredScope.companyId, payload);
     } catch {
-        removeMemoryTicket(scope.companyId, ticketId);
+        await createInMemory(ensuredScope.companyId, payload);
     }
 
-    revalidatePath("/ticket");
-    redirect(`/ticket?flash=deleted&ts=${Date.now()}`);
+    revalidatePath("/dashboard");
+    redirectWithFlash("created");
 }
 
 export async function updateTicket(formData: FormData): Promise<void> {
     "use server";
 
+    const redirectPath = safeText(toStr(formData.get("redirectPath")), 120);
+    const redirectTab = safeText(toStr(formData.get("redirectTab")), 40) || "cases";
+    const useDashboardRedirect = redirectPath === "/dashboard";
+    const redirectWithFlash = (flash: "invalid" | "updated"): never => {
+        const tab = useDashboardRedirect ? redirectTab : "cases";
+        const dashboardFlash = flash === "updated" ? "case_updated" : "invalid";
+        redirect(`/dashboard?tab=${encodeURIComponent(tab)}&flash=${dashboardFlash}&ts=${Date.now()}`);
+    };
+
     const scope = await resolveSessionScope(true);
-    if (!scope) {
-        redirect(`/ticket?flash=invalid&ts=${Date.now()}`);
-    }
+    const ensuredScope = scope ?? redirectWithFlash("invalid");
+    const ticketAttributePreferences = await getTicketAttributePreferences({ tenantId: ensuredScope.companyId });
+    const allowedCaseStatuses = ticketAttributePreferences.caseStatuses;
+    const allowedQuoteStatuses = ticketAttributePreferences.quoteStatuses;
 
     const rawId = toStr(formData.get("id"));
     const ticketId = safeText(rawId, 80);
-    const status = formData.get("status");
+    const status = formData.has("status") ? formData.get("status") : null;
+    const quoteStatus = formData.has("quoteStatus") ? formData.get("quoteStatus") : null;
     if (!ticketId) {
-        redirect(`/ticket?flash=invalid&ts=${Date.now()}`);
+        redirectWithFlash("invalid");
     }
 
-    const finalStatus: TicketStatus | undefined =
-        status === "new" ||
-        status === "in_progress" ||
-        status === "waiting_customer" ||
-        status === "resolved" ||
-        status === "closed"
-            ? status
-            : undefined;
+    if (status !== null && !isAllowedStatus(status, allowedCaseStatuses)) {
+        redirectWithFlash("invalid");
+    }
+
+    if (quoteStatus !== null && !isAllowedStatus(quoteStatus, allowedQuoteStatuses)) {
+        redirectWithFlash("invalid");
+    }
+
+    const finalStatus = status !== null ? (normalizeStatusValue(status) as TicketStatus) : undefined;
+    const finalQuoteStatus = quoteStatus !== null ? (normalizeStatusValue(quoteStatus) as QuoteStatus) : undefined;
 
     const getOptional = (key: string, max: number): string | undefined => {
         if (!formData.has(key)) return undefined;
@@ -755,40 +779,24 @@ export async function updateTicket(formData: FormData): Promise<void> {
         note: getOptional("note", MAX_DETAIL),
         repairAmount: formData.has("repairAmount") ? parseMoney(formData.get("repairAmount")) : undefined,
         inspectionFee: formData.has("inspectionFee") ? parseMoney(formData.get("inspectionFee")) : undefined,
-        quoteStatus: formData.has("quoteStatus") ? parseQuoteStatus(formData.get("quoteStatus")) : undefined,
+        quoteStatus: finalQuoteStatus,
         status: finalStatus,
     };
 
     if (payload.customerPhone && !PHONE_RE.test(payload.customerPhone)) {
-        redirect(`/ticket?flash=invalid&ts=${Date.now()}`);
+        redirectWithFlash("invalid");
     }
     if (payload.customerEmail && !EMAIL_RE.test(payload.customerEmail)) {
-        redirect(`/ticket?flash=invalid&ts=${Date.now()}`);
+        redirectWithFlash("invalid");
     }
 
     try {
-        const updated = await updateInFirebase(scope.companyId, payload);
-        if (!updated) await updateInMemory(scope.companyId, payload);
+        const updated = await updateInFirebase(ensuredScope.companyId, payload);
+        if (!updated) await updateInMemory(ensuredScope.companyId, payload);
     } catch {
-        await updateInMemory(scope.companyId, payload);
+        await updateInMemory(ensuredScope.companyId, payload);
     }
 
-    revalidatePath("/ticket");
-    redirect(`/ticket?flash=updated&ts=${Date.now()}`);
-}
-
-export async function checkTicketFirebaseConnection(): Promise<{ ok: boolean; detail: string }> {
-    try {
-        const scope = await resolveSessionScope(false);
-        if (!scope) return { ok: false, detail: "No active session scope" };
-
-        const db = await getFirestoreDb();
-        if (!db) return { ok: false, detail: "Firebase Admin not available" };
-
-        const snap = await companyCasesRef(db, scope.companyId).limit(1).get();
-        return { ok: true, detail: `Connected. Read ${snap.size} doc(s) from companies/${scope.companyId}/cases.` };
-    } catch (error: unknown) {
-        const detail = error instanceof Error ? error.message : "Unknown error";
-        return { ok: false, detail };
-    }
+    revalidatePath("/dashboard");
+    redirectWithFlash("updated");
 }

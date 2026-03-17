@@ -1,5 +1,5 @@
 import type { RgbTriplet } from "@/lib/types/theme";
-import type { ShowThemeColors } from "@/features/showcase/types/showTheme";
+import type { ShowThemeColors, StorefrontSettings } from "@/features/showcase/types/showTheme";
 
 const RGB_TRIPLET_PATTERN = /^(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})$/;
 const HEX_COLOR_PATTERN = /^#?([0-9a-fA-F]{6})$/;
@@ -13,6 +13,17 @@ export const DEFAULT_SHOW_THEME_COLORS: ShowThemeColors = {
     contact: "255 253 246",
     ad: "25 24 21",
     footer: "255 203 45",
+    shopPage: "250 248 239",
+    shopHeader: "25 24 21",
+    shopHero: "255 203 45",
+    shopGrid: "255 255 255",
+    shopFooter: "25 24 21",
+};
+
+export const DEFAULT_STOREFRONT_SETTINGS: StorefrontSettings = {
+    shoppingEnabled: true,
+    autoRedirectToShopForCustomer: false,
+    showCartOnNavForCustomer: false,
 };
 
 function clampColorValue(value: number) {
@@ -61,5 +72,28 @@ export function normalizeShowThemeColors(input: Partial<ShowThemeColors> | null 
         contact: normalizeRgbTriplet(candidate.contact ?? "", DEFAULT_SHOW_THEME_COLORS.contact),
         ad: normalizeRgbTriplet(candidate.ad ?? "", DEFAULT_SHOW_THEME_COLORS.ad),
         footer: normalizeRgbTriplet(candidate.footer ?? "", DEFAULT_SHOW_THEME_COLORS.footer),
+        shopPage: normalizeRgbTriplet(candidate.shopPage ?? "", DEFAULT_SHOW_THEME_COLORS.shopPage),
+        shopHeader: normalizeRgbTriplet(candidate.shopHeader ?? "", DEFAULT_SHOW_THEME_COLORS.shopHeader),
+        shopHero: normalizeRgbTriplet(candidate.shopHero ?? "", DEFAULT_SHOW_THEME_COLORS.shopHero),
+        shopGrid: normalizeRgbTriplet(candidate.shopGrid ?? "", DEFAULT_SHOW_THEME_COLORS.shopGrid),
+        shopFooter: normalizeRgbTriplet(candidate.shopFooter ?? "", DEFAULT_SHOW_THEME_COLORS.shopFooter),
+    };
+}
+
+export function normalizeStorefrontSettings(input: Partial<StorefrontSettings> | null | undefined): StorefrontSettings {
+    const candidate = input ?? {};
+    return {
+        shoppingEnabled:
+            typeof candidate.shoppingEnabled === "boolean"
+                ? candidate.shoppingEnabled
+                : DEFAULT_STOREFRONT_SETTINGS.shoppingEnabled,
+        autoRedirectToShopForCustomer:
+            typeof candidate.autoRedirectToShopForCustomer === "boolean"
+                ? candidate.autoRedirectToShopForCustomer
+                : DEFAULT_STOREFRONT_SETTINGS.autoRedirectToShopForCustomer,
+        showCartOnNavForCustomer:
+            typeof candidate.showCartOnNavForCustomer === "boolean"
+                ? candidate.showCartOnNavForCustomer
+                : DEFAULT_STOREFRONT_SETTINGS.showCartOnNavForCustomer,
     };
 }

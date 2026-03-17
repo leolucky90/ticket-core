@@ -5,6 +5,7 @@ import { getShowcasePreferences, saveShowcasePreferences } from "@/features/show
 
 type UpdateShowcasePreferencesBody = {
     themeColors?: unknown;
+    storefront?: unknown;
     content?: unknown;
 };
 
@@ -39,7 +40,7 @@ export async function PUT(req: Request) {
         return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    if (body.themeColors === undefined && body.content === undefined) {
+    if (body.themeColors === undefined && body.storefront === undefined && body.content === undefined) {
         return NextResponse.json({ error: "No updatable fields" }, { status: 400 });
     }
 
@@ -47,6 +48,7 @@ export async function PUT(req: Request) {
         tenantId,
         updatedBy: session.uid,
         themeColors: body.themeColors,
+        storefront: body.storefront,
         content: body.content,
     });
 

@@ -1,5 +1,6 @@
 import { ShowHomePage } from "@/features/showcase/components/ShowHomePage";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
 import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 import { getShowcasePreferences } from "@/features/showcase/services/showcasePreferences.server";
@@ -21,13 +22,22 @@ export async function TenantShowcasePage({ tenantId, homeHref }: { tenantId: str
         }
     }
 
+    if (
+        navAccountType === "customer" &&
+        preferences.storefront.shoppingEnabled &&
+        preferences.storefront.autoRedirectToShopForCustomer
+    ) {
+        redirect(`/${encodeURIComponent(tenantId)}/shop`);
+    }
+
     return (
         <ShowHomePage
             navAccountType={navAccountType}
             lang={lang}
             showThemeColors={preferences.themeColors}
+            storefrontSettings={preferences.storefront}
             showContentState={preferences.content}
-            homeHref={homeHref ?? `/site/${encodeURIComponent(tenantId)}`}
+            homeHref={homeHref ?? `/${encodeURIComponent(tenantId)}`}
             authTenantId={tenantId}
         />
     );
