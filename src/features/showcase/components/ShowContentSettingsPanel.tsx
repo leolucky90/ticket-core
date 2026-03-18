@@ -408,8 +408,8 @@ export function ShowContentSettingsPanel({ labels, initialState }: ShowContentSe
             : [];
 
     return (
-        <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-            <aside className="rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-4">
+        <div className="grid w-full gap-4 xl:grid-cols-[300px_minmax(0,1fr)] 2xl:grid-cols-[320px_minmax(0,1fr)]">
+            <aside className="rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-4 xl:sticky xl:top-4 xl:self-start">
                 <div className="auth-title">{labels.title}</div>
                 <div className="mt-1 text-xs text-[rgb(var(--muted))]">{labels.hint}</div>
                 <div className="mt-3 inline-flex rounded-lg border border-[rgb(var(--border))] p-1">
@@ -479,7 +479,7 @@ export function ShowContentSettingsPanel({ labels, initialState }: ShowContentSe
                 </div>
             </aside>
 
-            <section className="rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-4">
+            <section className="min-w-0 rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="text-sm font-semibold">{blockNameMap[activeBlockId]}</div>
                     <span className="rounded-md border border-[rgb(var(--border))] px-2 py-1 text-xs text-[rgb(var(--muted))]">
@@ -650,12 +650,8 @@ export function ShowContentSettingsPanel({ labels, initialState }: ShowContentSe
                                                         {labels.selectedImage}: {selectedFile.name}
                                                     </span>
                                                 ) : null}
-                                                {uploadSuccessText ? (
-                                                    <span className="text-xs text-green-600">{uploadSuccessText}</span>
-                                                ) : null}
-                                                {uploadErrorText ? (
-                                                    <span className="text-xs text-red-500">{uploadErrorText}</span>
-                                                ) : null}
+                                                {uploadSuccessText ? <span className="text-xs text-[rgb(var(--accent))]">{uploadSuccessText}</span> : null}
+                                                {uploadErrorText ? <span className="text-xs text-[rgb(var(--muted))]">{uploadErrorText}</span> : null}
                                             </div>
 
                                             <div className="grid gap-3 sm:grid-cols-2">

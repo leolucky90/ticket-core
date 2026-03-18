@@ -1,3 +1,6 @@
+import type { ProductNamingMode, StockDeductionMode } from "@/lib/types/catalog";
+import type { EntitlementScopeType, EntitlementType, PromotionEffectType } from "@/lib/schema";
+
 export type TrendRange = "day" | "month";
 
 export type ActivityStatus = "upcoming" | "active" | "ended" | "cancelled";
@@ -19,6 +22,22 @@ export type Activity = {
     endAt: number;
     status: ActivityStatus;
     message: string;
+    effectType: PromotionEffectType;
+    discountAmount: number;
+    bundlePriceDiscount: number;
+    giftProductId?: string;
+    giftProductName?: string;
+    giftQty: number;
+    entitlementType?: EntitlementType;
+    scopeType?: EntitlementScopeType;
+    categoryId?: string;
+    categoryName?: string;
+    productId?: string;
+    productName?: string;
+    entitlementQty: number;
+    entitlementExpiresAt?: number;
+    reservationQty: number;
+    reservationExpiresAt?: number;
     defaultStoreQty: number;
     items: ActivityItem[];
     totalAmount: number;
@@ -55,17 +74,41 @@ export type CompanyCustomer = {
     updatedAt: number;
 };
 
-export type Product = {
+export type ProductDoc = {
     id: string;
+    companyId?: string;
     name: string;
+    namingMode: ProductNamingMode;
+    categoryId: string;
+    categoryName: string;
+    brandId: string;
+    brandName: string;
+    modelId: string;
+    modelName: string;
+    nameEntryId: string;
+    nameEntryName: string;
+    customLabel: string;
+    aliases: string[];
+    normalizedName: string;
     price: number;
     cost: number;
     supplier: string;
     sku: string;
     stock: number;
+    onHandQty?: number;
+    reservedQty?: number;
+    availableQty?: number;
+    sellPrice?: number;
+    costPrice?: number;
+    stockQty?: number;
+    lowStockThreshold?: number;
+    stockDeductionMode?: StockDeductionMode;
+    status?: "active" | "inactive";
     createdAt: number;
     updatedAt: number;
 };
+
+export type Product = ProductDoc;
 
 export type InventoryStockLog = {
     id: string;

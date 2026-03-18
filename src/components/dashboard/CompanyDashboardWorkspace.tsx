@@ -7,10 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { MerchantStatGrid } from "@/components/merchant/shell";
+import { MerchantPredictiveSearchInput } from "@/components/merchant/search";
+import type { MerchantStatItem } from "@/components/merchant/shell";
 import { Pencil, Plus, Save, Search, X } from "lucide-react";
 import type { Activity, CompanyCustomer, CompanyDashboardStats, InventoryStockLog, Product, RepairBrand } from "@/lib/types/commerce";
 import type { Sale } from "@/lib/types/sale";
 import type { KnownTicketStatus, QuoteStatus, Ticket } from "@/lib/types/ticket";
+import { isActivityPurchaseLinkedToCustomer, isTicketLinkedToCustomer } from "@/lib/services/customerRelationships";
 
 export type DashboardTab = "dashboard" | "customers" | "cases" | "activities" | "inventory" | "marketing";
 export type InventoryView = "stock" | "settings" | "stock-in" | "stock-out" | "product-management";
@@ -209,46 +213,16 @@ function activityStatusText(status: Activity["status"]) {
     return "取消";
 }
 
+function activityEffectText(effectType: Activity["effectType"]) {
+    if (effectType === "bundle_price") return "立即組合價";
+    if (effectType === "gift_item") return "立即贈品";
+    if (effectType === "create_entitlement") return "未來兌換權";
+    if (effectType === "create_pickup_reservation") return "待取貨留貨";
+    return "立即折扣";
+}
+
 function stockActionText(action: InventoryStockLog["action"]): string {
     return action === "stock_out" ? "出庫" : "入庫";
-}
-
-function normalizeComparable(value: string): string {
-    return value.trim().toLowerCase();
-}
-
-function isTicketForCustomer(customer: CompanyCustomer, ticket: Ticket): boolean {
-    if (ticket.customerId && customer.id && ticket.customerId === customer.id) return true;
-
-    const customerEmail = normalizeComparable(customer.email);
-    const ticketEmail = normalizeComparable(ticket.customer.email);
-    if (customerEmail && ticketEmail && customerEmail === ticketEmail) return true;
-
-    const customerPhone = normalizeComparable(customer.phone);
-    const ticketPhone = normalizeComparable(ticket.customer.phone);
-    if (customerPhone && ticketPhone && customerPhone === ticketPhone) return true;
-
-    const customerName = normalizeComparable(customer.name);
-    const ticketName = normalizeComparable(ticket.customer.name);
-    if (customerName && ticketName && customerName === ticketName) return true;
-
-    return false;
-}
-
-function isPurchaseForCustomer(customer: CompanyCustomer, purchase: ActivityPurchaseRow): boolean {
-    const customerEmail = normalizeComparable(customer.email);
-    const purchaseEmail = normalizeComparable(purchase.customerEmail);
-    if (customerEmail && purchaseEmail && customerEmail === purchaseEmail) return true;
-
-    const customerPhone = normalizeComparable(customer.phone);
-    const purchasePhone = normalizeComparable(purchase.customerPhone);
-    if (customerPhone && purchasePhone && customerPhone === purchasePhone) return true;
-
-    const customerName = normalizeComparable(customer.name);
-    const purchaseName = normalizeComparable(purchase.customerName);
-    if (customerName && purchaseName && customerName === purchaseName) return true;
-
-    return false;
 }
 
 function toDateInput(ts: number): string {
@@ -573,10 +547,10 @@ export function CompanyDashboardWorkspace({
     const customerRows = useMemo(() => {
         const rows: CustomerRowData[] = customers.map((customer) => {
             const customerTickets = tickets
-                .filter((ticket) => isTicketForCustomer(customer, ticket))
+                .filter((ticket) => isTicketLinkedToCustomer(customer, ticket))
                 .sort((a, b) => b.updatedAt - a.updatedAt);
             const customerPurchases = purchases
-                .filter((purchase) => isPurchaseForCustomer(customer, purchase))
+                .filter((purchase) => isActivityPurchaseLinkedToCustomer(customer, purchase))
                 .sort((a, b) => b.purchasedAt - a.purchasedAt);
             const openCaseCount = customerTickets.filter((ticket) =>
                 ticket.status === "new" || ticket.status === "in_progress" || ticket.status === "waiting_customer",
@@ -618,66 +592,56 @@ export function CompanyDashboardWorkspace({
         });
     }, [activities, activityOrder, activityStatusFilter]);
     const inventorySummary = useMemo(() => {
-        const totalUnits = products.reduce((sum, product) => sum + Math.max(0, product.stock), 0);
-        const totalValue = products.reduce((sum, product) => sum + Math.max(0, product.stock) * Math.max(0, product.cost), 0);
-        const lowStockCount = products.filter((product) => product.stock <= 5).length;
+        const totalOnHandUnits = products.reduce((sum, product) => sum + Math.max(0, product.onHandQty ?? product.stock), 0);
+        const totalReservedUnits = products.reduce((sum, product) => sum + Math.max(0, product.reservedQty ?? 0), 0);
+        const totalAvailableUnits = products.reduce(
+            (sum, product) => sum + Math.max(0, product.availableQty ?? (product.onHandQty ?? product.stock) - (product.reservedQty ?? 0)),
+            0,
+        );
+        const totalValue = products.reduce((sum, product) => sum + Math.max(0, product.onHandQty ?? product.stock) * Math.max(0, product.cost), 0);
+        const lowStockCount = products.filter((product) => {
+            const available = Math.max(0, product.availableQty ?? (product.onHandQty ?? product.stock) - (product.reservedQty ?? 0));
+            const threshold = Math.max(0, product.lowStockThreshold ?? 5);
+            return available <= threshold;
+        }).length;
         return {
-            totalUnits,
+            totalOnHandUnits,
+            totalReservedUnits,
+            totalAvailableUnits,
             totalValue,
             lowStockCount,
         };
     }, [products]);
+    const dashboardStats = useMemo<MerchantStatItem[]>(
+        () => [
+            { id: "today-count", label: "當日交易筆數", value: stats.todaySubscriptionCount },
+            { id: "today-revenue", label: "當日營收金額", value: formatMoney(stats.todayRevenue, lang) },
+            { id: "month-count", label: "當月交易筆數", value: stats.monthSubscriptionCount },
+            { id: "month-revenue", label: "當月營收金額", value: formatMoney(stats.monthRevenue, lang) },
+            { id: "customer-count", label: "客戶總數", value: customers.length },
+            { id: "open-case-count", label: "進行中案件", value: tickets.filter((ticket) => ticket.status !== "closed").length },
+            { id: "active-activities", label: "活動中", value: activeActivities.length },
+            {
+                id: "average-order-value",
+                label: "平均客單價（當月）",
+                value: formatMoney(
+                    stats.monthSubscriptionCount > 0 ? Math.round(stats.monthRevenue / stats.monthSubscriptionCount) : 0,
+                    lang,
+                ),
+            },
+        ],
+        [activeActivities.length, customers.length, lang, stats.monthRevenue, stats.monthSubscriptionCount, stats.todayRevenue, stats.todaySubscriptionCount, tickets],
+    );
 
     return (
         <div className="space-y-4">
             <div className="space-y-4">
+                {/* Operational tabs keep fixed list/table workflows; sortable behavior is intentionally limited to dashboard/storefront builder contexts. */}
                 {tab === "dashboard" ? (
                     <>
                         <Card>
                             <SectionTitle title="企業營運儀錶板" hint="交易、客戶、案件與活動趨勢" />
-                            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                                <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                                    <div className="text-xs text-[rgb(var(--muted))]">當日交易筆數</div>
-                                    <div className="mt-1 text-2xl font-semibold">{stats.todaySubscriptionCount}</div>
-                                </div>
-                                <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                                    <div className="text-xs text-[rgb(var(--muted))]">當日營收金額</div>
-                                    <div className="mt-1 text-2xl font-semibold">{formatMoney(stats.todayRevenue, lang)}</div>
-                                </div>
-                                <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                                    <div className="text-xs text-[rgb(var(--muted))]">當月交易筆數</div>
-                                    <div className="mt-1 text-2xl font-semibold">{stats.monthSubscriptionCount}</div>
-                                </div>
-                                <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                                    <div className="text-xs text-[rgb(var(--muted))]">當月營收金額</div>
-                                    <div className="mt-1 text-2xl font-semibold">{formatMoney(stats.monthRevenue, lang)}</div>
-                                </div>
-                                <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                                    <div className="text-xs text-[rgb(var(--muted))]">客戶總數</div>
-                                    <div className="mt-1 text-2xl font-semibold">{customers.length}</div>
-                                </div>
-                                <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                                    <div className="text-xs text-[rgb(var(--muted))]">進行中案件</div>
-                                    <div className="mt-1 text-2xl font-semibold">
-                                        {tickets.filter((ticket) => ticket.status !== "closed").length}
-                                    </div>
-                                </div>
-                                <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                                    <div className="text-xs text-[rgb(var(--muted))]">活動中</div>
-                                    <div className="mt-1 text-2xl font-semibold">{activeActivities.length}</div>
-                                </div>
-                                <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                                    <div className="text-xs text-[rgb(var(--muted))]">平均客單價（當月）</div>
-                                    <div className="mt-1 text-2xl font-semibold">
-                                        {formatMoney(
-                                            stats.monthSubscriptionCount > 0
-                                                ? Math.round(stats.monthRevenue / stats.monthSubscriptionCount)
-                                                : 0,
-                                            lang,
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
+                            <MerchantStatGrid items={dashboardStats} />
                             <div className="mt-4 flex items-center gap-2">
                                 <Button type="button" variant={range === "day" ? "solid" : "ghost"} onClick={() => setRange("day")}>
                                     日
@@ -747,7 +711,13 @@ export function CompanyDashboardWorkspace({
                                 <form action="/dashboard" method="get" className="flex w-full flex-col gap-2 sm:flex-row sm:items-center">
                                     <input type="hidden" name="tab" value="customers" />
                                     <div className="relative w-full">
-                                        <Input name="customerQ" defaultValue={customerKeyword} placeholder="查詢姓名、電話、Email" className="pr-10" />
+                                        <MerchantPredictiveSearchInput
+                                            name="customerQ"
+                                            defaultValue={customerKeyword}
+                                            placeholder="查詢姓名、電話、Email"
+                                            targets={["customers"]}
+                                            inputClassName="pr-10"
+                                        />
                                         <Link
                                             href="/dashboard?tab=customers"
                                             aria-label="清除"
@@ -943,7 +913,13 @@ export function CompanyDashboardWorkspace({
                                     <input type="hidden" name="caseStatus" value={caseStatus} />
                                     <input type="hidden" name="caseOrder" value={caseOrder} />
                                     <div className="relative w-full">
-                                        <Input type="text" name="caseQ" defaultValue={caseKeyword} placeholder="查詢姓名、電話、設備名稱" className="pr-10" />
+                                        <MerchantPredictiveSearchInput
+                                            name="caseQ"
+                                            defaultValue={caseKeyword}
+                                            placeholder="查詢姓名、電話、設備名稱或案件編號"
+                                            targets={["tickets"]}
+                                            inputClassName="pr-10"
+                                        />
                                         <Link
                                             href="/dashboard?tab=cases"
                                             aria-label="清除"
@@ -1014,12 +990,22 @@ export function CompanyDashboardWorkspace({
                                     <span className="whitespace-nowrap text-xs text-[rgb(var(--muted))]">最後更新</span>
                                     <span className="whitespace-nowrap text-xs text-[rgb(var(--muted))]">{formatTimeShort(snapshotTs, lang)}</span>
                                     <span className="whitespace-nowrap text-xs text-[rgb(var(--muted))]">時間排序</span>
-                                    <Select name="caseOrder" className="w-[4ch]" defaultValue={caseOrder}>
+                                    <Select
+                                        name="caseOrder"
+                                        className="w-[4ch]"
+                                        defaultValue={caseOrder}
+                                        onChange={(event) => event.currentTarget.form?.requestSubmit()}
+                                    >
                                         <option value="latest">新→舊</option>
                                         <option value="earliest">舊→新</option>
                                     </Select>
                                     <span className="whitespace-nowrap text-xs text-[rgb(var(--muted))]">狀態過濾</span>
-                                    <Select name="caseStatus" className="w-[4ch]" defaultValue={caseStatus || "all"}>
+                                    <Select
+                                        name="caseStatus"
+                                        className="w-[4ch]"
+                                        defaultValue={caseStatus || "all"}
+                                        onChange={(event) => event.currentTarget.form?.requestSubmit()}
+                                    >
                                         <option value="all">全部</option>
                                         {filterCaseStatusOptions.map((status) => (
                                             <option key={status} value={status}>
@@ -1027,7 +1013,9 @@ export function CompanyDashboardWorkspace({
                                             </option>
                                         ))}
                                     </Select>
-                                    <Button type="submit" className="h-8 px-3 text-xs">套用</Button>
+                                    <Link href="/dashboard?tab=cases" className="text-xs text-[rgb(var(--accent))] hover:underline">
+                                        重設
+                                    </Link>
                                 </form>
                             </div>
                         </Card>
@@ -1117,16 +1105,107 @@ export function CompanyDashboardWorkspace({
                                             />
                                         </div>
                                     </div>
-                                    <div className="grid gap-1">
-                                        <FieldLabel htmlFor="create-activity-default-store-qty" label="寄店預設數量" />
-                                        <Input
-                                            id="create-activity-default-store-qty"
-                                            type="number"
-                                            min={0}
-                                            name="activityDefaultStoreQty"
-                                            placeholder="寄店預設數量"
-                                            defaultValue={0}
-                                        />
+                                    <div className="grid gap-2 md:grid-cols-3">
+                                        <div className="grid gap-1">
+                                            <FieldLabel htmlFor="create-activity-effect-type" label="活動效果" />
+                                            <Select id="create-activity-effect-type" name="activityEffectType" defaultValue="discount">
+                                                <option value="discount">立即折扣型</option>
+                                                <option value="bundle_price">立即組合價型</option>
+                                                <option value="gift_item">立即贈品型</option>
+                                                <option value="create_entitlement">未來兌換權型</option>
+                                                <option value="create_pickup_reservation">留貨待取型（預備）</option>
+                                            </Select>
+                                        </div>
+                                        <div className="grid gap-1">
+                                            <FieldLabel htmlFor="create-activity-discount-amount" label="折扣金額" />
+                                            <Input id="create-activity-discount-amount" type="number" min={0} name="activityDiscountAmount" defaultValue={0} />
+                                        </div>
+                                        <div className="grid gap-1">
+                                            <FieldLabel htmlFor="create-activity-bundle-discount" label="組合價折抵" />
+                                            <Input id="create-activity-bundle-discount" type="number" min={0} name="activityBundlePriceDiscount" defaultValue={0} />
+                                        </div>
+                                    </div>
+                                    <div className="grid gap-2 md:grid-cols-3">
+                                        <div className="grid gap-1">
+                                            <FieldLabel htmlFor="create-activity-gift-product-id" label="贈品產品 ID" />
+                                            <Input id="create-activity-gift-product-id" name="activityGiftProductId" placeholder="gift_item 使用" />
+                                        </div>
+                                        <div className="grid gap-1">
+                                            <FieldLabel htmlFor="create-activity-gift-product-name" label="贈品名稱" />
+                                            <Input id="create-activity-gift-product-name" name="activityGiftProductName" placeholder="gift_item 使用" />
+                                        </div>
+                                        <div className="grid gap-1">
+                                            <FieldLabel htmlFor="create-activity-gift-qty" label="贈品數量" />
+                                            <Input id="create-activity-gift-qty" type="number" min={1} name="activityGiftQty" defaultValue={1} />
+                                        </div>
+                                    </div>
+                                    <div className="grid gap-2 md:grid-cols-3">
+                                        <div className="grid gap-1">
+                                            <FieldLabel htmlFor="create-activity-entitlement-type" label="權益類型" />
+                                            <Select id="create-activity-entitlement-type" name="activityEntitlementType" defaultValue="replacement">
+                                                <option value="replacement">replacement</option>
+                                                <option value="gift">gift</option>
+                                                <option value="discount">discount</option>
+                                                <option value="service">service</option>
+                                            </Select>
+                                        </div>
+                                        <div className="grid gap-1">
+                                            <FieldLabel htmlFor="create-activity-scope-type" label="權益範圍" />
+                                            <Select id="create-activity-scope-type" name="activityScopeType" defaultValue="category">
+                                                <option value="category">分類</option>
+                                                <option value="product">產品</option>
+                                            </Select>
+                                        </div>
+                                        <div className="grid gap-1">
+                                            <FieldLabel htmlFor="create-activity-entitlement-qty" label="權益次數" />
+                                            <Input id="create-activity-entitlement-qty" type="number" min={1} name="activityEntitlementQty" defaultValue={1} />
+                                        </div>
+                                    </div>
+                                    <div className="grid gap-2 md:grid-cols-4">
+                                        <div className="grid gap-1">
+                                            <FieldLabel htmlFor="create-activity-category-id" label="分類 ID" />
+                                            <Input id="create-activity-category-id" name="activityCategoryId" placeholder="分類 ID（分類型權益）" />
+                                        </div>
+                                        <div className="grid gap-1">
+                                            <FieldLabel htmlFor="create-activity-category-name" label="分類名稱" />
+                                            <Input id="create-activity-category-name" name="activityCategoryName" placeholder="分類名稱（分類型權益）" />
+                                        </div>
+                                        <div className="grid gap-1">
+                                            <FieldLabel htmlFor="create-activity-product-id" label="產品 ID" />
+                                            <Input id="create-activity-product-id" name="activityProductId" placeholder="產品 ID（產品型權益/留貨）" />
+                                        </div>
+                                        <div className="grid gap-1">
+                                            <FieldLabel htmlFor="create-activity-product-name" label="產品名稱" />
+                                            <Input id="create-activity-product-name" name="activityProductName" placeholder="產品名稱（產品型權益/留貨）" />
+                                        </div>
+                                    </div>
+                                    <div className="grid gap-2 md:grid-cols-4">
+                                        <div className="grid gap-1">
+                                            <FieldLabel htmlFor="create-activity-entitlement-expire" label="權益到期日" />
+                                            <Input
+                                                id="create-activity-entitlement-expire"
+                                                type="date"
+                                                name="activityEntitlementExpiresAt"
+                                                onClick={(event) => openDatePicker(event.currentTarget)}
+                                            />
+                                        </div>
+                                        <div className="grid gap-1">
+                                            <FieldLabel htmlFor="create-activity-reservation-qty" label="待取貨數量" />
+                                            <Input id="create-activity-reservation-qty" type="number" min={1} name="activityReservationQty" defaultValue={1} />
+                                        </div>
+                                        <div className="grid gap-1">
+                                            <FieldLabel htmlFor="create-activity-reservation-expire" label="留貨到期日" />
+                                            <Input
+                                                id="create-activity-reservation-expire"
+                                                type="date"
+                                                name="activityReservationExpiresAt"
+                                                onClick={(event) => openDatePicker(event.currentTarget)}
+                                            />
+                                        </div>
+                                        <div className="grid gap-1">
+                                            <FieldLabel htmlFor="create-activity-default-store-qty" label="Legacy 保留欄位（相容）" />
+                                            <Input id="create-activity-default-store-qty" type="number" min={0} name="activityDefaultStoreQty" defaultValue={0} />
+                                        </div>
                                     </div>
                                     <div className="grid gap-1">
                                         <FieldLabel htmlFor="create-activity-message" label="活動說明" />
@@ -1255,7 +1334,7 @@ export function CompanyDashboardWorkspace({
                                 <span>活動名稱</span>
                                 <span>品名</span>
                                 <span>總數</span>
-                                <span>寄店數量</span>
+                                <span>效果類型</span>
                                 <span>開始日期</span>
                                 <span>結束日期</span>
                                 <span>狀態</span>
@@ -1267,13 +1346,14 @@ export function CompanyDashboardWorkspace({
                                             <span><span className="text-[rgb(var(--muted))] sm:hidden">活動名稱：</span>{activity.name}</span>
                                             <span><span className="text-[rgb(var(--muted))] sm:hidden">品名：</span>{activity.items[0]?.itemName || "-"}</span>
                                             <span><span className="text-[rgb(var(--muted))] sm:hidden">總數：</span>{activity.items.reduce((sum, item) => sum + item.totalQty, 0)}</span>
-                                            <span><span className="text-[rgb(var(--muted))] sm:hidden">寄店數量：</span>{activity.defaultStoreQty}</span>
+                                            <span><span className="text-[rgb(var(--muted))] sm:hidden">效果類型：</span>{activityEffectText(activity.effectType)}</span>
                                             <span><span className="text-[rgb(var(--muted))] sm:hidden">開始日期：</span>{formatTime(activity.startAt, lang)}</span>
                                             <span><span className="text-[rgb(var(--muted))] sm:hidden">結束日期：</span>{formatTime(activity.endAt, lang)}</span>
                                             <span><span className="text-[rgb(var(--muted))] sm:hidden">狀態：</span>{activityStatusText(activity.status)}</span>
                                         </summary>
                                         <div className="border-t border-[rgb(var(--border))] p-3 text-sm">
                                             <div className="mb-2 whitespace-pre-wrap text-[rgb(var(--muted))]">{activity.message || "-"}</div>
+                                            <div className="mb-2 text-xs text-[rgb(var(--muted))]">活動效果：{activityEffectText(activity.effectType)}</div>
                                             <div className="overflow-x-auto">
                                                 <table className="min-w-full text-xs">
                                                     <thead>
@@ -1329,15 +1409,165 @@ export function CompanyDashboardWorkspace({
                                                             />
                                                         </div>
                                                     </div>
-                                                    <div className="grid gap-1">
-                                                        <FieldLabel htmlFor={`update-activity-default-store-qty-${activity.id}`} label="寄店預設數量" />
-                                                        <Input
-                                                            id={`update-activity-default-store-qty-${activity.id}`}
-                                                            type="number"
-                                                            min={0}
-                                                            name="activityDefaultStoreQty"
-                                                            defaultValue={activity.defaultStoreQty}
-                                                        />
+                                                    <div className="grid gap-2 md:grid-cols-3">
+                                                        <div className="grid gap-1">
+                                                            <FieldLabel htmlFor={`update-activity-effect-type-${activity.id}`} label="活動效果" />
+                                                            <Select id={`update-activity-effect-type-${activity.id}`} name="activityEffectType" defaultValue={activity.effectType}>
+                                                                <option value="discount">立即折扣型</option>
+                                                                <option value="bundle_price">立即組合價型</option>
+                                                                <option value="gift_item">立即贈品型</option>
+                                                                <option value="create_entitlement">未來兌換權型</option>
+                                                                <option value="create_pickup_reservation">留貨待取型（預備）</option>
+                                                            </Select>
+                                                        </div>
+                                                        <div className="grid gap-1">
+                                                            <FieldLabel htmlFor={`update-activity-discount-${activity.id}`} label="折扣金額" />
+                                                            <Input
+                                                                id={`update-activity-discount-${activity.id}`}
+                                                                type="number"
+                                                                min={0}
+                                                                name="activityDiscountAmount"
+                                                                defaultValue={activity.discountAmount ?? 0}
+                                                            />
+                                                        </div>
+                                                        <div className="grid gap-1">
+                                                            <FieldLabel htmlFor={`update-activity-bundle-${activity.id}`} label="組合價折抵" />
+                                                            <Input
+                                                                id={`update-activity-bundle-${activity.id}`}
+                                                                type="number"
+                                                                min={0}
+                                                                name="activityBundlePriceDiscount"
+                                                                defaultValue={activity.bundlePriceDiscount ?? 0}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div className="grid gap-2 md:grid-cols-3">
+                                                        <div className="grid gap-1">
+                                                            <FieldLabel htmlFor={`update-activity-gift-product-id-${activity.id}`} label="贈品產品 ID" />
+                                                            <Input
+                                                                id={`update-activity-gift-product-id-${activity.id}`}
+                                                                name="activityGiftProductId"
+                                                                defaultValue={activity.giftProductId ?? ""}
+                                                            />
+                                                        </div>
+                                                        <div className="grid gap-1">
+                                                            <FieldLabel htmlFor={`update-activity-gift-product-name-${activity.id}`} label="贈品名稱" />
+                                                            <Input
+                                                                id={`update-activity-gift-product-name-${activity.id}`}
+                                                                name="activityGiftProductName"
+                                                                defaultValue={activity.giftProductName ?? ""}
+                                                            />
+                                                        </div>
+                                                        <div className="grid gap-1">
+                                                            <FieldLabel htmlFor={`update-activity-gift-qty-${activity.id}`} label="贈品數量" />
+                                                            <Input
+                                                                id={`update-activity-gift-qty-${activity.id}`}
+                                                                type="number"
+                                                                min={1}
+                                                                name="activityGiftQty"
+                                                                defaultValue={activity.giftQty ?? 1}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div className="grid gap-2 md:grid-cols-3">
+                                                        <div className="grid gap-1">
+                                                            <FieldLabel htmlFor={`update-activity-entitlement-type-${activity.id}`} label="權益類型" />
+                                                            <Select
+                                                                id={`update-activity-entitlement-type-${activity.id}`}
+                                                                name="activityEntitlementType"
+                                                                defaultValue={activity.entitlementType ?? "replacement"}
+                                                            >
+                                                                <option value="replacement">replacement</option>
+                                                                <option value="gift">gift</option>
+                                                                <option value="discount">discount</option>
+                                                                <option value="service">service</option>
+                                                            </Select>
+                                                        </div>
+                                                        <div className="grid gap-1">
+                                                            <FieldLabel htmlFor={`update-activity-scope-${activity.id}`} label="權益範圍" />
+                                                            <Select
+                                                                id={`update-activity-scope-${activity.id}`}
+                                                                name="activityScopeType"
+                                                                defaultValue={activity.scopeType === "product" ? "product" : "category"}
+                                                            >
+                                                                <option value="category">分類</option>
+                                                                <option value="product">產品</option>
+                                                            </Select>
+                                                        </div>
+                                                        <div className="grid gap-1">
+                                                            <FieldLabel htmlFor={`update-activity-entitlement-qty-${activity.id}`} label="權益次數" />
+                                                            <Input
+                                                                id={`update-activity-entitlement-qty-${activity.id}`}
+                                                                type="number"
+                                                                min={1}
+                                                                name="activityEntitlementQty"
+                                                                defaultValue={activity.entitlementQty ?? 1}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div className="grid gap-2 md:grid-cols-4">
+                                                        <div className="grid gap-1">
+                                                            <FieldLabel htmlFor={`update-activity-category-id-${activity.id}`} label="分類 ID" />
+                                                            <Input id={`update-activity-category-id-${activity.id}`} name="activityCategoryId" defaultValue={activity.categoryId ?? ""} />
+                                                        </div>
+                                                        <div className="grid gap-1">
+                                                            <FieldLabel htmlFor={`update-activity-category-name-${activity.id}`} label="分類名稱" />
+                                                            <Input
+                                                                id={`update-activity-category-name-${activity.id}`}
+                                                                name="activityCategoryName"
+                                                                defaultValue={activity.categoryName ?? ""}
+                                                            />
+                                                        </div>
+                                                        <div className="grid gap-1">
+                                                            <FieldLabel htmlFor={`update-activity-product-id-${activity.id}`} label="產品 ID" />
+                                                            <Input id={`update-activity-product-id-${activity.id}`} name="activityProductId" defaultValue={activity.productId ?? ""} />
+                                                        </div>
+                                                        <div className="grid gap-1">
+                                                            <FieldLabel htmlFor={`update-activity-product-name-${activity.id}`} label="產品名稱" />
+                                                            <Input id={`update-activity-product-name-${activity.id}`} name="activityProductName" defaultValue={activity.productName ?? ""} />
+                                                        </div>
+                                                    </div>
+                                                    <div className="grid gap-2 md:grid-cols-4">
+                                                        <div className="grid gap-1">
+                                                            <FieldLabel htmlFor={`update-activity-entitlement-expire-${activity.id}`} label="權益到期日" />
+                                                            <Input
+                                                                id={`update-activity-entitlement-expire-${activity.id}`}
+                                                                type="date"
+                                                                name="activityEntitlementExpiresAt"
+                                                                defaultValue={toDateInput(activity.entitlementExpiresAt ?? 0)}
+                                                                onClick={(event) => openDatePicker(event.currentTarget)}
+                                                            />
+                                                        </div>
+                                                        <div className="grid gap-1">
+                                                            <FieldLabel htmlFor={`update-activity-reservation-qty-${activity.id}`} label="待取貨數量" />
+                                                            <Input
+                                                                id={`update-activity-reservation-qty-${activity.id}`}
+                                                                type="number"
+                                                                min={1}
+                                                                name="activityReservationQty"
+                                                                defaultValue={activity.reservationQty ?? 1}
+                                                            />
+                                                        </div>
+                                                        <div className="grid gap-1">
+                                                            <FieldLabel htmlFor={`update-activity-reservation-expire-${activity.id}`} label="留貨到期日" />
+                                                            <Input
+                                                                id={`update-activity-reservation-expire-${activity.id}`}
+                                                                type="date"
+                                                                name="activityReservationExpiresAt"
+                                                                defaultValue={toDateInput(activity.reservationExpiresAt ?? 0)}
+                                                                onClick={(event) => openDatePicker(event.currentTarget)}
+                                                            />
+                                                        </div>
+                                                        <div className="grid gap-1">
+                                                            <FieldLabel htmlFor={`update-activity-default-store-qty-${activity.id}`} label="Legacy 保留欄位（相容）" />
+                                                            <Input
+                                                                id={`update-activity-default-store-qty-${activity.id}`}
+                                                                type="number"
+                                                                min={0}
+                                                                name="activityDefaultStoreQty"
+                                                                defaultValue={activity.defaultStoreQty}
+                                                            />
+                                                        </div>
                                                     </div>
                                                     <div className="grid gap-1">
                                                         <FieldLabel htmlFor={`update-activity-message-${activity.id}`} label="活動說明" />
@@ -1425,17 +1655,17 @@ export function CompanyDashboardWorkspace({
                             ].join(" ")}
                         >
                             <SectionTitle
-                                title="庫存管理"
+                                title="庫存功能"
                                 hint={
                                     inventoryView === "stock"
-                                        ? "目前庫存總覽"
+                                        ? "目前檢視：庫存總覽"
                                         : inventoryView === "settings"
-                                          ? "產品資料與庫存設置"
+                                          ? "目前檢視：庫存設置"
                                           : inventoryView === "stock-in"
-                                            ? "將商品數量入庫"
+                                            ? "目前檢視：入庫作業"
                                             : inventoryView === "stock-out"
-                                              ? "將商品數量出庫"
-                                              : "產品 CRUD 管理"
+                                              ? "目前檢視：出庫作業"
+                                              : "目前檢視：產品管理"
                                 }
                             />
                             <div className="mb-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
@@ -1464,31 +1694,54 @@ export function CompanyDashboardWorkspace({
                                     );
                                 })}
                             </div>
+                        </Card>
+                        <Card>
+                            <SectionTitle title="搜尋與篩選" hint="功能切換與搜尋區分離，避免操作混淆。" />
                             <form action="/dashboard" method="get" className="flex flex-wrap items-center gap-2">
                                 <input type="hidden" name="tab" value="inventory" />
                                 <input type="hidden" name="inventoryView" value={inventoryView} />
-                                <Input name="productQ" defaultValue={productKeyword} placeholder="產品搜尋" className="w-full sm:w-80" />
+                                <MerchantPredictiveSearchInput
+                                    name="productQ"
+                                    defaultValue={productKeyword}
+                                    placeholder="搜尋品名、SKU、分類、品牌、型號"
+                                    targets={["inventory"]}
+                                    className="w-full sm:w-80"
+                                />
                                 <Button type="submit">查詢</Button>
+                                <Link
+                                    href={`/dashboard?tab=inventory&inventoryView=${encodeURIComponent(inventoryView)}`}
+                                    className="text-sm text-[rgb(var(--accent))] hover:underline"
+                                >
+                                    清除
+                                </Link>
                             </form>
                         </Card>
 
                         {inventoryView === "stock" ? (
                             <>
                                 <Card>
-                                    <SectionTitle title="庫存摘要" />
-                                    <div className="grid gap-3 sm:grid-cols-3">
+                                    <SectionTitle title="庫存摘要" hint="只統計實體庫存與真實 reserved，不含客戶權益。"/>
+                                    <div className="grid gap-3 sm:grid-cols-4">
                                         <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                                            <div className="text-xs text-[rgb(var(--muted))]">總庫存數量</div>
-                                            <div className="mt-1 text-2xl font-semibold">{formatMoney(inventorySummary.totalUnits, lang)}</div>
+                                            <div className="text-xs text-[rgb(var(--muted))]">On hand 總數</div>
+                                            <div className="mt-1 text-2xl font-semibold">{formatMoney(inventorySummary.totalOnHandUnits, lang)}</div>
+                                        </div>
+                                        <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                                            <div className="text-xs text-[rgb(var(--muted))]">Reserved 總數</div>
+                                            <div className="mt-1 text-2xl font-semibold">{formatMoney(inventorySummary.totalReservedUnits, lang)}</div>
+                                        </div>
+                                        <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                                            <div className="text-xs text-[rgb(var(--muted))]">Available 總數</div>
+                                            <div className="mt-1 text-2xl font-semibold">{formatMoney(inventorySummary.totalAvailableUnits, lang)}</div>
                                         </div>
                                         <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
                                             <div className="text-xs text-[rgb(var(--muted))]">庫存成本總值</div>
                                             <div className="mt-1 text-2xl font-semibold">{formatMoney(inventorySummary.totalValue, lang)}</div>
                                         </div>
-                                        <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                                            <div className="text-xs text-[rgb(var(--muted))]">{"低庫存（<= 5）"}</div>
-                                            <div className="mt-1 text-2xl font-semibold">{inventorySummary.lowStockCount}</div>
-                                        </div>
+                                    </div>
+                                    <div className="mt-3 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                                        <div className="text-xs text-[rgb(var(--muted))]">低庫存（依各商品 lowStockThreshold）</div>
+                                        <div className="mt-1 text-2xl font-semibold">{inventorySummary.lowStockCount}</div>
                                     </div>
                                     <div className="mt-3 flex flex-wrap gap-2 text-sm">
                                         <Link href="/dashboard?tab=inventory&inventoryView=stock-in" className="text-[rgb(var(--accent))] hover:underline">
@@ -1512,7 +1765,9 @@ export function CompanyDashboardWorkspace({
                                                         <th className="px-2 py-2">品名</th>
                                                         <th className="px-2 py-2">SKU</th>
                                                         <th className="px-2 py-2">供應商</th>
-                                                        <th className="px-2 py-2">庫存</th>
+                                                        <th className="px-2 py-2">On hand</th>
+                                                        <th className="px-2 py-2">Reserved</th>
+                                                        <th className="px-2 py-2">Available</th>
                                                         <th className="px-2 py-2">售價</th>
                                                         <th className="px-2 py-2">成本</th>
                                                     </tr>
@@ -1523,7 +1778,9 @@ export function CompanyDashboardWorkspace({
                                                             <td className="px-2 py-2 font-medium">{product.name}</td>
                                                             <td className="px-2 py-2">{product.sku || "-"}</td>
                                                             <td className="px-2 py-2">{product.supplier || "-"}</td>
-                                                            <td className="px-2 py-2">{product.stock}</td>
+                                                            <td className="px-2 py-2">{product.onHandQty ?? product.stock}</td>
+                                                            <td className="px-2 py-2">{product.reservedQty ?? 0}</td>
+                                                            <td className="px-2 py-2">{product.availableQty ?? Math.max((product.onHandQty ?? product.stock) - (product.reservedQty ?? 0), 0)}</td>
                                                             <td className="px-2 py-2">{formatMoney(product.price, lang)}</td>
                                                             <td className="px-2 py-2">{formatMoney(product.cost, lang)}</td>
                                                         </tr>
@@ -1560,7 +1817,7 @@ export function CompanyDashboardWorkspace({
                                             <details key={product.id} className="rounded-lg border border-[rgb(var(--border))]">
                                                 <summary className="grid cursor-pointer list-none gap-1 px-3 py-2 text-sm sm:grid-cols-6 [&::-webkit-details-marker]:hidden">
                                                     <span>{product.name}</span>
-                                                    <span>庫存 {product.stock}</span>
+                                                    <span>On hand {product.onHandQty ?? product.stock} / Reserved {product.reservedQty ?? 0}</span>
                                                     <span>售價 {formatMoney(product.price, lang)}</span>
                                                     <span>成本 {formatMoney(product.cost, lang)}</span>
                                                     <span>{product.supplier || "-"}</span>
@@ -1576,7 +1833,7 @@ export function CompanyDashboardWorkspace({
                                                         <Input type="number" min={0} name="cost" defaultValue={product.cost} required />
                                                         <Input name="supplier" defaultValue={product.supplier} />
                                                         <Input name="sku" defaultValue={product.sku} />
-                                                        <Input type="number" min={0} name="stock" defaultValue={product.stock} />
+                                                        <Input type="number" min={0} name="stock" defaultValue={product.onHandQty ?? product.stock} />
                                                         <Button type="submit" className="md:col-span-3">更新產品</Button>
                                                     </form>
                                                     <form action={deleteProductAction} className="mt-2">
@@ -1602,12 +1859,12 @@ export function CompanyDashboardWorkspace({
                                             <input type="hidden" name="tab" value="inventory" />
                                             <input type="hidden" name="inventoryView" value="product-management" />
                                             <div className="relative w-full">
-                                                <Input
-                                                    type="text"
+                                                <MerchantPredictiveSearchInput
                                                     name="productQ"
                                                     defaultValue={productKeyword}
-                                                    placeholder="查詢品名、SKU、供應商"
-                                                    className="pr-10"
+                                                    placeholder="查詢品名、SKU、供應商、分類、品牌、型號"
+                                                    targets={["inventory"]}
+                                                    inputClassName="pr-10"
                                                 />
                                                 <Link
                                                     href="/dashboard?tab=inventory&inventoryView=product-management"
@@ -1657,7 +1914,7 @@ export function CompanyDashboardWorkspace({
                                                 <details key={product.id} className="rounded-lg border border-[rgb(var(--border))]">
                                                     <summary className="grid cursor-pointer list-none gap-1 px-3 py-2 text-sm sm:grid-cols-6 [&::-webkit-details-marker]:hidden">
                                                         <span>{product.name}</span>
-                                                        <span>庫存 {product.stock}</span>
+                                                        <span>On hand {product.onHandQty ?? product.stock} / Reserved {product.reservedQty ?? 0}</span>
                                                         <span>售價 {formatMoney(product.price, lang)}</span>
                                                         <span>成本 {formatMoney(product.cost, lang)}</span>
                                                         <span>{product.supplier || "-"}</span>
@@ -1673,7 +1930,7 @@ export function CompanyDashboardWorkspace({
                                                             <Input type="number" min={0} name="cost" defaultValue={product.cost} required />
                                                             <Input name="supplier" defaultValue={product.supplier} />
                                                             <Input name="sku" defaultValue={product.sku} />
-                                                            <Input type="number" min={0} name="stock" defaultValue={product.stock} />
+                                                            <Input type="number" min={0} name="stock" defaultValue={product.onHandQty ?? product.stock} />
                                                             <Button type="submit" className="md:col-span-3">更新產品</Button>
                                                         </form>
                                                         <form action={deleteProductAction} className="mt-2">
@@ -1710,7 +1967,7 @@ export function CompanyDashboardWorkspace({
                                                 <div className="text-sm">
                                                     <div className="font-medium">{product.name}</div>
                                                     <div className="text-xs text-[rgb(var(--muted))]">
-                                                        SKU: {product.sku || "-"} / 目前庫存: {product.stock}
+                                                        SKU: {product.sku || "-"} / On hand: {product.onHandQty ?? product.stock} / Reserved: {product.reservedQty ?? 0}
                                                     </div>
                                                 </div>
                                                 <Input type="number" min={1} name="qty" defaultValue={1} />
@@ -1724,7 +1981,7 @@ export function CompanyDashboardWorkspace({
 
                         {inventoryView === "stock-out" ? (
                             <Card>
-                                <SectionTitle title={`出庫（${products.length}）`} hint="出庫數量不可超過目前庫存" />
+                                <SectionTitle title={`出庫（${products.length}）`} hint="出庫數量不可超過 available 庫存" />
                                 {products.length === 0 ? (
                                     <div className="text-sm text-[rgb(var(--muted))]">目前沒有產品可出庫。</div>
                                 ) : (
@@ -1741,11 +1998,22 @@ export function CompanyDashboardWorkspace({
                                                 <div className="text-sm">
                                                     <div className="font-medium">{product.name}</div>
                                                     <div className="text-xs text-[rgb(var(--muted))]">
-                                                        SKU: {product.sku || "-"} / 目前庫存: {product.stock}
+                                                        SKU: {product.sku || "-"} / On hand: {product.onHandQty ?? product.stock} / Reserved: {product.reservedQty ?? 0} / Available: {product.availableQty ?? Math.max((product.onHandQty ?? product.stock) - (product.reservedQty ?? 0), 0)}
                                                     </div>
                                                 </div>
-                                                <Input type="number" min={1} max={Math.max(1, product.stock)} name="qty" defaultValue={1} />
-                                                <Button type="submit" disabled={product.stock <= 0}>確認出庫</Button>
+                                                <Input
+                                                    type="number"
+                                                    min={1}
+                                                    max={Math.max(1, product.availableQty ?? Math.max((product.onHandQty ?? product.stock) - (product.reservedQty ?? 0), 0))}
+                                                    name="qty"
+                                                    defaultValue={1}
+                                                />
+                                                <Button
+                                                    type="submit"
+                                                    disabled={(product.availableQty ?? Math.max((product.onHandQty ?? product.stock) - (product.reservedQty ?? 0), 0)) <= 0}
+                                                >
+                                                    確認出庫
+                                                </Button>
                                             </form>
                                         ))}
                                     </div>

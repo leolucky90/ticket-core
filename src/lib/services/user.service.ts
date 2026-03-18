@@ -22,9 +22,27 @@ const USER_ROLE_SET: ReadonlySet<UserDoc["role"]> = new Set([
     "customer",
 ]);
 
-function normalizeRole(value: unknown, fallback: UserDoc["role"]): UserDoc["role"] {
-    return typeof value === "string" && USER_ROLE_SET.has(value as UserDoc["role"]) ? (value as UserDoc["role"]) : fallback;
+const LEGACY_ROLE_MAP: Readonly<Record<string, UserDoc["role"]>> = {
+    admin: "company_admin",
+    company: "company_admin",
+    company_user: "company_admin",
+    company_owner: "owner",
+    merchant: "company_admin",
+    merchant_admin: "company_admin",
+    member: "customer",
+    user: "customer",
+};
+
+function parseCompanyRoleHintEmailSet(): ReadonlySet<string> {
+    const source = process.env.COMPANY_ROLE_HINT_EMAILS ?? "admin1@gmail.com";
+    const emails = source
+        .split(",")
+        .map((item) => item.trim().toLowerCase())
+        .filter((item) => item.length > 0);
+    return new Set(emails);
 }
+
+const COMPANY_ROLE_HINT_EMAIL_SET = parseCompanyRoleHintEmailSet();
 
 function normalizeCompanyId(value: unknown): string | null {
     if (typeof value !== "string") return null;
@@ -42,6 +60,44 @@ function normalizeCustomerId(value: unknown): string | null {
     if (typeof value !== "string") return null;
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeEmail(value: unknown): string {
+    if (typeof value !== "string") return "";
+    return value.trim().toLowerCase();
+}
+
+function inferFallbackRoleFromShape(input: {
+    role?: unknown;
+    companyId?: unknown;
+    customerId?: unknown;
+    email?: unknown;
+}, preferred: UserDoc["role"]): UserDoc["role"] {
+    const email = normalizeEmail(input.email);
+    if (email && COMPANY_ROLE_HINT_EMAIL_SET.has(email)) return "company_admin";
+
+    if (typeof input.role === "string") {
+        const normalized = input.role.trim().toLowerCase();
+        if (normalized) {
+            if (USER_ROLE_SET.has(normalized as UserDoc["role"])) {
+                const explicitRole = normalized as UserDoc["role"];
+                const customerId = normalizeCustomerId(input.customerId);
+                const companyId = normalizeCompanyId(input.companyId);
+                if (explicitRole === "customer" && !customerId && companyId) return "company_admin";
+                return explicitRole;
+            }
+            const mapped = LEGACY_ROLE_MAP[normalized];
+            if (mapped) return mapped;
+        }
+    }
+
+    const customerId = normalizeCustomerId(input.customerId);
+    if (customerId) return "customer";
+
+    const companyId = normalizeCompanyId(input.companyId);
+    if (companyId) return "company_admin";
+
+    return preferred;
 }
 
 export function toAccountType(role: UserDoc["role"] | null | undefined): AccountType {
@@ -89,7 +145,15 @@ export async function ensureUserDoc(params: {
     );
 
     const uid = typeof existing.uid === "string" && existing.uid ? existing.uid : params.uid;
-    const role = normalizeRole(existing.role, fallbackRole);
+    const role = inferFallbackRoleFromShape(
+        {
+            role: existing.role,
+            companyId: existing.companyId,
+            customerId: existing.customerId,
+            email: existing.email ?? params.email,
+        },
+        fallbackRole,
+    );
     const merged: UserDoc = {
         uid,
         email: params.email || (typeof existing.email === "string" ? existing.email : ""),
@@ -108,7 +172,15 @@ export async function getUserDoc(uid: string): Promise<UserDoc | null> {
     const snap = await fbAdminDb.collection("users").doc(uid).get();
     if (!snap.exists) return null;
     const raw = (snap.data() ?? {}) as Partial<UserDoc>;
-    const role = normalizeRole(raw.role, "customer");
+    const role = inferFallbackRoleFromShape(
+        {
+            role: raw.role,
+            companyId: raw.companyId,
+            customerId: raw.customerId,
+            email: raw.email,
+        },
+        "customer",
+    );
     const next: UserDoc = {
         uid: typeof raw.uid === "string" && raw.uid ? raw.uid : uid,
         email: typeof raw.email === "string" ? raw.email : "",

@@ -15,6 +15,7 @@ import type {
     RepairBrand,
     RevenuePoint,
 } from "@/lib/types/commerce";
+import { buildProductNameSuggestion, buildProductNormalizedName, buildProductSearchKeywords, normalizeAliasList, parseProductNamingMode } from "@/lib/services/productNaming";
 import type { Sale } from "@/lib/types/sale";
 import type { Ticket } from "@/lib/types/ticket";
 import { listSales, queryCheckoutSales } from "@/lib/services/sales";
@@ -146,6 +147,14 @@ function computeActivityStatus(startAt: number, endAt: number, forced?: Activity
     return "active";
 }
 
+function parsePromotionEffectType(value: unknown): Activity["effectType"] {
+    if (value === "bundle_price") return "bundle_price";
+    if (value === "gift_item") return "gift_item";
+    if (value === "create_entitlement") return "create_entitlement";
+    if (value === "create_pickup_reservation") return "create_pickup_reservation";
+    return "discount";
+}
+
 function normalizeActivityItem(input: Partial<ActivityItem> | null | undefined): ActivityItem {
     const candidate = input ?? {};
     const totalQty = Math.max(0, Math.round(toNumber(candidate.totalQty, 0)));
@@ -177,6 +186,12 @@ function normalizeActivity(input: Partial<Activity> & { id: string }): Activity 
 
     const totalAmount = items.reduce((sum, item) => sum + item.amount, 0);
     const totalCost = items.reduce((sum, item) => sum + item.cost, 0);
+    const effectType = parsePromotionEffectType(input.effectType);
+    const discountAmount = toMoney(input.discountAmount);
+    const bundlePriceDiscount = toMoney(input.bundlePriceDiscount);
+    const giftQty = Math.max(1, Math.round(toNumber(input.giftQty, 1)));
+    const entitlementQty = Math.max(1, Math.round(toNumber(input.entitlementQty, 1)));
+    const reservationQty = Math.max(1, Math.round(toNumber(input.reservationQty, 1)));
 
     return {
         id: safeText(input.id, 120) || id("act"),
@@ -185,6 +200,25 @@ function normalizeActivity(input: Partial<Activity> & { id: string }): Activity 
         endAt: Math.max(endAt, startAt),
         status: computeActivityStatus(startAt, Math.max(endAt, startAt), input.status),
         message: safeText(input.message, MAX_LONG_TEXT),
+        effectType,
+        discountAmount,
+        bundlePriceDiscount,
+        giftProductId: safeText(input.giftProductId, 120) || undefined,
+        giftProductName: safeText(input.giftProductName) || undefined,
+        giftQty,
+        entitlementType:
+            input.entitlementType === "gift" || input.entitlementType === "discount" || input.entitlementType === "service"
+                ? input.entitlementType
+                : "replacement",
+        scopeType: input.scopeType === "product" ? "product" : "category",
+        categoryId: safeText(input.categoryId, 120) || undefined,
+        categoryName: safeText(input.categoryName) || undefined,
+        productId: safeText(input.productId, 120) || undefined,
+        productName: safeText(input.productName) || undefined,
+        entitlementQty,
+        entitlementExpiresAt: toTimestamp(input.entitlementExpiresAt, 0) || undefined,
+        reservationQty,
+        reservationExpiresAt: toTimestamp(input.reservationExpiresAt, 0) || undefined,
         defaultStoreQty: Math.max(0, Math.round(toNumber(input.defaultStoreQty, 0))),
         items,
         totalAmount: toMoney(input.totalAmount ?? totalAmount),
@@ -196,14 +230,72 @@ function normalizeActivity(input: Partial<Activity> & { id: string }): Activity 
 
 function normalizeProduct(input: Partial<Product> & { id: string }): Product {
     const createdAt = toTimestamp(input.createdAt, now());
+    const namingMode = parseProductNamingMode(input.namingMode);
+    const categoryId = safeText(input.categoryId, 120);
+    const categoryName = safeText(input.categoryName);
+    const brandId = safeText(input.brandId, 120);
+    const brandName = safeText(input.brandName);
+    const modelId = safeText(input.modelId, 120);
+    const modelName = safeText(input.modelName);
+    const nameEntryId = safeText(input.nameEntryId, 120);
+    const nameEntryName = safeText(input.nameEntryName);
+    const customLabel = safeText(input.customLabel);
+    const aliases = normalizeAliasList(input.aliases);
+    const suggestedName = buildProductNameSuggestion({
+        namingMode,
+        categoryName,
+        brandName,
+        modelName,
+        nameEntryName,
+        customLabel,
+    });
+    const safeName = safeText(input.name) || suggestedName || "未命名產品";
+
+    const sellPrice = toMoney(input.sellPrice ?? input.price);
+    const costPrice = toMoney(input.costPrice ?? input.cost);
+    const onHandQty = Math.max(0, Math.round(toNumber(input.onHandQty ?? input.stockQty ?? input.stock, 0)));
+    const reservedQty = Math.max(0, Math.round(toNumber(input.reservedQty, 0)));
+    const availableQty = Math.max(0, Math.round(toNumber(input.availableQty, onHandQty - reservedQty)));
+
     return {
         id: safeText(input.id, 120) || id("prd"),
-        name: safeText(input.name) || "未命名產品",
-        price: toMoney(input.price),
-        cost: toMoney(input.cost),
+        companyId: safeText(input.companyId, 120),
+        name: safeName,
+        namingMode,
+        categoryId,
+        categoryName,
+        brandId,
+        brandName,
+        modelId,
+        modelName,
+        nameEntryId,
+        nameEntryName,
+        customLabel,
+        aliases,
+        normalizedName:
+            buildProductNormalizedName({
+                name: input.normalizedName || safeName,
+                aliases,
+                categoryName,
+                brandName,
+                modelName,
+                nameEntryName,
+                customLabel,
+            }) || buildProductNormalizedName({ name: safeName }),
+        price: sellPrice,
+        cost: costPrice,
         supplier: safeText(input.supplier),
         sku: safeText(input.sku, 120),
-        stock: Math.max(0, Math.round(toNumber(input.stock, 0))),
+        stock: onHandQty,
+        onHandQty,
+        reservedQty,
+        availableQty,
+        sellPrice,
+        costPrice,
+        stockQty: onHandQty,
+        lowStockThreshold: Math.max(0, Math.round(toNumber(input.lowStockThreshold, 0))),
+        stockDeductionMode: input.stockDeductionMode === "redeem_only" ? "redeem_only" : "immediate",
+        status: input.status === "inactive" ? "inactive" : "active",
         createdAt,
         updatedAt: toTimestamp(input.updatedAt, createdAt),
     };
@@ -611,6 +703,145 @@ function parseActivityItems(formData: FormData): ActivityItem[] {
     return items;
 }
 
+type ActivityEffectFields = {
+    effectType: Activity["effectType"];
+    discountAmount: number;
+    bundlePriceDiscount: number;
+    giftProductId?: string;
+    giftProductName?: string;
+    giftQty: number;
+    entitlementType: "replacement" | "gift" | "discount" | "service";
+    scopeType: "category" | "product";
+    categoryId?: string;
+    categoryName?: string;
+    productId?: string;
+    productName?: string;
+    entitlementQty: number;
+    entitlementExpiresAt?: number;
+    reservationQty: number;
+    reservationExpiresAt?: number;
+};
+
+function parseActivityEffectFields(formData: FormData): ActivityEffectFields {
+    const effectType = parsePromotionEffectType(formData.get("activityEffectType"));
+    return {
+        effectType,
+        discountAmount: toMoney(formData.get("activityDiscountAmount")),
+        bundlePriceDiscount: toMoney(formData.get("activityBundlePriceDiscount")),
+        giftProductId: safeText(formData.get("activityGiftProductId"), 120) || undefined,
+        giftProductName: safeText(formData.get("activityGiftProductName")) || undefined,
+        giftQty: Math.max(1, Math.round(toNumber(formData.get("activityGiftQty"), 1))),
+        entitlementType:
+            formData.get("activityEntitlementType") === "gift" ||
+            formData.get("activityEntitlementType") === "discount" ||
+            formData.get("activityEntitlementType") === "service"
+                ? (formData.get("activityEntitlementType") as "gift" | "discount" | "service")
+                : "replacement",
+        scopeType: formData.get("activityScopeType") === "product" ? "product" : "category",
+        categoryId: safeText(formData.get("activityCategoryId"), 120) || undefined,
+        categoryName: safeText(formData.get("activityCategoryName")) || undefined,
+        productId: safeText(formData.get("activityProductId"), 120) || undefined,
+        productName: safeText(formData.get("activityProductName")) || undefined,
+        entitlementQty: Math.max(1, Math.round(toNumber(formData.get("activityEntitlementQty"), 1))),
+        entitlementExpiresAt: toTimestamp(formData.get("activityEntitlementExpiresAt"), 0) || undefined,
+        reservationQty: Math.max(1, Math.round(toNumber(formData.get("activityReservationQty"), 1))),
+        reservationExpiresAt: toTimestamp(formData.get("activityReservationExpiresAt"), 0) || undefined,
+    };
+}
+
+function isActivityEffectValid(effect: ActivityEffectFields): boolean {
+    if (effect.effectType === "create_entitlement") {
+        if (effect.entitlementQty <= 0) return false;
+        if (effect.scopeType === "product") return Boolean(effect.productId || effect.productName);
+        return Boolean(effect.categoryId || effect.categoryName);
+    }
+    if (effect.effectType === "gift_item") {
+        return Boolean(effect.giftProductId || effect.giftProductName);
+    }
+    if (effect.effectType === "create_pickup_reservation") {
+        return Boolean(effect.productId || effect.productName) && effect.reservationQty > 0;
+    }
+    return true;
+}
+
+function parseDimensionRef(value: unknown): { id: string; name: string } {
+    const raw = safeText(value, 320);
+    if (!raw) return { id: "", name: "" };
+    const [idPart, namePart] = raw.split("::");
+    const idValue = safeText(idPart, 120);
+    const nameValue = safeText(namePart);
+    if (!nameValue && !idValue) return { id: "", name: "" };
+    return {
+        id: idValue,
+        name: nameValue || idValue,
+    };
+}
+
+type ProductFormFields = {
+    name: string;
+    namingMode: Product["namingMode"];
+    categoryId: string;
+    categoryName: string;
+    brandId: string;
+    brandName: string;
+    modelId: string;
+    modelName: string;
+    nameEntryId: string;
+    nameEntryName: string;
+    customLabel: string;
+    aliases: string[];
+    stockDeductionMode: "immediate" | "redeem_only";
+    status: "active" | "inactive";
+};
+
+function readProductFormFields(formData: FormData): ProductFormFields {
+    const namingMode = parseProductNamingMode(formData.get("namingMode"));
+    const categoryRef = parseDimensionRef(formData.get("categoryRef"));
+    const brandRef = parseDimensionRef(formData.get("brandRef"));
+    const modelRef = parseDimensionRef(formData.get("modelRef"));
+    const nameEntryRef = parseDimensionRef(formData.get("nameEntryRef"));
+    const categoryId = categoryRef.id || safeText(formData.get("categoryId"), 120);
+    const categoryName = categoryRef.name || safeText(formData.get("categoryName"));
+    const brandId = brandRef.id || safeText(formData.get("brandId"), 120);
+    const brandName = brandRef.name || safeText(formData.get("brandName"));
+    const modelId = modelRef.id || safeText(formData.get("modelId"), 120);
+    const modelName = modelRef.name || safeText(formData.get("modelName"));
+    const nameEntryId = nameEntryRef.id || safeText(formData.get("nameEntryId"), 120);
+    const nameEntryName = nameEntryRef.name || safeText(formData.get("nameEntryName"));
+    const customLabel = safeText(formData.get("customLabel"));
+    const aliases = normalizeAliasList([...formData.getAll("aliases[]"), formData.get("aliases"), formData.get("aliasText")]);
+    const suggestedName = buildProductNameSuggestion({
+        namingMode,
+        categoryName,
+        brandName,
+        modelName,
+        nameEntryName,
+        customLabel,
+    });
+    const name = safeText(formData.get("name")) || suggestedName;
+
+    const stockDeductionMode: "immediate" | "redeem_only" =
+        formData.get("stockDeductionMode") === "redeem_only" ? "redeem_only" : "immediate";
+    const status: "active" | "inactive" = formData.get("status") === "inactive" ? "inactive" : "active";
+
+    return {
+        name,
+        namingMode,
+        categoryId,
+        categoryName,
+        brandId,
+        brandName,
+        modelId,
+        modelName,
+        nameEntryId,
+        nameEntryName,
+        customLabel,
+        aliases,
+        stockDeductionMode,
+        status,
+    };
+}
+
 function buildCustomerListByTickets(tickets: Ticket[]): CompanyCustomer[] {
     const map = new Map<string, CompanyCustomer>();
 
@@ -724,7 +955,7 @@ export async function listProducts(keyword = ""): Promise<Product[]> {
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .slice(0, MAX_LIST_SIZE);
 
-    return queryByKeyword(normalized, keyword, (item) => [item.name, item.sku, item.supplier]);
+    return queryByKeyword(normalized, keyword, (item) => buildProductSearchKeywords(item));
 }
 
 export async function listInventoryStockLogs(keyword = ""): Promise<InventoryStockLog[]> {
@@ -844,11 +1075,14 @@ export async function listActivityPurchases(): Promise<
         .flatMap((sale, index) => {
             const boundActivities = sale.activityRefs && sale.activityRefs.length > 0
                 ? sale.activityRefs
-                : [{ activityId: "", activityName: "一般銷售", activityContent: "", checkoutStatus: "settled", storeQty: 0 }];
+                : [{ activityId: "", activityName: "一般銷售", activityContent: "", checkoutStatus: "settled", storeQty: 0, effectType: "discount" as const }];
             const rows = boundActivities.flatMap((activity, activityIndex) =>
                 (sale.lineItems ?? []).map((item, itemIndex) => {
-                    const checkoutStatus: "stored" | "settled" = activity.checkoutStatus === "stored" ? "stored" : "settled";
-                    const remainingQty = checkoutStatus === "stored" ? Math.max(1, toNumber(activity.storeQty, 0)) : 0;
+                    const effectType = parsePromotionEffectType(
+                        activity.effectType ?? (activity.checkoutStatus === "stored" ? "create_entitlement" : "discount"),
+                    );
+                    const checkoutStatus: "stored" | "settled" = effectType === "create_entitlement" ? "stored" : "settled";
+                    const remainingQty = effectType === "create_entitlement" ? Math.max(1, toNumber(activity.storeQty, 0)) : 0;
                     const status: "ongoing" | "ended" = remainingQty > 0 ? "ongoing" : "ended";
                     return {
                         id: `purchase_${sale.id}_${index}_${activityIndex}_${itemIndex}`,
@@ -870,8 +1104,11 @@ export async function listActivityPurchases(): Promise<
 
             if (rows.length > 0) return rows;
             const fallback = sale.activityRefs?.[0];
-            const checkoutStatus: "stored" | "settled" = fallback?.checkoutStatus === "stored" ? "stored" : "settled";
-            const remainingQty = checkoutStatus === "stored" ? Math.max(1, toNumber(fallback?.storeQty, 0)) : 0;
+            const fallbackEffectType = parsePromotionEffectType(
+                fallback?.effectType ?? (fallback?.checkoutStatus === "stored" ? "create_entitlement" : "discount"),
+            );
+            const checkoutStatus: "stored" | "settled" = fallbackEffectType === "create_entitlement" ? "stored" : "settled";
+            const remainingQty = fallbackEffectType === "create_entitlement" ? Math.max(1, toNumber(fallback?.storeQty, 0)) : 0;
             const status: "ongoing" | "ended" = remainingQty > 0 ? "ongoing" : "ended";
             const fallbackActivity = fallback?.activityName || "一般銷售";
             return [
@@ -994,8 +1231,9 @@ export async function createActivity(formData: FormData): Promise<void> {
     const message = safeText(formData.get("activityMessage"), MAX_LONG_TEXT);
     const defaultStoreQty = Math.max(0, Math.round(toNumber(formData.get("activityDefaultStoreQty"), 0)));
     const items = parseActivityItems(formData);
+    const effect = parseActivityEffectFields(formData);
 
-    if (!name || startAt <= 0 || endAt <= 0 || endAt < startAt || items.length === 0) {
+    if (!name || startAt <= 0 || endAt <= 0 || endAt < startAt || items.length === 0 || !isActivityEffectValid(effect)) {
         dashboardRedirect(tab, "invalid");
     }
 
@@ -1007,6 +1245,22 @@ export async function createActivity(formData: FormData): Promise<void> {
         endAt,
         message,
         defaultStoreQty,
+        effectType: effect.effectType,
+        discountAmount: effect.discountAmount,
+        bundlePriceDiscount: effect.bundlePriceDiscount,
+        giftProductId: effect.giftProductId,
+        giftProductName: effect.giftProductName,
+        giftQty: effect.giftQty,
+        entitlementType: effect.entitlementType,
+        scopeType: effect.scopeType,
+        categoryId: effect.categoryId,
+        categoryName: effect.categoryName,
+        productId: effect.productId,
+        productName: effect.productName,
+        entitlementQty: effect.entitlementQty,
+        entitlementExpiresAt: effect.entitlementExpiresAt,
+        reservationQty: effect.reservationQty,
+        reservationExpiresAt: effect.reservationExpiresAt,
         items,
         status: computeActivityStatus(startAt, endAt),
         createdAt: ts,
@@ -1038,8 +1292,9 @@ export async function updateActivity(formData: FormData): Promise<void> {
     const message = safeText(formData.get("activityMessage"), MAX_LONG_TEXT);
     const defaultStoreQty = Math.max(0, Math.round(toNumber(formData.get("activityDefaultStoreQty"), 0)));
     const items = parseActivityItems(formData);
+    const effect = parseActivityEffectFields(formData);
 
-    if (!activityId || !name || startAt <= 0 || endAt <= 0 || endAt < startAt || items.length === 0) {
+    if (!activityId || !name || startAt <= 0 || endAt <= 0 || endAt < startAt || items.length === 0 || !isActivityEffectValid(effect)) {
         dashboardRedirect(tab, "invalid");
     }
 
@@ -1055,6 +1310,22 @@ export async function updateActivity(formData: FormData): Promise<void> {
         endAt,
         message,
         defaultStoreQty,
+        effectType: effect.effectType,
+        discountAmount: effect.discountAmount,
+        bundlePriceDiscount: effect.bundlePriceDiscount,
+        giftProductId: effect.giftProductId,
+        giftProductName: effect.giftProductName,
+        giftQty: effect.giftQty,
+        entitlementType: effect.entitlementType,
+        scopeType: effect.scopeType,
+        categoryId: effect.categoryId,
+        categoryName: effect.categoryName,
+        productId: effect.productId,
+        productName: effect.productName,
+        entitlementQty: effect.entitlementQty,
+        entitlementExpiresAt: effect.entitlementExpiresAt,
+        reservationQty: effect.reservationQty,
+        reservationExpiresAt: effect.reservationExpiresAt,
         items,
         status: current?.status === "cancelled" ? "cancelled" : computeActivityStatus(startAt, endAt),
         updatedAt: now(),
@@ -1132,19 +1403,33 @@ export async function createProduct(formData: FormData): Promise<void> {
     const redirectPath = getProductRedirectPath(formData);
     if (!scope) dashboardRedirect(tab, "invalid", { inventoryView, redirectPath });
 
-    const name = safeText(formData.get("name"));
+    const productDraft = readProductFormFields(formData);
     const price = toMoney(formData.get("price"));
     const cost = toMoney(formData.get("cost"));
     const supplier = safeText(formData.get("supplier"));
     const sku = safeText(formData.get("sku"), 120);
     const stock = Math.max(0, Math.round(toNumber(formData.get("stock"), 0)));
 
-    if (!name) dashboardRedirect(tab, "invalid", { inventoryView, redirectPath });
+    if (!productDraft.name) dashboardRedirect(tab, "invalid", { inventoryView, redirectPath });
 
     const ts = now();
     const product = normalizeProduct({
         id: id("prd"),
-        name,
+        name: productDraft.name,
+        namingMode: productDraft.namingMode,
+        categoryId: productDraft.categoryId,
+        categoryName: productDraft.categoryName,
+        brandId: productDraft.brandId,
+        brandName: productDraft.brandName,
+        modelId: productDraft.modelId,
+        modelName: productDraft.modelName,
+        nameEntryId: productDraft.nameEntryId,
+        nameEntryName: productDraft.nameEntryName,
+        customLabel: productDraft.customLabel,
+        aliases: productDraft.aliases,
+        stockDeductionMode: productDraft.stockDeductionMode,
+        status: productDraft.status,
+        lowStockThreshold: Math.max(0, Math.round(toNumber(formData.get("lowStockThreshold"), 0))),
         price,
         cost,
         supplier,
@@ -1176,8 +1461,8 @@ export async function updateProduct(formData: FormData): Promise<void> {
     if (!scope) dashboardRedirect(tab, "invalid", { inventoryView, redirectPath });
 
     const productId = safeText(formData.get("productId"), 120);
-    const name = safeText(formData.get("name"));
-    if (!productId || !name) dashboardRedirect(tab, "invalid", { inventoryView, redirectPath });
+    const productDraft = readProductFormFields(formData);
+    if (!productId || !productDraft.name) dashboardRedirect(tab, "invalid", { inventoryView, redirectPath });
 
     const current = (await listProducts()).find((product) => product.id === productId);
     if (!current) dashboardRedirect(tab, "invalid", { inventoryView, redirectPath });
@@ -1185,7 +1470,21 @@ export async function updateProduct(formData: FormData): Promise<void> {
     const next = normalizeProduct({
         ...current,
         id: productId,
-        name,
+        name: productDraft.name,
+        namingMode: productDraft.namingMode,
+        categoryId: productDraft.categoryId,
+        categoryName: productDraft.categoryName,
+        brandId: productDraft.brandId,
+        brandName: productDraft.brandName,
+        modelId: productDraft.modelId,
+        modelName: productDraft.modelName,
+        nameEntryId: productDraft.nameEntryId,
+        nameEntryName: productDraft.nameEntryName,
+        customLabel: productDraft.customLabel,
+        aliases: productDraft.aliases,
+        stockDeductionMode: productDraft.stockDeductionMode,
+        status: productDraft.status,
+        lowStockThreshold: Math.max(0, Math.round(toNumber(formData.get("lowStockThreshold"), current.lowStockThreshold ?? 0))),
         price: toMoney(formData.get("price")),
         cost: toMoney(formData.get("cost")),
         supplier: safeText(formData.get("supplier")),
@@ -1244,13 +1543,16 @@ export async function createStockIn(formData: FormData): Promise<void> {
 
     const current = (await listProducts()).find((product) => product.id === productId);
     if (!current) dashboardRedirect(tab, "invalid", { inventoryView });
-    const beforeStock = Math.max(0, current.stock);
+    const beforeStock = Math.max(0, current.onHandQty ?? current.stock);
     const afterStock = beforeStock + qty;
+    const reservedQty = Math.max(0, current.reservedQty ?? 0);
 
     const next = normalizeProduct({
         ...current,
         id: productId,
         stock: afterStock,
+        onHandQty: afterStock,
+        availableQty: Math.max(afterStock - reservedQty, 0),
         updatedAt: now(),
     });
     const stockLog = normalizeInventoryStockLog({
@@ -1297,14 +1599,19 @@ export async function createStockOut(formData: FormData): Promise<void> {
     if (!productId || qty <= 0) dashboardRedirect(tab, "invalid", { inventoryView });
 
     const current = (await listProducts()).find((product) => product.id === productId);
-    if (!current || qty > Math.max(0, current.stock)) dashboardRedirect(tab, "invalid", { inventoryView });
-    const beforeStock = Math.max(0, current.stock);
+    const currentOnHand = Math.max(0, current?.onHandQty ?? current?.stock ?? 0);
+    const currentReserved = Math.max(0, current?.reservedQty ?? 0);
+    const currentAvailable = Math.max(0, current?.availableQty ?? currentOnHand - currentReserved);
+    if (!current || qty > currentAvailable) dashboardRedirect(tab, "invalid", { inventoryView });
+    const beforeStock = currentOnHand;
     const afterStock = Math.max(0, beforeStock - qty);
 
     const next = normalizeProduct({
         ...current,
         id: productId,
         stock: afterStock,
+        onHandQty: afterStock,
+        availableQty: Math.max(afterStock - currentReserved, 0),
         updatedAt: now(),
     });
     const stockLog = normalizeInventoryStockLog({

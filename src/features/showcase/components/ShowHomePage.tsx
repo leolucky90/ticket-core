@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { ShowcaseLanguageSwitcher } from "@/features/showcase/components/ShowcaseLanguageSwitcher";
+import { SignOutButton } from "@/components/layout/SignOutButton";
 import { MOCK_HOME_SERVICE_IMAGE_URLS } from "@/mock/homeServiceImages";
 import type {
     ShowContentBlock,
@@ -37,6 +38,7 @@ const uiByLang = {
         navSignUp: "註冊",
         navDashboard: "儀表板",
         navMyAccount: "我的帳戶",
+        navSignOut: "登出",
         navCart: "購物車",
         ctaCompany: "前往儀表板",
         ctaCustomer: "我的帳戶",
@@ -57,6 +59,7 @@ const uiByLang = {
         navSignUp: "Sign Up",
         navDashboard: "Dashboard",
         navMyAccount: "My Account",
+        navSignOut: "Sign out",
         navCart: "Cart",
         ctaCompany: "Open Dashboard",
         ctaCustomer: "My Account",
@@ -452,6 +455,10 @@ export function ShowHomePage({
                                 <Link className="rounded-full bg-[#191815] px-4 py-1.5 text-[#ffcb2d] hover:bg-black" href="/dashboard">
                                     {ui.navDashboard}
                                 </Link>
+                                <SignOutButton
+                                    className="rounded-full border-[#191815] bg-transparent px-4 py-1.5 text-[#191815] hover:border-[#191815] hover:bg-[#191815] hover:text-[#ffcb2d]"
+                                    label={ui.navSignOut}
+                                />
                             </>
                         ) : null}
                         {navAccountType === "customer" ? (
@@ -463,11 +470,21 @@ export function ShowHomePage({
                                     <Link className="rounded-full bg-[#191815] px-4 py-1.5 text-[#ffcb2d] hover:bg-black" href={customerDashboardHref}>
                                         {ui.navMyAccount} 👤
                                     </Link>
+                                    <SignOutButton
+                                        className="rounded-full border-[#191815] bg-transparent px-4 py-1.5 text-[#191815] hover:border-[#191815] hover:bg-[#191815] hover:text-[#ffcb2d]"
+                                        label={ui.navSignOut}
+                                    />
                                 </>
                             ) : (
-                                <Link className="rounded-full bg-[#191815] px-4 py-1.5 text-[#ffcb2d] hover:bg-black" href={customerDashboardHref}>
-                                    {ui.navMyAccount}
-                                </Link>
+                                <>
+                                    <Link className="rounded-full bg-[#191815] px-4 py-1.5 text-[#ffcb2d] hover:bg-black" href={customerDashboardHref}>
+                                        {ui.navMyAccount}
+                                    </Link>
+                                    <SignOutButton
+                                        className="rounded-full border-[#191815] bg-transparent px-4 py-1.5 text-[#191815] hover:border-[#191815] hover:bg-[#191815] hover:text-[#ffcb2d]"
+                                        label={ui.navSignOut}
+                                    />
+                                </>
                             )
                         ) : null}
                         <ShowcaseLanguageSwitcher currentLang={lang} />

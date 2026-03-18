@@ -43,6 +43,12 @@ type Labels = {
     passwordPolicyError?: string;
 };
 
+const TENANT_SIGNIN_ERROR_CODES = new Set([
+    "auth/invalid-tenant-id",
+    "auth/tenant-id-mismatch",
+    "auth/tenant-not-found",
+]);
+
 function getPasswordStrength(password: string): "weak" | "medium" | "strong" {
     if (!password) return "weak";
 
@@ -54,6 +60,49 @@ function getPasswordStrength(password: string): "weak" | "medium" | "strong" {
     if (score <= 1) return "weak";
     if (score === 2) return "medium";
     return "strong";
+}
+
+function getAuthErrorCode(error: unknown): string {
+    if (typeof error === "object" && error !== null && "code" in error) {
+        const code = (error as { code?: unknown }).code;
+        if (typeof code === "string") return code;
+    }
+    if (error instanceof Error && typeof error.message === "string" && error.message.startsWith("server/")) {
+        return error.message;
+    }
+    return "";
+}
+
+function getAuthErrorMessage(code: string, mode: Mode, labels: Labels): string {
+    if (code === "server/EMAIL_NOT_VERIFIED") return labels.verifyNeeded;
+    if (code === "server/TENANT_USER_NOT_BOUND") return "此帳號尚未綁定到該商家，請改用正確商家入口登入。";
+    if (code === "server/TENANT_SCOPE_MISMATCH") return "登入入口與帳號綁定商家不一致，請使用正確商家網址。";
+    if (code === "server/TENANT_LOGIN_FORBIDDEN") return "此帳號是商家管理帳號，請從一般後台登入。";
+    if (code === "server/CUSTOMER_TENANT_CONFLICT") return "此客戶帳號已綁定其他商家，請從原商家入口登入。";
+    if (code === "server/CUSTOMER_TENANT_REQUIRED") return "客戶帳號需要商家入口才能登入。";
+    if (code === "server/REGISTER_PROFILE_FAILED") return "建立帳號資料失敗，請稍後重試。";
+    if (code === "server/SESSION_CREATE_FAILED") return "登入工作階段建立失敗，請稍後重試。";
+
+    if (mode === "signIn") {
+        if (code === "auth/invalid-credential" || code === "auth/wrong-password" || code === "auth/user-not-found") {
+            return "帳號或密碼錯誤，若你是用 Google 建立帳號請改用 Google 登入。";
+        }
+        if (code === "auth/user-disabled") return "此帳號已被停用，請聯絡管理員。";
+        if (code === "auth/too-many-requests") return "嘗試次數過多，請稍後再試。";
+        if (code === "auth/network-request-failed") return "網路連線異常，請檢查網路後再試。";
+        if (code === "auth/operation-not-allowed") return "此登入方式目前未開啟，請聯絡管理員。";
+        if (TENANT_SIGNIN_ERROR_CODES.has(code)) return "租戶登入設定異常，請改用一般登入入口。";
+    }
+
+    if (mode === "signUp") {
+        if (code === "auth/email-already-in-use") return "此 Email 已被註冊，請直接登入。";
+        if (code === "auth/invalid-email") return "Email 格式不正確。";
+        if (code === "auth/weak-password") return labels.passwordPolicyError ?? "密碼強度不足。";
+        if (TENANT_SIGNIN_ERROR_CODES.has(code)) return "租戶註冊設定異常，請改用一般註冊入口。";
+    }
+
+    if (code) return `${labels.error} (${code})`;
+    return labels.error;
 }
 
 export function EmailAuthForm({
@@ -229,8 +278,9 @@ export function EmailAuthForm({
                     const previousTenantId = fbAuth.tenantId ?? null;
                     fbAuth.tenantId = firebaseAuthTenantId ?? null;
                     try {
+                        const normalizedEmail = email.trim().toLowerCase();
                         if (mode === "signUp") {
-                            const cred = await createUserWithEmailAndPassword(fbAuth, email, pw);
+                            const cred = await createUserWithEmailAndPassword(fbAuth, normalizedEmail, pw);
                             const signUpToken = await cred.user.getIdToken();
                             const roleResponse = await fetch("/api/auth/register-profile", {
                                 method: "POST",
@@ -243,7 +293,11 @@ export function EmailAuthForm({
                                 }),
                             });
                             if (!roleResponse.ok) {
-                                throw new Error("failed to setup account profile");
+                                const payload = (await roleResponse.json().catch(() => null)) as
+                                    | { error?: unknown }
+                                    | null;
+                                const errorCode = typeof payload?.error === "string" ? payload.error : "REGISTER_PROFILE_FAILED";
+                                throw new Error(`server/${errorCode}`);
                             }
                             await sendEmailVerification(cred.user);
                             await signOut(fbAuth);
@@ -251,7 +305,19 @@ export function EmailAuthForm({
                             return;
                         }
 
-                        const cred = await signInWithEmailAndPassword(fbAuth, email, pw);
+                        let cred;
+                        try {
+                            cred = await signInWithEmailAndPassword(fbAuth, normalizedEmail, pw);
+                        } catch (firstError) {
+                            const firstCode = getAuthErrorCode(firstError);
+                            // If tenant-scoped sign-in is misconfigured, retry once on default tenant.
+                            if (firebaseAuthTenantId && TENANT_SIGNIN_ERROR_CODES.has(firstCode)) {
+                                fbAuth.tenantId = null;
+                                cred = await signInWithEmailAndPassword(fbAuth, normalizedEmail, pw);
+                            } else {
+                                throw firstError;
+                            }
+                        }
                         await cred.user.reload();
 
                         if (!cred.user.emailVerified) {
@@ -262,8 +328,9 @@ export function EmailAuthForm({
 
                         const idToken = await cred.user.getIdToken(true);
                         await onAuthed(idToken);
-                    } catch {
-                        setMsg(labels.error);
+                    } catch (error) {
+                        const code = getAuthErrorCode(error);
+                        setMsg(getAuthErrorMessage(code, mode, labels));
                     } finally {
                         fbAuth.tenantId = previousTenantId;
                     }

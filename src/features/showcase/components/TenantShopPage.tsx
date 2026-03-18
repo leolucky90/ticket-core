@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
+import { SignOutButton } from "@/components/layout/SignOutButton";
 import type { Product } from "@/lib/types/commerce";
 import type { ShowThemeColors, StorefrontSettings } from "@/features/showcase/types/showTheme";
 
@@ -33,6 +34,7 @@ export function TenantShopPage({
 
     const dashboardHref = `/${encodeURIComponent(tenantId)}/dashboard`;
     const homeHref = `/${encodeURIComponent(tenantId)}`;
+    const merchantDashboardHref = "/dashboard";
 
     if (!storefrontSettings.shoppingEnabled) {
         return (
@@ -65,9 +67,26 @@ export function TenantShopPage({
                             {lang === "en" ? "Home" : "首頁"}
                         </Link>
                         {navAccountType === "customer" ? (
-                            <Link className="rounded-full bg-[#ffcb2d] px-3 py-1.5 text-[#191815]" href={dashboardHref}>
-                                {lang === "en" ? "My Dashboard" : "客戶儀錶板"}
-                            </Link>
+                            <>
+                                <Link className="rounded-full bg-[#ffcb2d] px-3 py-1.5 text-[#191815]" href={dashboardHref}>
+                                    {lang === "en" ? "My Dashboard" : "客戶儀錶板"}
+                                </Link>
+                                <SignOutButton
+                                    className="rounded-full border-[#ffcb2d] bg-transparent px-3 py-1.5 text-[#ffcb2d] hover:border-[#ffcb2d] hover:bg-[#ffcb2d] hover:text-[#191815]"
+                                    label={lang === "en" ? "Sign out" : "登出"}
+                                />
+                            </>
+                        ) : null}
+                        {navAccountType === "company" ? (
+                            <>
+                                <Link className="rounded-full bg-[#ffcb2d] px-3 py-1.5 text-[#191815]" href={merchantDashboardHref}>
+                                    {lang === "en" ? "Dashboard" : "儀錶板"}
+                                </Link>
+                                <SignOutButton
+                                    className="rounded-full border-[#ffcb2d] bg-transparent px-3 py-1.5 text-[#ffcb2d] hover:border-[#ffcb2d] hover:bg-[#ffcb2d] hover:text-[#191815]"
+                                    label={lang === "en" ? "Sign out" : "登出"}
+                                />
+                            </>
                         ) : null}
                         {navAccountType === "guest" ? (
                             <Link className="rounded-full bg-[#ffcb2d] px-3 py-1.5 text-[#191815]" href={`/login?tenant=${encodeURIComponent(tenantId)}`}>

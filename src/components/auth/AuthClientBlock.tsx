@@ -24,6 +24,12 @@ function normalizeAuthTenantId(value: string | null | undefined): string | null 
     return trimmed;
 }
 
+function toServerErrorCode(input: unknown, fallback: string): string {
+    if (typeof input !== "string") return fallback;
+    const normalized = input.trim();
+    return normalized || fallback;
+}
+
 export function AuthClientBlock({
     labels,
     googleLabel,
@@ -48,6 +54,18 @@ export function AuthClientBlock({
     const tenantId = normalizeTenantId(tenantContextId ?? sp.get("tenant"));
     const authTenantId = normalizeAuthTenantId(firebaseAuthTenantId ?? sp.get("authTenant"));
 
+    async function createSession(idToken: string, scopedTenantId: string | null): Promise<Response> {
+        return fetch("/api/auth/session", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+                idToken,
+                tenantId: scopedTenantId ?? undefined,
+                authTenantId: authTenantId ?? undefined,
+            }),
+        });
+    }
+
     async function onAuthed(idToken: string) {
         if (mode === "signUp") {
             const roleResponse = await fetch("/api/auth/register-profile", {
@@ -60,19 +78,24 @@ export function AuthClientBlock({
                     authTenantId: authTenantId ?? undefined,
                 }),
             });
-            if (!roleResponse.ok) return;
+            if (!roleResponse.ok) {
+                const payload = (await roleResponse.json().catch(() => null)) as { error?: unknown } | null;
+                throw new Error(`server/${toServerErrorCode(payload?.error, "REGISTER_PROFILE_FAILED")}`);
+            }
         }
 
-        const r = await fetch("/api/auth/session", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-                idToken,
-                tenantId: tenantId ?? undefined,
-                authTenantId: authTenantId ?? undefined,
-            }),
-        });
-        if (!r.ok) return;
+        let sessionResponse = await createSession(idToken, tenantId);
+        if (!sessionResponse.ok) {
+            const payload = (await sessionResponse.json().catch(() => null)) as { error?: string } | null;
+            // Company account signed in from tenant entry: retry without tenant scope.
+            if (tenantId && payload?.error === "TENANT_LOGIN_FORBIDDEN") {
+                sessionResponse = await createSession(idToken, null);
+            }
+        }
+        if (!sessionResponse.ok) {
+            const payload = (await sessionResponse.json().catch(() => null)) as { error?: unknown } | null;
+            throw new Error(`server/${toServerErrorCode(payload?.error, "SESSION_CREATE_FAILED")}`);
+        }
 
         let fallbackPath = tenantId ? `/${encodeURIComponent(tenantId)}/dashboard` : "/customer-dashboard";
         const bootstrapResponse = await fetch("/api/auth/bootstrap", { method: "POST" });

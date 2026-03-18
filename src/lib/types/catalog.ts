@@ -1,0 +1,63 @@
+export type CatalogRecordStatus = "active" | "inactive";
+export type ProductNamingMode = "structured" | "custom" | "hybrid";
+export type StockDeductionMode = "immediate" | "redeem_only";
+
+type CatalogAuditDoc = {
+    id: string;
+    companyId: string;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export interface CategoryDoc extends CatalogAuditDoc {
+    name: string;
+    slug: string;
+    description?: string;
+    sortOrder: number;
+    status: CatalogRecordStatus;
+}
+
+export interface BrandDoc extends CatalogAuditDoc {
+    name: string;
+    slug: string;
+    description?: string;
+    sortOrder: number;
+    status: CatalogRecordStatus;
+}
+
+export interface ModelDoc extends CatalogAuditDoc {
+    name: string;
+    slug: string;
+    brandId?: string;
+    brandName?: string;
+    categoryId?: string;
+    categoryName?: string;
+    isUniversal: boolean;
+    description?: string;
+    sortOrder: number;
+    status: CatalogRecordStatus;
+}
+
+export interface ProductNameEntryDoc extends CatalogAuditDoc {
+    name: string;
+    slug: string;
+    aliases?: string[];
+    categoryId?: string;
+    categoryName?: string;
+    description?: string;
+    sortOrder: number;
+    status: CatalogRecordStatus;
+}
+
+export type DimensionOption = {
+    id: string;
+    name: string;
+    slug?: string;
+};
+
+export type DimensionPickerBundle = {
+    categories: DimensionOption[];
+    brands: DimensionOption[];
+    models: DimensionOption[];
+    nameEntries: DimensionOption[];
+};

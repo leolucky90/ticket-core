@@ -9,7 +9,6 @@ import {
     normalizeStorefrontSettings,
 } from "@/features/showcase/services/showThemePreferences";
 import type { ShowThemeColorRole, ShowThemeColors, StorefrontSettings } from "@/features/showcase/types/showTheme";
-import { rgbTripletToHex } from "@/lib/services/themePreferences";
 
 export type ShowStyleLabels = {
     title: string;
@@ -54,6 +53,19 @@ function hexToRgbTriplet(hex: string): `${number} ${number} ${number}` {
     const g = Number.parseInt(normalized.slice(2, 4), 16);
     const b = Number.parseInt(normalized.slice(4, 6), 16);
     return `${r} ${g} ${b}`;
+}
+
+function clampColor(value: number): number {
+    if (!Number.isFinite(value)) return 0;
+    if (value < 0) return 0;
+    if (value > 255) return 255;
+    return Math.round(value);
+}
+
+function rgbTripletToHexString(rgb: `${number} ${number} ${number}`): string {
+    const [rRaw, gRaw, bRaw] = rgb.split(" ").map((part) => Number.parseInt(part, 10));
+    const toHex = (value: number) => clampColor(value).toString(16).padStart(2, "0");
+    return `#${toHex(rRaw)}${toHex(gRaw)}${toHex(bRaw)}`;
 }
 
 export function ShowStyleSettingsPanel({ labels, initialColors, initialStorefront }: ShowStyleSettingsPanelProps) {
@@ -125,7 +137,7 @@ export function ShowStyleSettingsPanel({ labels, initialColors, initialStorefron
     }
 
     return (
-        <div className="grid max-w-3xl gap-4">
+        <div className="grid w-full gap-4">
             <div className="rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-4">
                 <div className="grid gap-4">
                     <div className="grid gap-1">
@@ -136,7 +148,7 @@ export function ShowStyleSettingsPanel({ labels, initialColors, initialStorefron
                     <div className="grid gap-3">
                         {roles.map((role) => {
                             const rgbValue = colors[role];
-                            const hexValue = rgbTripletToHex(rgbValue, "#000000");
+                            const hexValue = rgbTripletToHexString(rgbValue);
                             const pickerLabel = `${roleLabels[role]} - ${labels.customColor}`;
 
                             return (
@@ -158,10 +170,9 @@ export function ShowStyleSettingsPanel({ labels, initialColors, initialStorefron
                                             <span className="font-mono uppercase">{hexValue}</span>
                                         </label>
                                     </div>
-                                    <div
-                                        className="h-3 rounded-full border border-[rgb(var(--border))]"
-                                        style={{ backgroundColor: `rgb(${rgbValue})` }}
-                                    />
+                                    <div className="rounded-full border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[10px] text-[rgb(var(--muted))]">
+                                        rgb({rgbValue})
+                                    </div>
                                 </div>
                             );
                         })}
