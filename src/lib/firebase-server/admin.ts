@@ -1,7 +1,7 @@
 import "server-only";
 import { getApps, initializeApp, cert } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
+import { getAuth, type Auth } from "firebase-admin/auth";
+import { getFirestore, type Firestore } from "firebase-admin/firestore";
 
 function loadServiceAccount(): { projectId: string; clientEmail: string; privateKey: string } {
     const b64 = process.env.FIREBASE_ADMIN_JSON_BASE64;
@@ -25,23 +25,54 @@ function loadServiceAccount(): { projectId: string; clientEmail: string; private
     };
 }
 
-const sa = loadServiceAccount();
-const storageBucket =
-    process.env.FIREBASE_STORAGE_BUCKET?.trim() ||
-    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET?.trim() ||
-    `${sa.projectId}.firebasestorage.app`;
+let cachedAuth: Auth | null = null;
+let cachedDb: Firestore | null = null;
 
-const app =
-    getApps().length === 0
-        ? initializeApp({
-            credential: cert({
-                projectId: sa.projectId,
-                clientEmail: sa.clientEmail,
-                privateKey: sa.privateKey,
-            }),
-            storageBucket,
-        })
-        : getApps()[0];
+function getFirebaseAdminApp() {
+    const existing = getApps()[0];
+    if (existing) return existing;
 
-export const fbAdminAuth = getAuth(app);
-export const fbAdminDb = getFirestore(app);
+    const sa = loadServiceAccount();
+    const storageBucket =
+        process.env.FIREBASE_STORAGE_BUCKET?.trim() ||
+        process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET?.trim() ||
+        `${sa.projectId}.firebasestorage.app`;
+
+    return initializeApp({
+        credential: cert({
+            projectId: sa.projectId,
+            clientEmail: sa.clientEmail,
+            privateKey: sa.privateKey,
+        }),
+        storageBucket,
+    });
+}
+
+function getFirebaseAdminAuth(): Auth {
+    if (cachedAuth) return cachedAuth;
+    cachedAuth = getAuth(getFirebaseAdminApp());
+    return cachedAuth;
+}
+
+function getFirebaseAdminDb(): Firestore {
+    if (cachedDb) return cachedDb;
+    cachedDb = getFirestore(getFirebaseAdminApp());
+    return cachedDb;
+}
+
+function bindProxyMethod<T extends object>(instance: T, prop: PropertyKey) {
+    const value = Reflect.get(instance, prop);
+    return typeof value === "function" ? value.bind(instance) : value;
+}
+
+export const fbAdminAuth = new Proxy({} as Auth, {
+    get(_target, prop) {
+        return bindProxyMethod(getFirebaseAdminAuth(), prop);
+    },
+}) as Auth;
+
+export const fbAdminDb = new Proxy({} as Firestore, {
+    get(_target, prop) {
+        return bindProxyMethod(getFirebaseAdminDb(), prop);
+    },
+}) as Firestore;
