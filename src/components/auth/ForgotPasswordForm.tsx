@@ -3,7 +3,11 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { sendPasswordResetEmail } from "firebase/auth";
-import { fbAuth, firebaseClientReady, getFirebaseClientErrorMessage } from "@/lib/firebase-client/client";
+import {
+    firebaseClientReady,
+    getFirebaseClientAuth,
+    getFirebaseClientErrorMessage,
+} from "@/lib/firebase-client/client";
 import { AuthButton } from "@/components/auth/ui/AuthButton";
 import { AuthInput } from "@/components/auth/ui/AuthInput";
 
@@ -32,6 +36,7 @@ export function ForgotPasswordForm({ loginHref, authTenantId = null }: ForgotPas
         setMessage(null);
         try {
             if (!firebaseClientReady) throw new Error(getFirebaseClientErrorMessage(null));
+            const fbAuth = getFirebaseClientAuth();
             fbAuth.tenantId = authTenantId ?? null;
             const query = new URLSearchParams();
             if (authTenantId) query.set("authTenant", authTenantId);

@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import { signInWithPopup } from "firebase/auth";
-import { fbAuth, fbGoogleProvider, getFirebaseClientErrorMessage } from "@/lib/firebase-client/client";
+import {
+    getFirebaseClientAuth,
+    getFirebaseClientErrorMessage,
+    getFirebaseGoogleProvider,
+} from "@/lib/firebase-client/client";
 import { AuthButton } from "@/components/auth/ui/AuthButton";
 
 export function GoogleAuthButton({
@@ -30,6 +34,8 @@ export function GoogleAuthButton({
                     }
 
                     setMessage(null);
+                    const fbAuth = getFirebaseClientAuth();
+                    const fbGoogleProvider = getFirebaseGoogleProvider();
                     const previousTenantId = fbAuth.tenantId ?? null;
                     fbAuth.tenantId = firebaseAuthTenantId ?? null;
                     try {

@@ -9,7 +9,7 @@ import {
     signInWithEmailAndPassword,
     signOut,
 } from "firebase/auth";
-import { fbAuth, getFirebaseClientErrorMessage } from "@/lib/firebase-client/client";
+import { getFirebaseClientAuth, getFirebaseClientErrorMessage } from "@/lib/firebase-client/client";
 import { AuthButton } from "@/components/auth/ui/AuthButton";
 import { AuthDivider } from "@/components/auth/ui/AuthDivider";
 import { AuthInput } from "@/components/auth/ui/AuthInput";
@@ -189,6 +189,7 @@ export function EmailAuthForm({
 
     async function resendVerification() {
         try {
+            const fbAuth = getFirebaseClientAuth();
             const u = fbAuth.currentUser;
             if (!u) return;
             await sendEmailVerification(u);
@@ -279,6 +280,7 @@ export function EmailAuthForm({
                         setMsg(getFirebaseClientErrorMessage(null));
                         return;
                     }
+                    const fbAuth = getFirebaseClientAuth();
 
                     if (mode === "signUp") {
                         if (!passwordValid) {

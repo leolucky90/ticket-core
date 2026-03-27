@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { EmailAuthProvider, reauthenticateWithCredential, signInWithEmailAndPassword, updatePassword } from "firebase/auth";
-import { fbAuth } from "@/lib/firebase-client/client";
+import { getFirebaseClientAuth } from "@/lib/firebase-client/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -52,6 +52,7 @@ export function ChangePasswordForm({ email }: ChangePasswordFormProps) {
         setSubmitting(true);
         setMessage(null);
         try {
+            const fbAuth = getFirebaseClientAuth();
             let targetUser = fbAuth.currentUser;
             if (!targetUser || targetUser.email?.toLowerCase() !== email.toLowerCase()) {
                 const signInResult = await signInWithEmailAndPassword(fbAuth, email, currentPassword);

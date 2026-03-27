@@ -57,32 +57,9 @@ function getFirebaseGoogleProvider(): GoogleAuthProvider {
     return cachedGoogleProvider;
 }
 
-function bindProxyMethod<T extends object>(instance: T, prop: PropertyKey) {
-    const value = Reflect.get(instance, prop);
-    return typeof value === "function" ? value.bind(instance) : value;
-}
-
 export function getFirebaseClientErrorMessage(error: unknown): string {
     if (error instanceof Error && error.message) return error.message;
     return firebaseClientConfigError ?? "Firebase 設定異常，請聯絡管理員。";
 }
 
-export const fbAuth = new Proxy({} as Auth, {
-    get(_target, prop) {
-        return bindProxyMethod(getFirebaseClientAuth(), prop);
-    },
-    set(_target, prop, value) {
-        Reflect.set(getFirebaseClientAuth(), prop, value);
-        return true;
-    },
-}) as Auth;
-
-export const fbGoogleProvider = new Proxy({} as GoogleAuthProvider, {
-    get(_target, prop) {
-        return bindProxyMethod(getFirebaseGoogleProvider(), prop);
-    },
-    set(_target, prop, value) {
-        Reflect.set(getFirebaseGoogleProvider(), prop, value);
-        return true;
-    },
-}) as GoogleAuthProvider;
+export { getFirebaseClientAuth, getFirebaseGoogleProvider };

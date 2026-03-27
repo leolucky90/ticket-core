@@ -3,7 +3,11 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { confirmPasswordReset, verifyPasswordResetCode } from "firebase/auth";
-import { fbAuth, firebaseClientReady, getFirebaseClientErrorMessage } from "@/lib/firebase-client/client";
+import {
+    firebaseClientReady,
+    getFirebaseClientAuth,
+    getFirebaseClientErrorMessage,
+} from "@/lib/firebase-client/client";
 import { AuthButton } from "@/components/auth/ui/AuthButton";
 import { AuthInput } from "@/components/auth/ui/AuthInput";
 
@@ -57,6 +61,7 @@ export function ResetPasswordForm({ loginHref, oobCode = null, authTenantId = nu
             setCheckingCode(true);
             setMessage(null);
             try {
+                const fbAuth = getFirebaseClientAuth();
                 fbAuth.tenantId = authTenantId ?? null;
                 const targetEmail = await verifyPasswordResetCode(fbAuth, code);
                 setEmail(targetEmail);
@@ -97,6 +102,7 @@ export function ResetPasswordForm({ loginHref, oobCode = null, authTenantId = nu
         setSubmitting(true);
         setMessage(null);
         try {
+            const fbAuth = getFirebaseClientAuth();
             fbAuth.tenantId = authTenantId ?? null;
             await confirmPasswordReset(fbAuth, code, newPassword);
             setSuccess(true);

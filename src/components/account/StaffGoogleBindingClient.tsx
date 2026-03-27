@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import { linkWithPopup, unlink } from "firebase/auth";
-import { fbAuth, fbGoogleProvider } from "@/lib/firebase-client/client";
+import {
+    getFirebaseClientAuth,
+    getFirebaseClientErrorMessage,
+    getFirebaseGoogleProvider,
+} from "@/lib/firebase-client/client";
 import { Button } from "@/components/ui/button";
 
 type StaffGoogleBindingClientProps = {
@@ -44,6 +48,8 @@ export function StaffGoogleBindingClient({ staffId, primaryEmail, linked, google
                         setBusy(true);
                         setMessage("");
                         try {
+                            const fbAuth = getFirebaseClientAuth();
+                            const fbGoogleProvider = getFirebaseGoogleProvider();
                             const currentUser = fbAuth.currentUser;
                             if (!currentUser) throw new Error("請先以 email/password 登入後再綁定");
                             if (!currentUser.email || currentUser.email.toLowerCase() !== primaryEmail.toLowerCase()) {
@@ -67,7 +73,7 @@ export function StaffGoogleBindingClient({ staffId, primaryEmail, linked, google
                             setBoundEmail(linkedEmail);
                             setMessage("Google 帳號綁定完成");
                         } catch (error) {
-                            setMessage(error instanceof Error ? error.message : "Google 綁定失敗");
+                            setMessage(getFirebaseClientErrorMessage(error));
                         } finally {
                             setBusy(false);
                         }
@@ -83,6 +89,7 @@ export function StaffGoogleBindingClient({ staffId, primaryEmail, linked, google
                         setBusy(true);
                         setMessage("");
                         try {
+                            const fbAuth = getFirebaseClientAuth();
                             const currentUser = fbAuth.currentUser;
                             if (currentUser) {
                                 const hasGoogle = currentUser.providerData.some((item) => item.providerId === "google.com");
@@ -95,7 +102,7 @@ export function StaffGoogleBindingClient({ staffId, primaryEmail, linked, google
                             setBoundEmail("");
                             setMessage("Google 綁定已解除");
                         } catch (error) {
-                            setMessage(error instanceof Error ? error.message : "解除綁定失敗");
+                            setMessage(getFirebaseClientErrorMessage(error));
                         } finally {
                             setBusy(false);
                         }
@@ -108,4 +115,3 @@ export function StaffGoogleBindingClient({ staffId, primaryEmail, linked, google
         </div>
     );
 }
-
