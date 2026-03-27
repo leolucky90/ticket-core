@@ -9,7 +9,7 @@ import {
     signInWithEmailAndPassword,
     signOut,
 } from "firebase/auth";
-import { fbAuth } from "@/lib/firebase-client/client";
+import { fbAuth, getFirebaseClientErrorMessage } from "@/lib/firebase-client/client";
 import { AuthButton } from "@/components/auth/ui/AuthButton";
 import { AuthDivider } from "@/components/auth/ui/AuthDivider";
 import { AuthInput } from "@/components/auth/ui/AuthInput";
@@ -119,6 +119,7 @@ export function EmailAuthForm({
     signUpAccountType = "customer",
     signUpTenantId = null,
     firebaseAuthTenantId = null,
+    disabled = false,
 }: {
     labels: Labels;
     onAuthed: (idToken: string) => Promise<void>;
@@ -127,6 +128,7 @@ export function EmailAuthForm({
     signUpAccountType?: SignUpAccountType;
     signUpTenantId?: string | null;
     firebaseAuthTenantId?: string | null;
+    disabled?: boolean;
 }) {
     const [mode, setMode] = useState<Mode>(initialMode);
     const [email, setEmail] = useState("");
@@ -158,7 +160,7 @@ export function EmailAuthForm({
     const passwordStrength = getPasswordStrength(pw);
 
     const isSubmitDisabled =
-        !email.trim() || !pw || (isSignUp ? !passwordValid || !confirmMatched : false);
+        disabled || !email.trim() || !pw || (isSignUp ? !passwordValid || !confirmMatched : false);
 
     const confirmPasswordLabel = labels.confirmPassword ?? "確認密碼";
     const passwordRuleCase = labels.passwordRuleCase ?? "需包含至少 1 個大寫與 1 個小寫英文字母";
@@ -186,10 +188,14 @@ export function EmailAuthForm({
     }
 
     async function resendVerification() {
-        const u = fbAuth.currentUser;
-        if (!u) return;
-        await sendEmailVerification(u);
-        setMsg(labels.verifySent);
+        try {
+            const u = fbAuth.currentUser;
+            if (!u) return;
+            await sendEmailVerification(u);
+            setMsg(labels.verifySent);
+        } catch (error) {
+            setMsg(getFirebaseClientErrorMessage(error));
+        }
     }
 
     return (
@@ -269,6 +275,10 @@ export function EmailAuthForm({
                 disabled={isSubmitDisabled}
                 onClick={async () => {
                     setMsg(null);
+                    if (disabled) {
+                        setMsg(getFirebaseClientErrorMessage(null));
+                        return;
+                    }
 
                     if (mode === "signUp") {
                         if (!passwordValid) {
@@ -336,7 +346,7 @@ export function EmailAuthForm({
                         await onAuthed(idToken);
                     } catch (error) {
                         const code = getAuthErrorCode(error);
-                        setMsg(getAuthErrorMessage(code, mode, labels));
+                        setMsg(code ? getAuthErrorMessage(code, mode, labels) : getFirebaseClientErrorMessage(error));
                     } finally {
                         fbAuth.tenantId = previousTenantId;
                     }

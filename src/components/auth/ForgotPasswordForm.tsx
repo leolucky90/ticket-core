@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { sendPasswordResetEmail } from "firebase/auth";
-import { fbAuth } from "@/lib/firebase-client/client";
+import { fbAuth, firebaseClientReady, getFirebaseClientErrorMessage } from "@/lib/firebase-client/client";
 import { AuthButton } from "@/components/auth/ui/AuthButton";
 import { AuthInput } from "@/components/auth/ui/AuthInput";
 
@@ -31,6 +31,7 @@ export function ForgotPasswordForm({ loginHref, authTenantId = null }: ForgotPas
         setSubmitting(true);
         setMessage(null);
         try {
+            if (!firebaseClientReady) throw new Error(getFirebaseClientErrorMessage(null));
             fbAuth.tenantId = authTenantId ?? null;
             const query = new URLSearchParams();
             if (authTenantId) query.set("authTenant", authTenantId);
@@ -40,8 +41,8 @@ export function ForgotPasswordForm({ loginHref, authTenantId = null }: ForgotPas
                 handleCodeInApp: false,
             });
             setMessage("若此 Email 已註冊，系統已寄出重設密碼連結，請檢查信箱。");
-        } catch {
-            setMessage("若此 Email 已註冊，系統已寄出重設密碼連結，請檢查信箱。");
+        } catch (error) {
+            setMessage(firebaseClientReady ? "若此 Email 已註冊，系統已寄出重設密碼連結，請檢查信箱。" : getFirebaseClientErrorMessage(error));
         } finally {
             setSubmitting(false);
         }
@@ -57,7 +58,7 @@ export function ForgotPasswordForm({ loginHref, authTenantId = null }: ForgotPas
                     onChange={(event) => setEmail(event.target.value)}
                 />
             </div>
-            <AuthButton variant="primary" type="submit" disabled={submitting}>
+            <AuthButton variant="primary" type="submit" disabled={submitting || !firebaseClientReady}>
                 {submitting ? "寄送中..." : "寄送重設連結"}
             </AuthButton>
             {message ? <div className="auth-muted text-sm">{message}</div> : null}

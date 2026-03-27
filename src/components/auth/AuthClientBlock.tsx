@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { EmailAuthForm } from "@/components/auth/EmailAuthForm";
 import { GoogleAuthButton } from "@/components/auth/GoogleAuthButton";
+import { firebaseClientConfigError, firebaseClientReady } from "@/lib/firebase-client/client";
 
 type Labels = Parameters<typeof EmailAuthForm>[0]["labels"];
 type AuthMode = "signIn" | "signUp";
@@ -123,6 +124,14 @@ export function AuthClientBlock({
 
     return (
         <div className="auth-actions">
+            {!firebaseClientReady ? (
+                <div className="auth-error">
+                    {firebaseClientConfigError ?? "Firebase 前端設定異常，暫時無法登入。"}
+                    <br />
+                    請在部署環境補上 `NEXT_PUBLIC_FIREBASE_API_KEY`、`NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`、
+                    `NEXT_PUBLIC_FIREBASE_PROJECT_ID`、`NEXT_PUBLIC_FIREBASE_APP_ID`。
+                </div>
+            ) : null}
             <EmailAuthForm
                 labels={labels}
                 onAuthed={onAuthed}
@@ -131,8 +140,16 @@ export function AuthClientBlock({
                 signUpAccountType={signUpAccountType}
                 signUpTenantId={tenantId}
                 firebaseAuthTenantId={authTenantId}
+                disabled={!firebaseClientReady}
             />
-            {showGoogle ? <GoogleAuthButton label={googleLabel} onAuthed={onAuthed} firebaseAuthTenantId={authTenantId} /> : null}
+            {showGoogle ? (
+                <GoogleAuthButton
+                    label={googleLabel}
+                    onAuthed={onAuthed}
+                    firebaseAuthTenantId={authTenantId}
+                    disabled={!firebaseClientReady}
+                />
+            ) : null}
         </div>
     );
 }

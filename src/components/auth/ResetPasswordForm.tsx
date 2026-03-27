@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { confirmPasswordReset, verifyPasswordResetCode } from "firebase/auth";
-import { fbAuth } from "@/lib/firebase-client/client";
+import { fbAuth, firebaseClientReady, getFirebaseClientErrorMessage } from "@/lib/firebase-client/client";
 import { AuthButton } from "@/components/auth/ui/AuthButton";
 import { AuthInput } from "@/components/auth/ui/AuthInput";
 
@@ -42,6 +42,12 @@ export function ResetPasswordForm({ loginHref, oobCode = null, authTenantId = nu
 
     useEffect(() => {
         async function runVerify() {
+            if (!firebaseClientReady) {
+                setCheckingCode(false);
+                setVerifiedCode(false);
+                setMessage(getFirebaseClientErrorMessage(null));
+                return;
+            }
             if (!code) {
                 setCheckingCode(false);
                 setVerifiedCode(false);
@@ -75,6 +81,10 @@ export function ResetPasswordForm({ loginHref, oobCode = null, authTenantId = nu
     async function onSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
         if (!verifiedCode || !code) return;
+        if (!firebaseClientReady) {
+            setMessage(getFirebaseClientErrorMessage(null));
+            return;
+        }
         if (!passwordState.valid) {
             setMessage("新密碼不符合規則（至少 8 碼，含大小寫英文字母）。");
             return;
@@ -91,9 +101,9 @@ export function ResetPasswordForm({ loginHref, oobCode = null, authTenantId = nu
             await confirmPasswordReset(fbAuth, code, newPassword);
             setSuccess(true);
             setMessage("密碼已重設成功，請使用新密碼登入。");
-        } catch {
+        } catch (error) {
             setSuccess(false);
-            setMessage("密碼重設失敗，連結可能已過期，請重新申請。");
+            setMessage(firebaseClientReady ? "密碼重設失敗，連結可能已過期，請重新申請。" : getFirebaseClientErrorMessage(error));
         } finally {
             setSubmitting(false);
         }
@@ -129,7 +139,7 @@ export function ResetPasswordForm({ loginHref, oobCode = null, authTenantId = nu
                             </div>
                         </div>
                     </div>
-                    <AuthButton variant="primary" type="submit" disabled={submitting || success}>
+                    <AuthButton variant="primary" type="submit" disabled={submitting || success || !firebaseClientReady}>
                         {submitting ? "更新中..." : "更新密碼"}
                     </AuthButton>
                 </form>
