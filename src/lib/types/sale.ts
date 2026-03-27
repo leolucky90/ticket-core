@@ -8,6 +8,12 @@ export type SaleLineItem = {
     qty: number;
     unitPrice: number;
     subtotal: number;
+    isUsedProduct?: boolean;
+    usedProductId?: string;
+    usedBrand?: string;
+    usedModel?: string;
+    usedGrade?: string;
+    usedSerialOrImei?: string;
 };
 
 export type SaleCaseRef = {

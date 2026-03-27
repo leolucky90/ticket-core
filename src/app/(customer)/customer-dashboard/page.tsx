@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
 import { listTicketsByCustomerEmail } from "@/lib/services/ticket";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getCurrentSessionAccountContext } from "@/lib/services/staff.service";
 import { CustomerDashboardPanel } from "@/components/dashboard/CustomerDashboardPanel";
 
 export default async function CustomerDashboardPage() {
@@ -10,13 +10,12 @@ export default async function CustomerDashboardPage() {
         redirect("/login?next=/customer-dashboard");
     }
 
-    const user = await getUserDoc(session.uid);
-    const accountType = toAccountType(user?.role ?? null);
-    if (accountType === "company") {
+    const accountContext = await getCurrentSessionAccountContext();
+    if (accountContext?.accountType === "company") {
         redirect("/dashboard");
     }
 
-    const tenantId = getShowcaseTenantId(user, session.uid);
+    const tenantId = accountContext?.tenantId ?? null;
     if (tenantId) {
         redirect(`/${encodeURIComponent(tenantId)}/dashboard`);
     }

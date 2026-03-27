@@ -1,23 +1,62 @@
-import Link from "next/link";
+import { Shield, SlidersHorizontal } from "lucide-react";
 import { redirect } from "next/navigation";
 import { Card } from "@/components/ui/card";
+import { IconTextActionButton } from "@/components/ui/icon-text-action-button";
 import { Section } from "@/components/ui/section";
+import { ChangePasswordForm } from "@/components/settings/ChangePasswordForm";
+import { CompanyProfileSettingsForm } from "@/components/account/company-profile-settings-form";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
-import { getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getCurrentSessionAccountContext } from "@/lib/services/staff.service";
+import { getCompanyProfile, updateCompanyProfile } from "@/lib/services/company-profile.service";
 
-export default async function AccountInfoPage() {
+type AccountInfoPageProps = {
+    searchParams: Promise<{ flash?: string; ts?: string }>;
+};
+
+export default async function AccountInfoPage({ searchParams }: AccountInfoPageProps) {
     const session = await getSessionUser();
     if (!session) {
         redirect("/login?next=/settings/account");
     }
 
-    const user = await getUserDoc(session.uid);
-    const accountType = toAccountType(user?.role ?? null);
+    const sp = await searchParams;
+    const accountContext = await getCurrentSessionAccountContext();
+    const accountType = accountContext?.accountType ?? "customer";
     const accountTypeText = accountType === "company" ? "公司帳號" : "客戶帳號";
+    const companyProfile = accountType === "company" ? await getCompanyProfile() : null;
+
+    async function saveCompanyProfileAction(formData: FormData): Promise<void> {
+        "use server";
+
+        const updated = await updateCompanyProfile({
+            companyName: String(formData.get("companyName") ?? ""),
+            displayName: String(formData.get("displayName") ?? ""),
+            contactName: String(formData.get("contactName") ?? ""),
+            phone: String(formData.get("phone") ?? ""),
+            email: String(formData.get("email") ?? ""),
+            address: String(formData.get("address") ?? ""),
+            country: String(formData.get("country") ?? ""),
+            region: String(formData.get("region") ?? ""),
+            postcode: String(formData.get("postcode") ?? ""),
+            taxId: String(formData.get("taxId") ?? ""),
+            abn: String(formData.get("abn") ?? ""),
+            businessRegistrationNumber: String(formData.get("businessRegistrationNumber") ?? ""),
+            invoiceNote: String(formData.get("invoiceNote") ?? ""),
+            receiptNote: String(formData.get("receiptNote") ?? ""),
+        });
+
+        if (!updated) {
+            redirect(`/settings/account?flash=${encodeURIComponent("公司資料更新失敗")}&ts=${Date.now()}`);
+        }
+
+        redirect(`/settings/account?flash=${encodeURIComponent("公司資料已更新")}&ts=${Date.now()}`);
+    }
 
     return (
         <Section title="帳戶資訊">
-            <div className="grid max-w-3xl gap-4">
+            <div className="grid max-w-5xl gap-4">
+                {sp.flash ? <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2 text-sm">{sp.flash}</div> : null}
+
                 <Card>
                     <div className="grid gap-3">
                         <div className="text-sm">
@@ -34,22 +73,26 @@ export default async function AccountInfoPage() {
                         </div>
                     </div>
                 </Card>
+
+                {accountType === "company" ? <CompanyProfileSettingsForm profile={companyProfile} saveAction={saveCompanyProfileAction} /> : null}
+
                 {accountType === "company" ? (
                     <Card>
-                        <div className="grid gap-2">
-                            <div className="text-sm font-medium">屬性設置</div>
-                            <div className="text-sm text-[rgb(var(--muted))]">管理案件狀態與報價狀態，支援新增、移除與修改後寫入伺服器。</div>
-                            <div>
-                                <Link
-                                    href="/settings/account/attributes"
-                                    className="inline-flex items-center rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-4 py-2 text-sm"
-                                >
-                                    前往屬性設置
-                                </Link>
-                            </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <IconTextActionButton
+                                href="/settings/account/attributes"
+                                icon={SlidersHorizontal}
+                                label="屬性設置"
+                                tooltip="前往屬性設置"
+                            />
+                            <IconTextActionButton href="/account/security" icon={Shield} label="帳號安全" tooltip="前往帳號安全中心" />
                         </div>
                     </Card>
                 ) : null}
+
+                <Card>
+                    <ChangePasswordForm email={session.email} />
+                </Card>
             </div>
         </Section>
     );

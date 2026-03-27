@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
 import { fbAdminAuth } from "@/lib/firebase-server";
-import { ensureUserDoc } from "@/lib/services/user.service";
+import { ensureUserDoc, getShowcaseTenantId, toAccountType } from "@/lib/services/user.service";
+import { getCurrentSessionAccountContext } from "@/lib/services/staff.service";
 
 export async function POST() {
     const session = await getSessionUser();
@@ -17,5 +18,9 @@ export async function POST() {
         defaultRole: "customer",
     });
 
-    return NextResponse.json({ ok: true, user: doc });
+    const accountContext = await getCurrentSessionAccountContext();
+    const accountType = accountContext?.accountType ?? toAccountType(doc.role);
+    const tenantId = accountContext?.tenantId ?? getShowcaseTenantId(doc, session.uid);
+
+    return NextResponse.json({ ok: true, user: doc, accountType, tenantId });
 }

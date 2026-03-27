@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FocusEvent } from "react";
 import { cn } from "@/components/ui/cn";
 import { Input } from "@/components/ui/input";
@@ -12,33 +12,70 @@ type MerchantPredictiveSearchInputProps = {
     name?: string;
     defaultValue?: string;
     placeholder?: string;
-    targets: PredictiveSearchTarget[];
+    targets?: PredictiveSearchTarget[];
+    localSuggestions?: Array<{
+        id: string;
+        value: string;
+        title?: string;
+        subtitle?: string;
+        keywords?: string[];
+    }>;
     limit?: number;
     className?: string;
     dropdownClassName?: string;
     inputClassName?: string;
     disabled?: boolean;
     onSelect?: (item: PredictiveSearchSuggestion) => void;
+    onValueChange?: (value: string) => void;
 };
+
+const EMPTY_TARGETS: PredictiveSearchTarget[] = [];
+const EMPTY_LOCAL_SUGGESTIONS: Array<{
+    id: string;
+    value: string;
+    title?: string;
+    subtitle?: string;
+    keywords?: string[];
+}> = [];
 
 export function MerchantPredictiveSearchInput({
     id,
     name,
     defaultValue = "",
     placeholder = "輸入關鍵字",
-    targets,
+    targets = EMPTY_TARGETS,
+    localSuggestions = EMPTY_LOCAL_SUGGESTIONS,
     limit,
     className,
     dropdownClassName,
     inputClassName,
     disabled = false,
     onSelect,
+    onValueChange,
 }: MerchantPredictiveSearchInputProps) {
     const [query, setQuery] = useState(defaultValue);
+    const staticSuggestions = useMemo(
+        () =>
+            (localSuggestions ?? EMPTY_LOCAL_SUGGESTIONS).map((item, index) => ({
+                id: item.id,
+                target: "products" as const,
+                value: item.value,
+                title: item.title ?? item.value,
+                subtitle: item.subtitle,
+                score: Math.max(0, 1_000 - index),
+                meta: item.keywords && item.keywords.length > 0 ? { keywordsText: item.keywords.join(" ") } : undefined,
+            })),
+        [localSuggestions],
+    );
+
+    useEffect(() => {
+        setQuery(defaultValue);
+    }, [defaultValue]);
 
     const { loading, open, setOpen, activeIndex, suggestions, empty, error, handleKeyDown, selectSuggestion } = usePredictiveSearch({
         query,
         targets,
+        staticSuggestions,
         limit,
         enabled: !disabled,
         onEnterSelect: (item) => {
@@ -63,6 +100,7 @@ export function MerchantPredictiveSearchInput({
                 value={query}
                 onChange={(event) => {
                     setQuery(event.target.value);
+                    onValueChange?.(event.target.value);
                     setOpen(true);
                 }}
                 onFocus={() => setOpen(true)}
@@ -100,6 +138,7 @@ export function MerchantPredictiveSearchInput({
                                         onClick={() => {
                                             selectSuggestion(item);
                                             setQuery(item.value);
+                                            onValueChange?.(item.value);
                                             onSelect?.(item);
                                         }}
                                     >

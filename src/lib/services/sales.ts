@@ -1,4 +1,5 @@
 import "server-only";
+import { FieldPath } from "firebase-admin/firestore";
 import type {
     PaymentMethod,
     PaymentStatus,
@@ -12,6 +13,7 @@ import type {
     SaleLineItem,
     SalePricingAdjustment,
 } from "@/lib/types/sale";
+import type { CursorPageResult } from "@/lib/types/pagination";
 import type { CheckoutPromotionSelection, PromotionEffectType } from "@/lib/schema";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -22,6 +24,7 @@ import { createPickupReservationsFromPromotionDrafts } from "@/lib/services/pick
 import { evaluateCheckoutPromotions } from "@/lib/services/promotions";
 import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 import { listTickets, setTicketStatusById } from "@/lib/services/ticket";
+import { attachUsedProductToReceipt, getUsedProductById } from "@/lib/services/used-products.service";
 import type { Ticket } from "@/lib/types/ticket";
 
 const memory: { salesByCompany: Record<string, Sale[]> } = { salesByCompany: {} };
@@ -37,6 +40,15 @@ const MAX_PROMOTION_REFS = 40;
 
 type SessionScope = {
     companyId: string;
+};
+type SaleCursor = {
+    checkoutAt: number;
+    id: string;
+};
+type CheckoutSalesPageQuery = {
+    keyword?: string;
+    pageSize?: number;
+    cursor?: string;
 };
 
 function now() {
@@ -106,6 +118,96 @@ function parsePromotionEffectType(value: unknown): PromotionEffectType {
     return "discount";
 }
 
+function normalizePageSize(input: number | undefined, fallback = 20): number {
+    const value = Number(input);
+    if (!Number.isFinite(value)) return fallback;
+    if (value <= 10) return 10;
+    if (value <= 20) return 20;
+    if (value <= 50) return 50;
+    return 100;
+}
+
+function encodeSaleCursorValue(cursor: SaleCursor): string {
+    return Buffer.from(JSON.stringify(cursor)).toString("base64url");
+}
+
+function decodeSaleCursorValue(value: string | undefined): SaleCursor | null {
+    const text = safeText(toStr(value), 240);
+    if (!text) return null;
+    try {
+        const parsed = JSON.parse(Buffer.from(text, "base64url").toString("utf8")) as Partial<SaleCursor>;
+        const checkoutAt = Number(parsed.checkoutAt);
+        const idValue = safeText(toStr(parsed.id), 120);
+        if (!Number.isFinite(checkoutAt) || checkoutAt <= 0 || !idValue) return null;
+        return { checkoutAt: Math.round(checkoutAt), id: idValue };
+    } catch {
+        return null;
+    }
+}
+
+function saleMatchesKeyword(sale: Sale, keyword?: string): boolean {
+    const q = safeText(keyword ?? "", MAX_QUERY).toLowerCase();
+    if (!q) return true;
+    const itemKeywords = (sale.lineItems ?? [])
+        .map((row) =>
+            [
+                row.productName,
+                row.productId,
+                String(row.qty),
+                String(row.unitPrice),
+                String(row.subtotal),
+                row.usedProductId ?? "",
+                row.usedBrand ?? "",
+                row.usedModel ?? "",
+                row.usedGrade ?? "",
+                row.usedSerialOrImei ?? "",
+                row.isUsedProduct ? "used" : "",
+            ].join(" "),
+        )
+        .join(" ");
+    const caseKeywords = (sale.caseRefs ?? [])
+        .map((row) => [row.caseId, row.caseNo, row.caseTitle].join(" "))
+        .join(" ");
+    const activityKeywords = (sale.activityRefs ?? [])
+        .map((row) => [row.activityId, row.activityName, row.activityContent ?? "", row.checkoutStatus ?? "", String(row.storeQty ?? 0)].join(" "))
+        .join(" ");
+    const promotionKeywords = (sale.appliedPromotions ?? [])
+        .map((row) => [row.promotionId, row.promotionName, row.effectType].join(" "))
+        .join(" ");
+    const entitlementKeywords = (sale.createdEntitlements ?? [])
+        .map((row) => [row.entitlementId, row.entitlementType, row.scopeType, row.categoryName ?? "", row.productName ?? ""].join(" "))
+        .join(" ");
+    const reservationKeywords = (sale.createdPickupReservations ?? [])
+        .map((row) => [row.reservationId, row.status, String(row.lineItemCount)].join(" "))
+        .join(" ");
+    const haystack = [
+        sale.id,
+        sale.item,
+        String(sale.amount),
+        sale.paymentMethod,
+        sale.paymentStatus ?? "",
+        sale.receiptNo ?? "",
+        sale.source ?? "",
+        sale.customerName ?? "",
+        sale.customerPhone ?? "",
+        sale.customerEmail ?? "",
+        sale.caseId ?? "",
+        sale.caseTitle ?? "",
+        String(sale.checkoutAt),
+        String(sale.updatedAt),
+        sale.companyId ?? "",
+        itemKeywords,
+        caseKeywords,
+        activityKeywords,
+        promotionKeywords,
+        entitlementKeywords,
+        reservationKeywords,
+    ]
+        .join(" ")
+        .toLowerCase();
+    return haystack.includes(q);
+}
+
 function normalizeSale(input: Partial<Sale> & { id: string }): Sale {
     const createdAt = typeof input.createdAt === "number" ? input.createdAt : now();
     const checkoutAt = typeof input.checkoutAt === "number" ? input.checkoutAt : createdAt;
@@ -121,7 +223,19 @@ function normalizeSale(input: Partial<Sale> & { id: string }): Sale {
                   const qty = Math.max(1, Math.round(parseMoney(item.qty)));
                   const unitPrice = parseMoney(item.unitPrice);
                   const subtotal = parseMoney(item.subtotal || qty * unitPrice);
-                  return { productId, productName, qty, unitPrice, subtotal };
+                  return {
+                      productId,
+                      productName,
+                      qty,
+                      unitPrice,
+                      subtotal,
+                      isUsedProduct: item.isUsedProduct === true,
+                      usedProductId: safeText(toStr(item.usedProductId), 120) || undefined,
+                      usedBrand: safeText(toStr(item.usedBrand), 120) || undefined,
+                      usedModel: safeText(toStr(item.usedModel), 120) || undefined,
+                      usedGrade: safeText(toStr(item.usedGrade), 80) || undefined,
+                      usedSerialOrImei: safeText(toStr(item.usedSerialOrImei), 120) || undefined,
+                  } satisfies SaleLineItem;
               })
               .slice(0, MAX_LINE_ITEMS)
         : [];
@@ -567,54 +681,81 @@ async function updateInFirebase(
 }
 
 function filterSales(sales: Sale[], keyword?: string): Sale[] {
-    const q = safeText(keyword ?? "", MAX_QUERY).toLowerCase();
-    if (!q) return sales;
-    return sales.filter((sale) => {
-        const itemKeywords = (sale.lineItems ?? [])
-            .map((row) => [row.productName, row.productId, String(row.qty), String(row.unitPrice), String(row.subtotal)].join(" "))
-            .join(" ");
-        const caseKeywords = (sale.caseRefs ?? [])
-            .map((row) => [row.caseId, row.caseNo, row.caseTitle].join(" "))
-            .join(" ");
-        const activityKeywords = (sale.activityRefs ?? [])
-            .map((row) => [row.activityId, row.activityName, row.activityContent ?? "", row.checkoutStatus ?? "", String(row.storeQty ?? 0)].join(" "))
-            .join(" ");
-        const promotionKeywords = (sale.appliedPromotions ?? [])
-            .map((row) => [row.promotionId, row.promotionName, row.effectType].join(" "))
-            .join(" ");
-        const entitlementKeywords = (sale.createdEntitlements ?? [])
-            .map((row) => [row.entitlementId, row.entitlementType, row.scopeType, row.categoryName ?? "", row.productName ?? ""].join(" "))
-            .join(" ");
-        const reservationKeywords = (sale.createdPickupReservations ?? [])
-            .map((row) => [row.reservationId, row.status, String(row.lineItemCount)].join(" "))
-            .join(" ");
-        const haystack = [
-            sale.id,
-            sale.item,
-            String(sale.amount),
-            sale.paymentMethod,
-            sale.paymentStatus ?? "",
-            sale.receiptNo ?? "",
-            sale.source ?? "",
-            sale.customerName ?? "",
-            sale.customerPhone ?? "",
-            sale.customerEmail ?? "",
-            sale.caseId ?? "",
-            sale.caseTitle ?? "",
-            String(sale.checkoutAt),
-            String(sale.updatedAt),
-            sale.companyId ?? "",
-            itemKeywords,
-            caseKeywords,
-            activityKeywords,
-            promotionKeywords,
-            entitlementKeywords,
-            reservationKeywords,
-        ]
-            .join(" ")
-            .toLowerCase();
-        return haystack.includes(q);
-    });
+    return sales.filter((sale) => saleMatchesKeyword(sale, keyword));
+}
+
+async function listCheckoutSalesPageFromFirebase(companyId: string, params: CheckoutSalesPageQuery): Promise<CursorPageResult<Sale> | null> {
+    const db = await getFirestoreDb();
+    if (!db) return null;
+
+    const pageSize = normalizePageSize(params.pageSize, 20);
+    const batchSize = Math.max(pageSize * 3, 40);
+    const decodedCursor = decodeSaleCursorValue(params.cursor);
+    const buildBaseQuery = () => companySalesRef(db, companyId).where("source", "==", "checkout").orderBy("checkoutAt", "desc").orderBy(FieldPath.documentId(), "desc");
+
+    let query = buildBaseQuery();
+    if (decodedCursor) query = query.startAfter(decodedCursor.checkoutAt, decodedCursor.id);
+
+    const items: Sale[] = [];
+
+    for (let round = 0; round < 8; round += 1) {
+        const snap = await query.limit(batchSize).get();
+        if (snap.empty) break;
+
+        const docs = snap.docs;
+        let lastCursorInBatch: SaleCursor | null = null;
+
+        for (let index = 0; index < docs.length; index += 1) {
+            const doc = docs[index];
+            const sale = normalizeSale({ id: doc.id, ...(doc.data() as Partial<Sale>) });
+            lastCursorInBatch = { checkoutAt: sale.checkoutAt, id: sale.id };
+            if (!saleMatchesKeyword(sale, params.keyword)) continue;
+            items.push(sale);
+            if (items.length >= pageSize) {
+                const hasNextPage = index < docs.length - 1 || docs.length === batchSize;
+                return {
+                    items,
+                    pageSize,
+                    nextCursor: hasNextPage ? encodeSaleCursorValue(lastCursorInBatch) : "",
+                    hasNextPage,
+                };
+            }
+        }
+
+        if (!lastCursorInBatch || docs.length < batchSize) break;
+        query = buildBaseQuery().startAfter(lastCursorInBatch.checkoutAt, lastCursorInBatch.id);
+    }
+
+    return {
+        items,
+        pageSize,
+        nextCursor: "",
+        hasNextPage: false,
+    };
+}
+
+function listCheckoutSalesPageFromMemory(companyId: string, params: CheckoutSalesPageQuery): CursorPageResult<Sale> {
+    const pageSize = normalizePageSize(params.pageSize, 20);
+    const currentCursor = decodeSaleCursorValue(params.cursor);
+    const ordered = listFromMemory(companyId)
+        .filter((sale) => sale.source === "checkout")
+        .filter((sale) => saleMatchesKeyword(sale, params.keyword))
+        .sort((a, b) => (b.checkoutAt === a.checkoutAt ? b.id.localeCompare(a.id) : b.checkoutAt - a.checkoutAt));
+    const startIndex = currentCursor
+        ? Math.max(
+              0,
+              ordered.findIndex((item) => item.checkoutAt === currentCursor.checkoutAt && item.id === currentCursor.id) + 1,
+          )
+        : 0;
+    const items = ordered.slice(startIndex, startIndex + pageSize);
+    const lastItem = items.at(-1);
+    const hasNextPage = startIndex + pageSize < ordered.length;
+    return {
+        items,
+        pageSize,
+        nextCursor: hasNextPage && lastItem ? encodeSaleCursorValue({ checkoutAt: lastItem.checkoutAt, id: lastItem.id }) : "",
+        hasNextPage,
+    };
 }
 
 export async function listSales(): Promise<Sale[]> {
@@ -639,6 +780,27 @@ export async function querySales(keyword?: string): Promise<Sale[]> {
 export async function queryCheckoutSales(keyword?: string): Promise<Sale[]> {
     const sales = await querySales(keyword);
     return sales.filter((sale) => sale.source === "checkout");
+}
+
+export async function queryCheckoutSalesPage(params: CheckoutSalesPageQuery = {}): Promise<CursorPageResult<Sale>> {
+    const scope = await resolveSessionScope(true);
+    if (!scope) {
+        return {
+            items: [],
+            pageSize: normalizePageSize(params.pageSize, 20),
+            nextCursor: "",
+            hasNextPage: false,
+        };
+    }
+
+    try {
+        const firebasePage = await listCheckoutSalesPageFromFirebase(scope.companyId, params);
+        if (firebasePage) return firebasePage;
+    } catch {
+        // fallback to memory
+    }
+
+    return listCheckoutSalesPageFromMemory(scope.companyId, params);
 }
 
 function buildReceiptNo(ts: number): string {
@@ -825,6 +987,12 @@ function parseCheckoutLineItems(formData: FormData): SaleLineItem[] {
     const productNames = formData.getAll("lineProductName[]");
     const quantities = formData.getAll("lineQty[]");
     const unitPrices = formData.getAll("lineUnitPrice[]");
+    const isUsedFlags = formData.getAll("lineIsUsedProduct[]");
+    const usedProductIds = formData.getAll("lineUsedProductId[]");
+    const usedBrands = formData.getAll("lineUsedBrand[]");
+    const usedModels = formData.getAll("lineUsedModel[]");
+    const usedGrades = formData.getAll("lineUsedGrade[]");
+    const usedSerials = formData.getAll("lineUsedSerialOrImei[]");
     const items: SaleLineItem[] = [];
 
     for (let index = 0; index < productNames.length && items.length < MAX_LINE_ITEMS; index += 1) {
@@ -832,7 +1000,10 @@ function parseCheckoutLineItems(formData: FormData): SaleLineItem[] {
         const productName = safeText(toStr(productNames[index]), MAX_TEXT);
         const qty = Math.max(0, Math.round(parseMoney(quantities[index])));
         const unitPrice = parseMoney(unitPrices[index]);
+        const isUsedProduct = toStr(isUsedFlags[index]) === "1";
+        const usedProductId = safeText(toStr(usedProductIds[index]), 120);
         if (!productName || qty <= 0) continue;
+        if (isUsedProduct && qty !== 1) continue;
         const subtotal = parseMoney(qty * unitPrice);
         items.push({
             productId,
@@ -840,6 +1011,12 @@ function parseCheckoutLineItems(formData: FormData): SaleLineItem[] {
             qty,
             unitPrice,
             subtotal,
+            isUsedProduct,
+            usedProductId: usedProductId || undefined,
+            usedBrand: safeText(toStr(usedBrands[index]), 120) || undefined,
+            usedModel: safeText(toStr(usedModels[index]), 120) || undefined,
+            usedGrade: safeText(toStr(usedGrades[index]), 80) || undefined,
+            usedSerialOrImei: safeText(toStr(usedSerials[index]), 120) || undefined,
         });
     }
 
@@ -907,9 +1084,20 @@ export async function createCheckoutSale(formData: FormData): Promise<void> {
     const { activityRefs, selectedPromotions } = parsePromotionSelections(formData);
     const closeCase = toStr(formData.get("closeCase")) === "1";
     const lineItems = parseCheckoutLineItems(formData);
+    const usedLineItems = lineItems.filter((row) => row.isUsedProduct && row.usedProductId);
 
     if (lineItems.length === 0) {
         redirect(`/dashboard/checkout?flash=invalid&ts=${Date.now()}`);
+    }
+
+    for (const row of usedLineItems) {
+        const usedProduct = await getUsedProductById(row.usedProductId ?? "");
+        if (!usedProduct) {
+            redirect(`/dashboard/checkout?flash=invalid&ts=${Date.now()}`);
+        }
+        if (usedProduct.saleStatus === "sold" || !usedProduct.isSellable) {
+            redirect(`/dashboard/checkout?flash=invalid&ts=${Date.now()}`);
+        }
     }
 
     const subtotal = lineItems.reduce((sum, row) => sum + row.subtotal, 0);
@@ -1028,6 +1216,23 @@ export async function createCheckoutSale(formData: FormData): Promise<void> {
         await applySaleInventoryDeductions(scope.companyId, createdSale?.id ?? receiptNo, lineItems);
     } catch {
         // inventory sync failure should not block checkout
+    }
+
+    if (createdSale && usedLineItems.length > 0) {
+        for (const row of usedLineItems) {
+            try {
+                await attachUsedProductToReceipt({
+                    id: row.usedProductId ?? "",
+                    receiptIssuedAt: checkoutAt,
+                    receiptId: createdSale.receiptNo ?? receiptNo,
+                    orderId: createdSale.id,
+                    customerId: customerId || undefined,
+                    salePrice: row.unitPrice,
+                });
+            } catch {
+                // used product sync failure should not block checkout
+            }
+        }
     }
 
     revalidatePath("/dashboard");

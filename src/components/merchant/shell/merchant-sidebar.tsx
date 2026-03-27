@@ -15,7 +15,13 @@ function hrefMatches(href: string, pathname: string, searchParams: URLSearchPara
 
     const query = new URLSearchParams(targetQuery);
     for (const [key, value] of query.entries()) {
-        if (searchParams.get(key) !== value) return false;
+        const current = searchParams.get(key);
+        if (current === value) continue;
+        // /dashboard defaults to tab=dashboard when query is omitted.
+        if (targetPath === "/dashboard" && key === "tab" && value === "dashboard" && (current === null || current === "")) {
+            continue;
+        }
+        return false;
     }
     return true;
 }

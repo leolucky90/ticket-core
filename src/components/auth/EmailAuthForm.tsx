@@ -80,6 +80,12 @@ function getAuthErrorMessage(code: string, mode: Mode, labels: Labels): string {
     if (code === "server/TENANT_LOGIN_FORBIDDEN") return "此帳號是商家管理帳號，請從一般後台登入。";
     if (code === "server/CUSTOMER_TENANT_CONFLICT") return "此客戶帳號已綁定其他商家，請從原商家入口登入。";
     if (code === "server/CUSTOMER_TENANT_REQUIRED") return "客戶帳號需要商家入口才能登入。";
+    if (code === "server/STAFF_ACCOUNT_NOT_ACTIVATED") return "帳號尚未啟用，請聯絡管理員。";
+    if (code === "server/STAFF_ACCOUNT_INACTIVE") return "帳號已停用，請聯絡管理員。";
+    if (code === "server/STAFF_ACCOUNT_LOCKED") return "帳號已被鎖定，請聯絡管理員。";
+    if (code === "server/STAFF_ACCOUNT_DELETED") return "帳號已刪除，無法登入。";
+    if (code === "server/STAFF_GOOGLE_NOT_LINKED") return "此帳號尚未綁定 Google，請先使用 Email 登入後至帳號安全頁綁定。";
+    if (code === "server/STAFF_GOOGLE_EMAIL_MISMATCH") return "Google 信箱與員工主信箱不一致，不可登入。";
     if (code === "server/REGISTER_PROFILE_FAILED") return "建立帳號資料失敗，請稍後重試。";
     if (code === "server/SESSION_CREATE_FAILED") return "登入工作階段建立失敗，請稍後重試。";
 

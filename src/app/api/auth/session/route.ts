@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { fbAdminAuth } from "@/lib/firebase-server";
 import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getStaffLoginGuardByEmail, markStaffLoginSuccess } from "@/lib/services/staff.service";
 
 const SESSION_DAYS = 14;
 const SESSION_EXPIRES_MS = SESSION_DAYS * 24 * 60 * 60 * 1000;
@@ -44,11 +45,44 @@ export async function POST(req: Request) {
             }
         }
 
+        const providerId = typeof decoded.firebase?.sign_in_provider === "string" ? decoded.firebase.sign_in_provider : "";
+        const signInEmail = typeof decoded.email === "string" ? decoded.email.toLowerCase() : "";
+        const staffGuard = signInEmail ? await getStaffLoginGuardByEmail(signInEmail) : null;
+        if (staffGuard) {
+            if (staffGuard.isDeleted || staffGuard.status === "deleted") {
+                return NextResponse.json({ error: "STAFF_ACCOUNT_DELETED" }, { status: 403 });
+            }
+            if (staffGuard.status === "pending_activation") {
+                return NextResponse.json({ error: "STAFF_ACCOUNT_NOT_ACTIVATED" }, { status: 403 });
+            }
+            if (staffGuard.status === "inactive") {
+                return NextResponse.json({ error: "STAFF_ACCOUNT_INACTIVE" }, { status: 403 });
+            }
+            if (staffGuard.status === "locked") {
+                return NextResponse.json({ error: "STAFF_ACCOUNT_LOCKED" }, { status: 403 });
+            }
+            if (providerId === "google.com" && !staffGuard.googleLinked) {
+                return NextResponse.json({ error: "STAFF_GOOGLE_NOT_LINKED" }, { status: 403 });
+            }
+            if (providerId === "google.com" && staffGuard.googleLinked && staffGuard.googleEmail && signInEmail !== staffGuard.googleEmail.toLowerCase()) {
+                return NextResponse.json({ error: "STAFF_GOOGLE_EMAIL_MISMATCH" }, { status: 403 });
+            }
+        }
+
         const sessionCookie = await fbAdminAuth.createSessionCookie(body.idToken, {
             expiresIn: SESSION_EXPIRES_MS,
         });
 
-        const res = NextResponse.json({ ok: true });
+        await markStaffLoginSuccess({
+            uid: decoded.uid,
+            email: signInEmail,
+        });
+
+        const res = NextResponse.json({
+            ok: true,
+            mustChangePassword: Boolean(staffGuard?.mustChangePassword),
+            googleLinked: Boolean(staffGuard?.googleLinked),
+        });
         res.cookies.set("session", sessionCookie, {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",

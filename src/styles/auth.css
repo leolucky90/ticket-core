@@ -13,6 +13,7 @@
 .auth-card {
     border: 1px solid rgb(var(--border));
     background: rgb(var(--panel));
+    color: rgb(var(--text));
     border-radius: 16px;
     padding: 16px;
 }
@@ -81,10 +82,13 @@
 .auth-title {
     font-size: 18px;
     font-weight: 700;
+    color: rgb(var(--text));
 }
 
 .auth-sub {
     font-size: 13px;
+    color: rgba(var(--text), 0.84);
+    font-weight: 500;
 }
 
 .auth-row {

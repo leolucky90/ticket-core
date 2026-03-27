@@ -4,7 +4,7 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { AuthClientBlock } from "@/components/auth/AuthClientBlock";
 import { AuthPageShell } from "@/components/auth/ui/AuthPageShell";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getCurrentSessionAccountContext } from "@/lib/services/staff.service";
 
 type LoginPageSearchParams = {
   tenant?: string | string[];
@@ -44,13 +44,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 
   const session = await getSessionUser();
   if (session) {
-    const userDoc = await getUserDoc(session.uid);
-    const accountType = toAccountType(userDoc?.role ?? null);
-    if (accountType === "company") {
+    const accountContext = await getCurrentSessionAccountContext();
+    if (accountContext?.accountType === "company") {
       redirect("/dashboard");
     }
-    const sessionTenantId = getShowcaseTenantId(userDoc, session.uid);
-    const targetTenantId = authTenantId ?? tenantId ?? sessionTenantId;
+    const targetTenantId = authTenantId ?? tenantId ?? accountContext?.tenantId ?? null;
     if (targetTenantId) {
       redirect(`/${encodeURIComponent(targetTenantId)}/dashboard`);
     }
@@ -101,6 +99,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             tenantContextId={tenantId}
             firebaseAuthTenantId={authTenantId}
           />
+          <div className="pt-1 text-center text-xs text-[rgb(var(--muted))]">
+            <Link className="text-[rgb(var(--accent))] hover:underline" href={withAuthContext("/forgot-password", tenantId, authTenantId)}>
+              忘記密碼？
+            </Link>
+          </div>
           <div className="pt-1 text-center">
             <Link
               className="inline-flex rounded-full border border-[rgb(var(--accent))] px-4 py-1.5 text-xs font-semibold text-[rgb(var(--accent))] hover:bg-[rgb(var(--accent))] hover:text-[#191815]"

@@ -7,6 +7,7 @@ import type { PredictiveSearchSuggestion, PredictiveSearchTarget } from "@/lib/t
 type UsePredictiveSearchParams = {
     query: string;
     targets: PredictiveSearchTarget[];
+    staticSuggestions?: PredictiveSearchSuggestion[];
     limit?: number;
     debounceMs?: number;
     enabled?: boolean;
@@ -40,9 +41,38 @@ function toQueryString(params: { query: string; targets: PredictiveSearchTarget[
     return search.toString();
 }
 
+function rankStaticSuggestions(items: PredictiveSearchSuggestion[], query: string, limit: number): PredictiveSearchSuggestion[] {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return [];
+
+    return items
+        .map((item) => {
+            const keywordsText = typeof item.meta?.keywordsText === "string" ? item.meta.keywordsText : "";
+            const haystacks = [
+                item.value,
+                item.title,
+                item.subtitle ?? "",
+                keywordsText,
+            ]
+                .join(" ")
+                .toLowerCase();
+            const startsWith = item.value.toLowerCase().startsWith(normalizedQuery) || item.title.toLowerCase().startsWith(normalizedQuery);
+            const index = haystacks.indexOf(normalizedQuery);
+            if (index < 0) return null;
+            return {
+                ...item,
+                score: startsWith ? 10_000 - index : 5_000 - index,
+            };
+        })
+        .filter((item): item is PredictiveSearchSuggestion => item !== null)
+        .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title, "zh-Hant"))
+        .slice(0, limit);
+}
+
 export function usePredictiveSearch({
     query,
     targets,
+    staticSuggestions = [],
     limit = 12,
     debounceMs = 180,
     enabled = true,
@@ -55,14 +85,27 @@ export function usePredictiveSearch({
     const [suggestions, setSuggestions] = useState<PredictiveSearchSuggestion[]>([]);
 
     const normalizedQuery = query.trim();
-    const normalizedTargets = useMemo(() => Array.from(new Set(targets)), [targets]);
+    const normalizedTargets = useMemo(() => Array.from(new Set(targets)), [targets.join("|")]);
+    const staticSuggestionKey = useMemo(
+        () => staticSuggestions.map((item) => `${item.target}:${item.id}:${item.value}:${item.score}`).join("|"),
+        [staticSuggestions],
+    );
 
     useEffect(() => {
         if (!enabled || !normalizedQuery) {
-            setSuggestions([]);
+            setSuggestions((current) => (current.length === 0 ? current : []));
             setLoading(false);
             setError("");
             setActiveIndex(-1);
+            return;
+        }
+
+        const staticMatches = rankStaticSuggestions(staticSuggestions, normalizedQuery, limit);
+        if (normalizedTargets.length === 0) {
+            setSuggestions(staticMatches);
+            setLoading(false);
+            setError("");
+            setActiveIndex(staticMatches.length > 0 ? 0 : -1);
             return;
         }
 
@@ -89,7 +132,14 @@ export function usePredictiveSearch({
                     return;
                 }
                 const payload = (await response.json()) as SuggestResponse;
-                const next = Array.isArray(payload.suggestions) ? payload.suggestions : [];
+                const remote = Array.isArray(payload.suggestions) ? payload.suggestions : [];
+                const deduped = new Map<string, PredictiveSearchSuggestion>();
+                for (const item of [...staticMatches, ...remote]) {
+                    deduped.set(`${item.target}:${item.id}:${item.value}`.toLowerCase(), item);
+                }
+                const next = [...deduped.values()]
+                    .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title, "zh-Hant"))
+                    .slice(0, limit);
                 if (!cancelled) {
                     setSuggestions(next);
                     setActiveIndex(next.length > 0 ? 0 : -1);
@@ -97,8 +147,8 @@ export function usePredictiveSearch({
             } catch {
                 if (!cancelled) {
                     setError("查詢失敗");
-                    setSuggestions([]);
-                    setActiveIndex(-1);
+                    setSuggestions(staticMatches);
+                    setActiveIndex(staticMatches.length > 0 ? 0 : -1);
                 }
             } finally {
                 if (!cancelled) setLoading(false);
@@ -109,7 +159,7 @@ export function usePredictiveSearch({
             cancelled = true;
             window.clearTimeout(handle);
         };
-    }, [debounceMs, enabled, limit, normalizedQuery, normalizedTargets]);
+    }, [debounceMs, enabled, limit, normalizedQuery, normalizedTargets, staticSuggestions, staticSuggestionKey]);
 
     const selectSuggestion = useCallback(
         (item: PredictiveSearchSuggestion) => {

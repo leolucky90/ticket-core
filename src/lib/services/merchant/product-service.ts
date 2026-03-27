@@ -144,17 +144,21 @@ export async function listMerchantProducts(): Promise<ProductDoc[]> {
 }
 
 export function buildDimensionBundleFromProducts(products: ProductDoc[]): DimensionPickerBundle {
-    const dedupe = (pairs: Array<{ id?: string; name?: string }>) => {
+    const dedupe = (pairs: Array<{ id?: string; name?: string; brandId?: string; brandName?: string; categoryId?: string; categoryName?: string }>) => {
         const seen = new Set<string>();
-        const out: Array<{ id: string; name: string }> = [];
+        const out: Array<{ id: string; name: string; brandId?: string; brandName?: string; categoryId?: string; categoryName?: string }> = [];
         for (const pair of pairs) {
             const name = toText(pair.name);
             if (!name) continue;
             const id = toText(pair.id) || name;
-            const key = `${id}:${name}`.toLowerCase();
+            const brandId = toText(pair.brandId) || undefined;
+            const brandName = toText(pair.brandName) || undefined;
+            const categoryId = toText(pair.categoryId) || undefined;
+            const categoryName = toText(pair.categoryName) || undefined;
+            const key = `${id}:${name}:${brandId || ""}:${categoryId || ""}`.toLowerCase();
             if (seen.has(key)) continue;
             seen.add(key);
-            out.push({ id, name });
+            out.push({ id, name, brandId, brandName, categoryId, categoryName });
         }
         return out.sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
     };
@@ -162,7 +166,13 @@ export function buildDimensionBundleFromProducts(products: ProductDoc[]): Dimens
     return {
         categories: dedupe(products.map((item) => ({ id: item.categoryId, name: item.categoryName }))),
         brands: dedupe(products.map((item) => ({ id: item.brandId, name: item.brandName }))),
-        models: dedupe(products.map((item) => ({ id: item.modelId, name: item.modelName }))),
-        nameEntries: dedupe(products.map((item) => ({ id: item.nameEntryId, name: item.nameEntryName }))),
+        models: dedupe(products.map((item) => ({
+            id: item.modelId,
+            name: item.modelName,
+            brandId: item.brandId,
+            brandName: item.brandName,
+            categoryId: item.categoryId,
+            categoryName: item.categoryName,
+        }))),
     };
 }

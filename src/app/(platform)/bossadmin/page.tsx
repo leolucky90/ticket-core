@@ -5,10 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { BossAdminWorkspace } from "@/components/dashboard/BossAdminWorkspace";
 import { buildRevenueStatsFromSubscriptions, listBossAdminCompanies } from "@/lib/services/commerce";
-
-const BOSS_ADMIN_COOKIE = "bossadmin_session";
-const BOSS_ADMIN_EMAIL = "bossadmin@gmail.com";
-const BOSS_ADMIN_PASSWORD = "123456";
+import { getBusinessHomepageContentPreferences } from "@/features/business/services/businessHomepageContent.server";
+import { BOSS_ADMIN_COOKIE, BOSS_ADMIN_EMAIL, BOSS_ADMIN_PASSWORD, isBossAdminAuthed } from "@/lib/services/bossadmin-auth";
 
 function isBossTab(value: string | undefined): value is "dashboard" | "query" {
     return value === "dashboard" || value === "query";
@@ -25,7 +23,7 @@ export default async function BossAdminPage({
 }) {
     const cookieStore = await cookies();
     const bossSession = cookieStore.get(BOSS_ADMIN_COOKIE)?.value;
-    const isAuthed = bossSession === "ok";
+    const isAuthed = isBossAdminAuthed(bossSession);
 
     async function signInAction(formData: FormData) {
         "use server";
@@ -89,6 +87,16 @@ export default async function BossAdminPage({
     const tab = isBossTab(sp.tab) ? sp.tab : "dashboard";
     const companies = await listBossAdminCompanies();
     const stats = buildRevenueStatsFromSubscriptions(companies);
+    const homepagePreferences = await getBusinessHomepageContentPreferences();
 
-    return <BossAdminWorkspace tab={tab} stats={stats} companies={companies} signOutAction={signOutAction} />;
+    return (
+        <BossAdminWorkspace
+            tab={tab}
+            stats={stats}
+            companies={companies}
+            homepageContent={homepagePreferences.content}
+            homepageUpdatedAt={homepagePreferences.updatedAt}
+            signOutAction={signOutAction}
+        />
+    );
 }

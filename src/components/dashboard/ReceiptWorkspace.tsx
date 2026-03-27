@@ -1,13 +1,22 @@
-import { ReceiptText } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { ArrowLeft, ArrowRight, Filter, ReceiptText, RotateCcw, Search } from "lucide-react";
+import { MerchantPredictiveSearchInput } from "@/components/merchant/search";
 import { MerchantListShell, MerchantSectionCard, MerchantStatGrid, MerchantToolbar } from "@/components/merchant/shell";
 import type { MerchantStatItem } from "@/components/merchant/shell";
+import { IconActionButton } from "@/components/ui/icon-action-button";
+import { IconTextActionButton } from "@/components/ui/icon-text-action-button";
 import type { Sale } from "@/lib/types/sale";
+import { LIST_DISPLAY_OPTIONS } from "@/lib/ui/list-display";
 
 type ReceiptWorkspaceProps = {
     receipts: Sale[];
     keyword?: string;
+    pageSize: string;
+    currentCursor: string;
+    previousCursor: string;
+    previousCursorStack: string;
+    nextCursor: string;
+    nextCursorStack: string;
+    hasNextPage: boolean;
 };
 
 function formatMoney(value: number) {
@@ -32,9 +41,26 @@ function paymentStatusText(value: Sale["paymentStatus"]) {
     return "結清";
 }
 
-export function ReceiptWorkspace({ receipts, keyword = "" }: ReceiptWorkspaceProps) {
+export function ReceiptWorkspace({
+    receipts,
+    keyword = "",
+    pageSize,
+    currentCursor,
+    previousCursor,
+    previousCursorStack,
+    nextCursor,
+    nextCursorStack,
+    hasNextPage,
+}: ReceiptWorkspaceProps) {
     const totalAmount = receipts.reduce((sum, row) => sum + Math.max(0, row.amount), 0);
     const paidCount = receipts.filter((row) => row.paymentStatus === "paid").length;
+    const receiptSuggestions = receipts.map((receipt) => ({
+        id: receipt.id,
+        value: receipt.receiptNo || receipt.id,
+        title: receipt.receiptNo || receipt.id,
+        subtitle: [receipt.customerName || "過路客", receipt.customerPhone, receipt.customerEmail].filter(Boolean).join(" / ") || undefined,
+        keywords: [receipt.receiptNo, receipt.id, receipt.customerName, receipt.customerPhone, receipt.customerEmail].filter((value): value is string => Boolean(value)),
+    }));
     const stats: MerchantStatItem[] = [
         { id: "count", label: "收據總數", value: receipts.length },
         { id: "total", label: "總營收", value: formatMoney(totalAmount) },
@@ -44,9 +70,39 @@ export function ReceiptWorkspace({ receipts, keyword = "" }: ReceiptWorkspacePro
     const toolbar = (
         <MerchantToolbar
             searchSlot={
-                <form action="/dashboard/receipts" method="get" className="flex w-full items-center gap-2">
-                    <Input name="q" defaultValue={keyword} placeholder="查詢收據編號、客戶名稱、電話、Email" />
-                    <Button type="submit">查詢</Button>
+                <form action="/dashboard/receipts" method="get" className="flex w-full flex-col gap-2 sm:flex-row sm:items-center">
+                    <MerchantPredictiveSearchInput
+                        name="q"
+                        defaultValue={keyword}
+                        placeholder="查詢收據編號、客戶名稱、電話、Email"
+                        localSuggestions={receiptSuggestions}
+                        className="min-w-0 flex-1"
+                    />
+                    <input type="hidden" name="pageSize" value={pageSize} />
+                    <div className="flex items-center gap-2">
+                        <IconActionButton icon={Search} type="submit" label="搜尋收據" tooltip="搜尋收據" />
+                        <IconActionButton href="/dashboard/receipts" icon={RotateCcw} label="清除搜尋" tooltip="清除搜尋條件" />
+                    </div>
+                </form>
+            }
+            filtersSlot={
+                <form action="/dashboard/receipts" method="get" className="flex items-center gap-2">
+                    {keyword ? <input type="hidden" name="q" value={keyword} /> : null}
+                    <span className="text-xs text-[rgb(var(--muted))]">每頁</span>
+                    <select
+                        name="pageSize"
+                        defaultValue={pageSize}
+                        className="h-10 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-3 text-sm text-[rgb(var(--text))]"
+                    >
+                        {LIST_DISPLAY_OPTIONS.map((size) => (
+                            <option key={`receipt-page-size-${size}`} value={size}>
+                                {size}
+                            </option>
+                        ))}
+                    </select>
+                    <IconTextActionButton type="submit" icon={Filter} label="套用每頁筆數" tooltip="套用每頁顯示筆數" className="h-10 px-3">
+                        套用
+                    </IconTextActionButton>
                 </form>
             }
         />
@@ -66,8 +122,46 @@ export function ReceiptWorkspace({ receipts, keyword = "" }: ReceiptWorkspacePro
             }
         >
             {receipts.length === 0 ? null : (
-                <div className="grid gap-2">
-                    {receipts.map((receipt) => (
+                <div className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[rgb(var(--muted))]">
+                        <span>本頁顯示 {receipts.length} 筆，採用固定高度與 server 分頁。</span>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <form action="/dashboard/receipts" method="get">
+                                {keyword ? <input type="hidden" name="q" value={keyword} /> : null}
+                                <input type="hidden" name="pageSize" value={pageSize} />
+                                {previousCursor ? <input type="hidden" name="cursor" value={previousCursor} /> : null}
+                                {previousCursorStack ? <input type="hidden" name="cursorStack" value={previousCursorStack} /> : null}
+                                <IconTextActionButton
+                                    type="submit"
+                                    icon={ArrowLeft}
+                                    label="上一頁"
+                                    tooltip="載入上一頁"
+                                    className="h-9 px-3"
+                                    disabled={!currentCursor}
+                                >
+                                    上一頁
+                                </IconTextActionButton>
+                            </form>
+                            <form action="/dashboard/receipts" method="get">
+                                {keyword ? <input type="hidden" name="q" value={keyword} /> : null}
+                                <input type="hidden" name="pageSize" value={pageSize} />
+                                <input type="hidden" name="cursor" value={nextCursor} />
+                                {nextCursorStack ? <input type="hidden" name="cursorStack" value={nextCursorStack} /> : null}
+                                <IconTextActionButton
+                                    type="submit"
+                                    icon={ArrowRight}
+                                    label="下一頁"
+                                    tooltip="載入下一頁"
+                                    className="h-9 px-3"
+                                    disabled={!hasNextPage || !nextCursor}
+                                >
+                                    下一頁
+                                </IconTextActionButton>
+                            </form>
+                        </div>
+                    </div>
+                    <div className="grid h-[720px] gap-2 overflow-y-auto pr-1">
+                        {receipts.map((receipt) => (
                         <details key={receipt.id} className="rounded-lg border border-[rgb(var(--border))]">
                             <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm [&::-webkit-details-marker]:hidden">
                                 <span className="font-semibold">{receipt.receiptNo || receipt.id}</span>
@@ -139,7 +233,8 @@ export function ReceiptWorkspace({ receipts, keyword = "" }: ReceiptWorkspacePro
                                 </div>
                             </div>
                         </details>
-                    ))}
+                        ))}
+                    </div>
                 </div>
             )}
         </MerchantSectionCard>

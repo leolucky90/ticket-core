@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getApp } from "firebase-admin/app";
 import { getStorage } from "firebase-admin/storage";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getCurrentSessionAccountContext } from "@/lib/services/staff.service";
 
 const MAX_UPLOAD_SIZE_BYTES = 12 * 1024 * 1024;
 
@@ -51,11 +51,11 @@ export async function POST(req: Request) {
     const session = await getSessionUser();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const userDoc = await getUserDoc(session.uid);
-    if (toAccountType(userDoc?.role ?? null) !== "company") {
+    const accountContext = await getCurrentSessionAccountContext();
+    if (accountContext?.accountType !== "company") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    const tenantId = getShowcaseTenantId(userDoc, session.uid);
+    const tenantId = accountContext.tenantId;
     if (!tenantId) return NextResponse.json({ error: "Missing company tenant id" }, { status: 400 });
 
     let formData: FormData;

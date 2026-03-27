@@ -5,14 +5,14 @@ const RGB_TRIPLET_PATTERN = /^(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})$/;
 const HEX_COLOR_PATTERN = /^#?([0-9a-fA-F]{6})$/;
 
 export const DEFAULT_SHOW_THEME_COLORS: ShowThemeColors = {
-    page: "255 253 246",
-    header: "255 203 45",
-    hero: "25 24 21",
+    page: "248 250 248",
+    header: "248 250 248",
+    hero: "236 243 241",
     about: "255 255 255",
-    services: "243 238 225",
-    contact: "255 253 246",
-    ad: "25 24 21",
-    footer: "255 203 45",
+    services: "242 247 245",
+    contact: "248 250 248",
+    ad: "236 243 241",
+    footer: "242 247 245",
     shopPage: "250 248 239",
     shopHeader: "25 24 21",
     shopHero: "255 203 45",

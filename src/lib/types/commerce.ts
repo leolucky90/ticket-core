@@ -74,6 +74,16 @@ export type CompanyCustomer = {
     updatedAt: number;
 };
 
+export type CustomerCaseState = "active_case" | "closed_case" | "no_case";
+
+export type CompanyCustomerListRow = {
+    customer: CompanyCustomer;
+    openCaseCount: number;
+    closedCaseCount: number;
+    caseState: CustomerCaseState;
+    activitySpend: number;
+};
+
 export type ProductDoc = {
     id: string;
     companyId?: string;
@@ -127,9 +137,18 @@ export type InventoryStockLog = {
 export type RepairBrand = {
     id: string;
     name: string;
+    linkedCategoryNames: string[];
+    productTypes: string[];
+    modelsByType: RepairBrandModelGroup[];
     models: string[];
+    usedProductTypes: string[];
     createdAt: number;
     updatedAt: number;
+};
+
+export type RepairBrandModelGroup = {
+    typeName: string;
+    models: string[];
 };
 
 export type RevenuePoint = {

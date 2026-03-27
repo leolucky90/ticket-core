@@ -5,11 +5,15 @@ import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { BossAdminCompanyRecord, CompanyDashboardStats } from "@/lib/types/commerce";
+import type { BusinessHomepageContentState } from "@/features/business/services/businessHomepageContent";
+import { BossAdminHomepageBuilder } from "@/components/dashboard/BossAdminHomepageBuilder";
 
 type BossAdminWorkspaceProps = {
     tab: "dashboard" | "query";
     stats: CompanyDashboardStats;
     companies: BossAdminCompanyRecord[];
+    homepageContent: BusinessHomepageContentState;
+    homepageUpdatedAt?: number;
     signOutAction: () => Promise<void>;
 };
 
@@ -70,7 +74,7 @@ function TrendChart({ stats, range }: { stats: CompanyDashboardStats; range: "da
     );
 }
 
-export function BossAdminWorkspace({ tab, stats, companies, signOutAction }: BossAdminWorkspaceProps) {
+export function BossAdminWorkspace({ tab, stats, companies, homepageContent, homepageUpdatedAt = 0, signOutAction }: BossAdminWorkspaceProps) {
     const [range, setRange] = useState<"day" | "month">("day");
 
     return (
@@ -119,6 +123,7 @@ export function BossAdminWorkspace({ tab, stats, companies, signOutAction }: Bos
                             </div>
                         </Card>
                         <TrendChart stats={stats} range={range} />
+                        <BossAdminHomepageBuilder initialState={homepageContent} hasSavedPreferences={homepageUpdatedAt > 0} />
                     </>
                 ) : null}
 

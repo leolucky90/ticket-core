@@ -21,6 +21,9 @@ export interface BrandDoc extends CatalogAuditDoc {
     name: string;
     slug: string;
     description?: string;
+    linkedCategoryNames?: string[];
+    productTypes?: string[];
+    usedProductTypes?: string[];
     sortOrder: number;
     status: CatalogRecordStatus;
 }
@@ -49,15 +52,30 @@ export interface ProductNameEntryDoc extends CatalogAuditDoc {
     status: CatalogRecordStatus;
 }
 
+export interface SupplierDoc extends CatalogAuditDoc {
+    name: string;
+    slug: string;
+    contactName?: string;
+    phone?: string;
+    email?: string;
+    description?: string;
+    sortOrder: number;
+    status: CatalogRecordStatus;
+}
+
 export type DimensionOption = {
     id: string;
     name: string;
     slug?: string;
+    brandId?: string;
+    brandName?: string;
+    categoryId?: string;
+    categoryName?: string;
+    categoryNames?: string[];
 };
 
 export type DimensionPickerBundle = {
     categories: DimensionOption[];
     brands: DimensionOption[];
     models: DimensionOption[];
-    nameEntries: DimensionOption[];
 };

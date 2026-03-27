@@ -4,7 +4,7 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { AuthClientBlock } from "@/components/auth/AuthClientBlock";
 import { AuthPageShell } from "@/components/auth/ui/AuthPageShell";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getCurrentSessionAccountContext } from "@/lib/services/staff.service";
 
 type RegisterCustomerSearchParams = {
     tenant?: string | string[];
@@ -44,13 +44,11 @@ export default async function CustomerRegisterPage({ searchParams }: { searchPar
 
     const session = await getSessionUser();
     if (session) {
-        const userDoc = await getUserDoc(session.uid);
-        const accountType = toAccountType(userDoc?.role ?? null);
-        if (accountType === "company") {
+        const accountContext = await getCurrentSessionAccountContext();
+        if (accountContext?.accountType === "company") {
             redirect("/dashboard");
         }
-        const sessionTenantId = getShowcaseTenantId(userDoc, session.uid);
-        const targetTenantId = authTenantId ?? tenantId ?? sessionTenantId;
+        const targetTenantId = authTenantId ?? tenantId ?? accountContext?.tenantId ?? null;
         if (targetTenantId) {
             redirect(`/${encodeURIComponent(targetTenantId)}/dashboard`);
         }
@@ -109,6 +107,13 @@ export default async function CustomerRegisterPage({ searchParams }: { searchPar
                             href={withAuthContext("/login", tenantId, authTenantId)}
                         >
                             返回登入頁面
+                        </Link>
+                        <span className="px-1">·</span>
+                        <Link
+                            className="text-[rgb(var(--accent))] hover:underline"
+                            href={withAuthContext("/forgot-password", tenantId, authTenantId)}
+                        >
+                            忘記密碼
                         </Link>
                     </div>
                 </AuthShell>

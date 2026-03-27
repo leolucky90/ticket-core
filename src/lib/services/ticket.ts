@@ -1,14 +1,17 @@
 import "server-only";
+import { FieldPath } from "firebase-admin/firestore";
 import type { KnownTicketStatus, QuoteStatus, Ticket, TicketStatus } from "@/lib/types/ticket";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
 import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { linkUsedProductToCase, syncUsedProductRefurbishmentStatus } from "@/lib/services/used-products.service";
 import {
     DEFAULT_CASE_STATUSES,
     DEFAULT_QUOTE_STATUSES,
     getTicketAttributePreferences,
 } from "@/lib/services/ticketAttributes";
+import type { CursorPageResult } from "@/lib/types/pagination";
 
 const memory: { ticketsByCompany: Record<string, Ticket[]> } = { ticketsByCompany: {} };
 
@@ -40,6 +43,19 @@ type CompanyCustomerDoc = {
     createdAt: number;
     updatedAt: number;
     lastCaseAt?: number;
+};
+
+type TicketCursor = {
+    updatedAt: number;
+    id: string;
+};
+
+type TicketPageQuery = {
+    keyword?: string;
+    status?: string;
+    order?: "latest" | "earliest";
+    pageSize?: number;
+    cursor?: string;
 };
 
 function now() {
@@ -150,6 +166,11 @@ function normalizeTicket(input: Partial<Ticket> & { id: string }): Ticket {
     const extra = input as Record<string, unknown>;
     const companyId = safeText(toStr(extra.companyId), MAX_ID);
     const customerId = safeText(toStr(extra.customerId), MAX_ID);
+    const repairTechnicianId = safeText(toStr(extra.repairTechnicianId), MAX_ID);
+    const repairTechnicianName = safeText(toStr(extra.repairTechnicianName), MAX_TEXT);
+    const linkedUsedProductId = safeText(toStr(extra.linkedUsedProductId), MAX_ID);
+    const linkedUsedProductName = safeText(toStr(extra.linkedUsedProductName), MAX_TEXT);
+    const caseType = safeText(toStr(extra.caseType), MAX_STATUS);
 
     return {
         id: input.id,
@@ -168,6 +189,11 @@ function normalizeTicket(input: Partial<Ticket> & { id: string }): Ticket {
         repairReason,
         repairSuggestion,
         note,
+        repairTechnicianId: repairTechnicianId || undefined,
+        repairTechnicianName: repairTechnicianName || undefined,
+        linkedUsedProductId: linkedUsedProductId || undefined,
+        linkedUsedProductName: linkedUsedProductName || undefined,
+        caseType: caseType || undefined,
         repairAmount,
         inspectionFee,
         pendingFee,
@@ -325,6 +351,54 @@ async function listFromFirebase(companyId: string): Promise<Ticket[] | null> {
     );
 }
 
+function normalizePageSize(input: number | undefined, fallback = 10): number {
+    const value = Number(input);
+    if (!Number.isFinite(value)) return fallback;
+    if (value <= 5) return 5;
+    if (value <= 10) return 10;
+    if (value <= 15) return 15;
+    return 20;
+}
+
+function encodeTicketCursorValue(cursor: TicketCursor): string {
+    return Buffer.from(JSON.stringify(cursor)).toString("base64url");
+}
+
+function decodeTicketCursorValue(value: string | undefined): TicketCursor | null {
+    const text = safeText(toStr(value), 240);
+    if (!text) return null;
+    try {
+        const parsed = JSON.parse(Buffer.from(text, "base64url").toString("utf8")) as Partial<TicketCursor>;
+        const updatedAt = Number(parsed.updatedAt);
+        const idValue = safeText(toStr(parsed.id), MAX_ID);
+        if (!Number.isFinite(updatedAt) || updatedAt <= 0 || !idValue) return null;
+        return { updatedAt: Math.round(updatedAt), id: idValue };
+    } catch {
+        return null;
+    }
+}
+
+function matchesTicketPageQuery(ticket: Ticket, params: TicketPageQuery): boolean {
+    if (params.status && params.status !== "all" && ticket.status !== params.status) return false;
+    const keyword = safeText(params.keyword ?? "", MAX_TEXT).toLowerCase();
+    if (!keyword) return true;
+    const haystack = [
+        ticket.customer.name,
+        ticket.customer.phone,
+        ticket.customer.email,
+        ticket.device.name,
+        ticket.device.model,
+        ticket.title,
+        ticket.id,
+        ticket.repairReason,
+        ticket.repairSuggestion,
+        ticket.note,
+    ]
+        .join(" ")
+        .toLowerCase();
+    return haystack.includes(keyword);
+}
+
 async function findOrCreateCustomerId(
     db: NonNullable<Awaited<ReturnType<typeof getFirestoreDb>>>,
     companyId: string,
@@ -387,6 +461,11 @@ async function createInMemory(
         repairReason: string;
         repairSuggestion: string;
         note: string;
+        repairTechnicianId?: string;
+        repairTechnicianName?: string;
+        linkedUsedProductId?: string;
+        linkedUsedProductName?: string;
+        caseType?: string;
         repairAmount: number;
         inspectionFee: number;
         quoteStatus: QuoteStatus;
@@ -411,6 +490,11 @@ async function createInMemory(
         repairReason: params.repairReason,
         repairSuggestion: params.repairSuggestion,
         note: params.note,
+        repairTechnicianId: params.repairTechnicianId,
+        repairTechnicianName: params.repairTechnicianName,
+        linkedUsedProductId: params.linkedUsedProductId,
+        linkedUsedProductName: params.linkedUsedProductName,
+        caseType: params.caseType,
         repairAmount: params.repairAmount,
         inspectionFee: params.inspectionFee,
         pendingFee: computePendingFee(params.repairAmount, params.inspectionFee),
@@ -436,6 +520,11 @@ async function createInFirebase(
         repairReason: string;
         repairSuggestion: string;
         note: string;
+        repairTechnicianId?: string;
+        repairTechnicianName?: string;
+        linkedUsedProductId?: string;
+        linkedUsedProductName?: string;
+        caseType?: string;
         repairAmount: number;
         inspectionFee: number;
         quoteStatus: QuoteStatus;
@@ -471,6 +560,11 @@ async function createInFirebase(
         repairReason: params.repairReason,
         repairSuggestion: params.repairSuggestion,
         note: params.note,
+        repairTechnicianId: params.repairTechnicianId,
+        repairTechnicianName: params.repairTechnicianName,
+        linkedUsedProductId: params.linkedUsedProductId,
+        linkedUsedProductName: params.linkedUsedProductName,
+        caseType: params.caseType,
         repairAmount: params.repairAmount,
         inspectionFee: params.inspectionFee,
         pendingFee: computePendingFee(params.repairAmount, params.inspectionFee),
@@ -517,6 +611,11 @@ async function updateInMemory(
         repairReason?: string;
         repairSuggestion?: string;
         note?: string;
+        repairTechnicianId?: string;
+        repairTechnicianName?: string;
+        linkedUsedProductId?: string;
+        linkedUsedProductName?: string;
+        caseType?: string;
         repairAmount?: number;
         inspectionFee?: number;
         quoteStatus?: QuoteStatus;
@@ -539,6 +638,11 @@ async function updateInMemory(
     if (params.repairReason !== undefined) target.repairReason = params.repairReason;
     if (params.repairSuggestion !== undefined) target.repairSuggestion = params.repairSuggestion;
     if (params.note !== undefined) target.note = params.note;
+    if (params.repairTechnicianId !== undefined) target.repairTechnicianId = params.repairTechnicianId;
+    if (params.repairTechnicianName !== undefined) target.repairTechnicianName = params.repairTechnicianName;
+    if (params.linkedUsedProductId !== undefined) target.linkedUsedProductId = params.linkedUsedProductId;
+    if (params.linkedUsedProductName !== undefined) target.linkedUsedProductName = params.linkedUsedProductName;
+    if (params.caseType !== undefined) target.caseType = params.caseType;
     if (params.repairAmount !== undefined) target.repairAmount = params.repairAmount;
     if (params.inspectionFee !== undefined) target.inspectionFee = params.inspectionFee;
     if (params.quoteStatus !== undefined) target.quoteStatus = params.quoteStatus;
@@ -564,6 +668,11 @@ async function updateInFirebase(
         repairReason?: string;
         repairSuggestion?: string;
         note?: string;
+        repairTechnicianId?: string;
+        repairTechnicianName?: string;
+        linkedUsedProductId?: string;
+        linkedUsedProductName?: string;
+        caseType?: string;
         repairAmount?: number;
         inspectionFee?: number;
         quoteStatus?: QuoteStatus;
@@ -596,6 +705,11 @@ async function updateInFirebase(
         repairReason: params.repairReason !== undefined ? params.repairReason : current.repairReason,
         repairSuggestion: params.repairSuggestion !== undefined ? params.repairSuggestion : current.repairSuggestion,
         note: params.note !== undefined ? params.note : current.note,
+        repairTechnicianId: params.repairTechnicianId !== undefined ? params.repairTechnicianId : current.repairTechnicianId,
+        repairTechnicianName: params.repairTechnicianName !== undefined ? params.repairTechnicianName : current.repairTechnicianName,
+        linkedUsedProductId: params.linkedUsedProductId !== undefined ? params.linkedUsedProductId : current.linkedUsedProductId,
+        linkedUsedProductName: params.linkedUsedProductName !== undefined ? params.linkedUsedProductName : current.linkedUsedProductName,
+        caseType: params.caseType !== undefined ? params.caseType : current.caseType,
         repairAmount: params.repairAmount !== undefined ? params.repairAmount : current.repairAmount,
         inspectionFee: params.inspectionFee !== undefined ? params.inspectionFee : current.inspectionFee,
         quoteStatus: params.quoteStatus !== undefined ? params.quoteStatus : current.quoteStatus,
@@ -622,6 +736,94 @@ export async function listTickets(): Promise<Ticket[]> {
         // fallback to memory
     }
     return listFromMemory(scope.companyId);
+}
+
+export async function queryTicketsPage(params: TicketPageQuery = {}): Promise<CursorPageResult<Ticket>> {
+    const scope = await resolveSessionScope(true);
+    const pageSize = normalizePageSize(params.pageSize, 10);
+    if (!scope) {
+        return {
+            items: [],
+            pageSize,
+            nextCursor: "",
+            hasNextPage: false,
+        };
+    }
+
+    const direction: "asc" | "desc" = params.order === "earliest" ? "asc" : "desc";
+    const decodedCursor = decodeTicketCursorValue(params.cursor);
+    const db = await getFirestoreDb();
+
+    if (db) {
+        const batchSize = Math.max(pageSize * 3, 30);
+        const buildBaseQuery = () => {
+            let query = companyCasesRef(db, scope.companyId).orderBy("updatedAt", direction).orderBy(FieldPath.documentId(), direction);
+            if (params.status && params.status !== "all") query = query.where("status", "==", params.status);
+            return query;
+        };
+
+        let query = buildBaseQuery();
+        if (decodedCursor) query = query.startAfter(decodedCursor.updatedAt, decodedCursor.id);
+        const items: Ticket[] = [];
+
+        for (let round = 0; round < 8; round += 1) {
+            const snap = await query.limit(batchSize).get();
+            if (snap.empty) break;
+
+            const docs = snap.docs;
+            let lastCursorInBatch: TicketCursor | null = null;
+
+            for (let index = 0; index < docs.length; index += 1) {
+                const doc = docs[index];
+                const ticket = normalizeTicket({ id: doc.id, ...(doc.data() as Partial<Ticket>) });
+                lastCursorInBatch = { updatedAt: ticket.updatedAt, id: ticket.id };
+                if (!matchesTicketPageQuery(ticket, params)) continue;
+                items.push(ticket);
+                if (items.length >= pageSize) {
+                    const hasNextPage = index < docs.length - 1 || docs.length === batchSize;
+                    return {
+                        items,
+                        pageSize,
+                        nextCursor: hasNextPage && lastCursorInBatch ? encodeTicketCursorValue(lastCursorInBatch) : "",
+                        hasNextPage,
+                    };
+                }
+            }
+
+            if (!lastCursorInBatch || docs.length < batchSize) break;
+            query = buildBaseQuery().startAfter(lastCursorInBatch.updatedAt, lastCursorInBatch.id);
+        }
+
+        return {
+            items,
+            pageSize,
+            nextCursor: "",
+            hasNextPage: false,
+        };
+    }
+
+    const ordered = listFromMemory(scope.companyId)
+        .map((item) => normalizeTicket(item))
+        .filter((ticket) => matchesTicketPageQuery(ticket, params))
+        .sort((left, right) => {
+            if (left.updatedAt === right.updatedAt) return direction === "desc" ? right.id.localeCompare(left.id) : left.id.localeCompare(right.id);
+            return direction === "desc" ? right.updatedAt - left.updatedAt : left.updatedAt - right.updatedAt;
+        });
+    const startIndex = decodedCursor
+        ? Math.max(
+              0,
+              ordered.findIndex((item) => item.id === decodedCursor.id) + 1,
+          )
+        : 0;
+    const items = ordered.slice(startIndex, startIndex + pageSize);
+    const lastItem = items.at(-1);
+    const hasNextPage = startIndex + pageSize < ordered.length;
+    return {
+        items,
+        pageSize,
+        nextCursor: hasNextPage && lastItem ? encodeTicketCursorValue({ updatedAt: lastItem.updatedAt, id: lastItem.id }) : "",
+        hasNextPage,
+    };
 }
 
 export async function listTicketsByCustomerEmail(email: string, companyId?: string | null): Promise<Ticket[]> {
@@ -707,17 +909,45 @@ export async function createTicket(formData: FormData): Promise<void> {
         allowedQuoteStatuses,
         DEFAULT_QUOTE_STATUSES[0],
     ) as QuoteStatus;
+    const repairTechnicianId = safeText(toStr(formData.get("repairTechnicianId")), MAX_ID);
+    const repairTechnicianName = safeText(toStr(formData.get("repairTechnicianName")), MAX_TEXT);
+    const linkedUsedProductId = safeText(toStr(formData.get("linkedUsedProductId")), MAX_ID);
+    const linkedUsedProductName = safeText(toStr(formData.get("linkedUsedProductName")), MAX_TEXT);
+    const caseType = safeText(toStr(formData.get("caseType")), MAX_STATUS);
     const payload = {
         ...ensuredValidated,
         status: selectedCaseStatus,
         quoteStatus: selectedQuoteStatus,
+        repairTechnicianId: repairTechnicianId || undefined,
+        repairTechnicianName: repairTechnicianName || undefined,
+        linkedUsedProductId: linkedUsedProductId || undefined,
+        linkedUsedProductName: linkedUsedProductName || undefined,
+        caseType: caseType || undefined,
     };
 
+    let createdTicket: Ticket | null = null;
     try {
-        const created = await createInFirebase(ensuredScope.companyId, payload);
-        if (!created) await createInMemory(ensuredScope.companyId, payload);
+        createdTicket = await createInFirebase(ensuredScope.companyId, payload);
+        if (!createdTicket) createdTicket = await createInMemory(ensuredScope.companyId, payload);
     } catch {
-        await createInMemory(ensuredScope.companyId, payload);
+        createdTicket = await createInMemory(ensuredScope.companyId, payload);
+    }
+
+    if (createdTicket?.linkedUsedProductId) {
+        try {
+            await linkUsedProductToCase({
+                usedProductId: createdTicket.linkedUsedProductId,
+                caseId: createdTicket.id,
+                caseTitle: createdTicket.title,
+            });
+            await syncUsedProductRefurbishmentStatus({
+                usedProductId: createdTicket.linkedUsedProductId,
+                caseStatus: createdTicket.status,
+                caseId: createdTicket.id,
+            });
+        } catch {
+            // ignore used-product sync failure
+        }
     }
 
     revalidatePath("/dashboard");
@@ -777,6 +1007,11 @@ export async function updateTicket(formData: FormData): Promise<void> {
         repairReason: getOptional("repairReason", MAX_DETAIL),
         repairSuggestion: getOptional("repairSuggestion", MAX_DETAIL),
         note: getOptional("note", MAX_DETAIL),
+        repairTechnicianId: getOptional("repairTechnicianId", MAX_ID),
+        repairTechnicianName: getOptional("repairTechnicianName", MAX_TEXT),
+        linkedUsedProductId: getOptional("linkedUsedProductId", MAX_ID),
+        linkedUsedProductName: getOptional("linkedUsedProductName", MAX_TEXT),
+        caseType: getOptional("caseType", MAX_STATUS),
         repairAmount: formData.has("repairAmount") ? parseMoney(formData.get("repairAmount")) : undefined,
         inspectionFee: formData.has("inspectionFee") ? parseMoney(formData.get("inspectionFee")) : undefined,
         quoteStatus: finalQuoteStatus,
@@ -790,11 +1025,24 @@ export async function updateTicket(formData: FormData): Promise<void> {
         redirectWithFlash("invalid");
     }
 
+    let updatedTicket: Ticket | null = null;
     try {
-        const updated = await updateInFirebase(ensuredScope.companyId, payload);
-        if (!updated) await updateInMemory(ensuredScope.companyId, payload);
+        updatedTicket = await updateInFirebase(ensuredScope.companyId, payload);
+        if (!updatedTicket) updatedTicket = await updateInMemory(ensuredScope.companyId, payload);
     } catch {
-        await updateInMemory(ensuredScope.companyId, payload);
+        updatedTicket = await updateInMemory(ensuredScope.companyId, payload);
+    }
+
+    if (updatedTicket?.linkedUsedProductId) {
+        try {
+            await syncUsedProductRefurbishmentStatus({
+                usedProductId: updatedTicket.linkedUsedProductId,
+                caseStatus: updatedTicket.status,
+                caseId: updatedTicket.id,
+            });
+        } catch {
+            // ignore used-product sync failure
+        }
     }
 
     revalidatePath("/dashboard");

@@ -1,5 +1,5 @@
 import "server-only";
-import type { BrandDoc, CategoryDoc, CatalogRecordStatus, DimensionPickerBundle, ModelDoc, ProductNameEntryDoc } from "@/lib/types/catalog";
+import type { BrandDoc, CategoryDoc, CatalogRecordStatus, DimensionPickerBundle, ModelDoc, ProductNameEntryDoc, SupplierDoc } from "@/lib/types/catalog";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
 import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 
@@ -11,16 +11,20 @@ type SessionScope = {
     companyId: string;
 };
 
+type CatalogCollectionKey = "categories" | "suppliers";
+
 const memory: {
     categoriesByCompany: Record<string, CategoryDoc[]>;
     brandsByCompany: Record<string, BrandDoc[]>;
     modelsByCompany: Record<string, ModelDoc[]>;
     nameEntriesByCompany: Record<string, ProductNameEntryDoc[]>;
+    suppliersByCompany: Record<string, SupplierDoc[]>;
 } = {
     categoriesByCompany: {},
     brandsByCompany: {},
     modelsByCompany: {},
     nameEntriesByCompany: {},
+    suppliersByCompany: {},
 };
 
 function nowIso(): string {
@@ -85,6 +89,35 @@ async function resolveSessionScope(): Promise<SessionScope | null> {
     return { companyId };
 }
 
+async function resolveCompanyId(companyIdOverride?: string): Promise<string | null> {
+    const normalized = normalizeCompanyId(companyIdOverride);
+    if (normalized) return normalized;
+    const scope = await resolveSessionScope();
+    return scope?.companyId ?? null;
+}
+
+async function resolveCompanyIdOrThrow(companyIdOverride: string | undefined, source: string): Promise<string> {
+    const companyId = await resolveCompanyId(companyIdOverride);
+    if (!companyId) {
+        throw new Error(`[catalog-service] Missing companyId at ${source}`);
+    }
+    return companyId;
+}
+
+function catalogCollectionPath(companyId: string, key: CatalogCollectionKey): string {
+    return `companies/${companyId}/${key}`;
+}
+
+function toErrorMessage(error: unknown): string {
+    if (error instanceof Error && error.message) return error.message;
+    return String(error);
+}
+
+function debugCatalogLog(event: string, payload: Record<string, unknown>) {
+    if (process.env.NODE_ENV === "production") return;
+    console.info(`[catalog-service] ${event}`, payload);
+}
+
 async function getFirestoreDb() {
     try {
         const mod = await import("@/lib/firebase-server");
@@ -95,7 +128,7 @@ async function getFirestoreDb() {
 }
 
 function categoriesRef(db: Awaited<ReturnType<typeof getFirestoreDb>>, companyId: string) {
-    return db!.collection(`companies/${companyId}/categories`);
+    return db!.collection(catalogCollectionPath(companyId, "categories"));
 }
 
 function brandsRef(db: Awaited<ReturnType<typeof getFirestoreDb>>, companyId: string) {
@@ -108,6 +141,10 @@ function modelsRef(db: Awaited<ReturnType<typeof getFirestoreDb>>, companyId: st
 
 function nameEntriesRef(db: Awaited<ReturnType<typeof getFirestoreDb>>, companyId: string) {
     return db!.collection(`companies/${companyId}/productNameEntries`);
+}
+
+function suppliersRef(db: Awaited<ReturnType<typeof getFirestoreDb>>, companyId: string) {
+    return db!.collection(catalogCollectionPath(companyId, "suppliers"));
 }
 
 function listFromMemory<T>(store: Record<string, T[]>, companyId: string): T[] {
@@ -132,6 +169,10 @@ function queryByKeyword<T>(list: T[], keyword: string, resolver: (item: T) => st
     const q = safeText(keyword, 120).toLowerCase();
     if (!q) return list;
     return list.filter((item) => resolver(item).join(" ").toLowerCase().includes(q));
+}
+
+function stripUndefinedFields(input: object): Record<string, unknown> {
+    return Object.fromEntries(Object.entries(input as Record<string, unknown>).filter(([, value]) => value !== undefined));
 }
 
 function normalizeCategory(input: Partial<CategoryDoc> & { id: string; companyId: string }): CategoryDoc {
@@ -159,6 +200,9 @@ function normalizeBrand(input: Partial<BrandDoc> & { id: string; companyId: stri
         name,
         slug: safeText(input.slug, 120) || slugify(name),
         description: safeText(input.description, MAX_LONG) || undefined,
+        linkedCategoryNames: toList(input.linkedCategoryNames),
+        productTypes: toList(input.productTypes),
+        usedProductTypes: toList(input.usedProductTypes),
         sortOrder: Number.isFinite(Number(input.sortOrder)) ? Math.round(Number(input.sortOrder)) : 0,
         status: toStatus(input.status),
         createdAt,
@@ -206,6 +250,25 @@ function normalizeNameEntry(input: Partial<ProductNameEntryDoc> & { id: string; 
     };
 }
 
+function normalizeSupplier(input: Partial<SupplierDoc> & { id: string; companyId: string }): SupplierDoc {
+    const name = safeText(input.name) || "未命名供應商";
+    const createdAt = safeText(input.createdAt, 40) || nowIso();
+    return {
+        id: safeText(input.id, 120) || id("supplier"),
+        companyId: safeText(input.companyId, 120),
+        name,
+        slug: safeText(input.slug, 120) || slugify(name),
+        contactName: safeText(input.contactName) || undefined,
+        phone: safeText(input.phone, 40) || undefined,
+        email: safeText(input.email, 160).toLowerCase() || undefined,
+        description: safeText(input.description, MAX_LONG) || undefined,
+        sortOrder: Number.isFinite(Number(input.sortOrder)) ? Math.round(Number(input.sortOrder)) : 0,
+        status: toStatus(input.status),
+        createdAt,
+        updatedAt: safeText(input.updatedAt, 40) || createdAt,
+    };
+}
+
 async function listCategoriesFromFirestore(companyId: string): Promise<CategoryDoc[] | null> {
     const db = await getFirestoreDb();
     if (!db) return null;
@@ -234,31 +297,45 @@ async function listNameEntriesFromFirestore(companyId: string): Promise<ProductN
     return snap.docs.map((doc) => normalizeNameEntry({ id: doc.id, companyId, ...(doc.data() as Partial<ProductNameEntryDoc>) }));
 }
 
+async function listSuppliersFromFirestore(companyId: string): Promise<SupplierDoc[] | null> {
+    const db = await getFirestoreDb();
+    if (!db) return null;
+    const snap = await suppliersRef(db, companyId).orderBy("updatedAt", "desc").limit(MAX_LIST_SIZE).get();
+    return snap.docs.map((doc) => normalizeSupplier({ id: doc.id, companyId, ...(doc.data() as Partial<SupplierDoc>) }));
+}
+
 async function setCategoryToFirestore(companyId: string, doc: CategoryDoc): Promise<boolean | null> {
     const db = await getFirestoreDb();
     if (!db) return null;
-    await categoriesRef(db, companyId).doc(doc.id).set(doc, { merge: true });
+    await categoriesRef(db, companyId).doc(doc.id).set(stripUndefinedFields(doc), { merge: true });
     return true;
 }
 
 async function setBrandToFirestore(companyId: string, doc: BrandDoc): Promise<boolean | null> {
     const db = await getFirestoreDb();
     if (!db) return null;
-    await brandsRef(db, companyId).doc(doc.id).set(doc, { merge: true });
+    await brandsRef(db, companyId).doc(doc.id).set(stripUndefinedFields(doc), { merge: true });
     return true;
 }
 
 async function setModelToFirestore(companyId: string, doc: ModelDoc): Promise<boolean | null> {
     const db = await getFirestoreDb();
     if (!db) return null;
-    await modelsRef(db, companyId).doc(doc.id).set(doc, { merge: true });
+    await modelsRef(db, companyId).doc(doc.id).set(stripUndefinedFields(doc), { merge: true });
     return true;
 }
 
 async function setNameEntryToFirestore(companyId: string, doc: ProductNameEntryDoc): Promise<boolean | null> {
     const db = await getFirestoreDb();
     if (!db) return null;
-    await nameEntriesRef(db, companyId).doc(doc.id).set(doc, { merge: true });
+    await nameEntriesRef(db, companyId).doc(doc.id).set(stripUndefinedFields(doc), { merge: true });
+    return true;
+}
+
+async function setSupplierToFirestore(companyId: string, doc: SupplierDoc): Promise<boolean | null> {
+    const db = await getFirestoreDb();
+    if (!db) return null;
+    await suppliersRef(db, companyId).doc(doc.id).set(stripUndefinedFields(doc), { merge: true });
     return true;
 }
 
@@ -290,20 +367,36 @@ async function deleteNameEntryInFirestore(companyId: string, itemId: string): Pr
     return true;
 }
 
-export async function listCatalogCategories(keyword = ""): Promise<CategoryDoc[]> {
-    const scope = await resolveSessionScope();
-    if (!scope) return [];
+async function deleteSupplierInFirestore(companyId: string, itemId: string): Promise<boolean | null> {
+    const db = await getFirestoreDb();
+    if (!db) return null;
+    await suppliersRef(db, companyId).doc(itemId).delete();
+    return true;
+}
+
+export async function listCatalogCategories(keyword = "", companyIdOverride?: string): Promise<CategoryDoc[]> {
+    const companyId = await resolveCompanyIdOrThrow(companyIdOverride, "listCatalogCategories");
+    const path = catalogCollectionPath(companyId, "categories");
+    debugCatalogLog("list_categories:start", { companyId, path, keyword });
     let list: CategoryDoc[] = [];
     try {
-        const fsList = await listCategoriesFromFirestore(scope.companyId);
+        const fsList = await listCategoriesFromFirestore(companyId);
         if (fsList) {
             list = fsList;
-            replaceMemoryList(memory.categoriesByCompany, scope.companyId, fsList);
+            replaceMemoryList(memory.categoriesByCompany, companyId, fsList);
+            debugCatalogLog("list_categories:firestore", { companyId, path, fetchedCount: fsList.length });
         } else {
-            list = listFromMemory(memory.categoriesByCompany, scope.companyId);
+            list = listFromMemory(memory.categoriesByCompany, companyId);
+            debugCatalogLog("list_categories:memory_no_firestore", { companyId, path, fetchedCount: list.length });
         }
-    } catch {
-        list = listFromMemory(memory.categoriesByCompany, scope.companyId);
+    } catch (error) {
+        list = listFromMemory(memory.categoriesByCompany, companyId);
+        debugCatalogLog("list_categories:fallback", {
+            companyId,
+            path,
+            fetchedCount: list.length,
+            error: toErrorMessage(error),
+        });
     }
     return queryByKeyword(
         list.map((item) => normalizeCategory(item)).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "zh-Hant")),
@@ -330,7 +423,7 @@ export async function listCatalogBrands(keyword = ""): Promise<BrandDoc[]> {
     return queryByKeyword(
         list.map((item) => normalizeBrand(item)).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "zh-Hant")),
         keyword,
-        (item) => [item.name, item.slug, item.description ?? ""],
+        (item) => [item.name, item.slug, ...(item.linkedCategoryNames ?? []), ...(item.productTypes ?? []), item.description ?? ""],
     );
 }
 
@@ -378,46 +471,107 @@ export async function listCatalogProductNameEntries(keyword = ""): Promise<Produ
     );
 }
 
-export async function createCatalogCategory(input: Partial<CategoryDoc>): Promise<CategoryDoc | null> {
-    const scope = await resolveSessionScope();
-    if (!scope) return null;
+export async function listCatalogSuppliers(keyword = "", companyIdOverride?: string): Promise<SupplierDoc[]> {
+    const companyId = await resolveCompanyIdOrThrow(companyIdOverride, "listCatalogSuppliers");
+    const path = catalogCollectionPath(companyId, "suppliers");
+    debugCatalogLog("list_suppliers:start", { companyId, path, keyword });
+    let list: SupplierDoc[] = [];
+    try {
+        const fsList = await listSuppliersFromFirestore(companyId);
+        if (fsList) {
+            list = fsList;
+            replaceMemoryList(memory.suppliersByCompany, companyId, fsList);
+            debugCatalogLog("list_suppliers:firestore", { companyId, path, fetchedCount: fsList.length });
+        } else {
+            list = listFromMemory(memory.suppliersByCompany, companyId);
+            debugCatalogLog("list_suppliers:memory_no_firestore", { companyId, path, fetchedCount: list.length });
+        }
+    } catch (error) {
+        list = listFromMemory(memory.suppliersByCompany, companyId);
+        debugCatalogLog("list_suppliers:fallback", {
+            companyId,
+            path,
+            fetchedCount: list.length,
+            error: toErrorMessage(error),
+        });
+    }
+    return queryByKeyword(
+        list.map((item) => normalizeSupplier(item)).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "zh-Hant")),
+        keyword,
+        (item) => [item.name, item.slug, item.contactName ?? "", item.phone ?? "", item.email ?? "", item.description ?? ""],
+    );
+}
+
+export async function createCatalogCategory(input: Partial<CategoryDoc>, companyIdOverride?: string): Promise<CategoryDoc | null> {
+    const companyId = await resolveCompanyIdOrThrow(companyIdOverride, "createCatalogCategory");
+    const path = catalogCollectionPath(companyId, "categories");
     const ts = nowIso();
-    const next = normalizeCategory({ id: id("category"), companyId: scope.companyId, ...input, createdAt: ts, updatedAt: ts });
+    const next = normalizeCategory({ id: id("category"), companyId, ...input, createdAt: ts, updatedAt: ts });
+    debugCatalogLog("create_category:start", {
+        companyId,
+        path,
+        payload: { name: next.name, slug: next.slug, status: next.status },
+    });
     try {
-        const saved = await setCategoryToFirestore(scope.companyId, next);
-        if (!saved) upsertMemory(memory.categoriesByCompany, scope.companyId, next);
-    } catch {
-        upsertMemory(memory.categoriesByCompany, scope.companyId, next);
+        const saved = await setCategoryToFirestore(companyId, next);
+        if (!saved) {
+            debugCatalogLog("create_category:db_unavailable", { companyId, path });
+            return null;
+        }
+    } catch (error) {
+        debugCatalogLog("create_category:failed", { companyId, path, error: toErrorMessage(error) });
+        return null;
     }
+    upsertMemory(memory.categoriesByCompany, companyId, next);
+    debugCatalogLog("create_category:success", { companyId, path, recordId: next.id });
     return next;
 }
 
-export async function updateCatalogCategory(categoryId: string, input: Partial<CategoryDoc>): Promise<CategoryDoc | null> {
-    const scope = await resolveSessionScope();
-    if (!scope) return null;
-    const current = (await listCatalogCategories()).find((item) => item.id === safeText(categoryId, 120));
+export async function updateCatalogCategory(categoryId: string, input: Partial<CategoryDoc>, companyIdOverride?: string): Promise<CategoryDoc | null> {
+    const companyId = await resolveCompanyIdOrThrow(companyIdOverride, "updateCatalogCategory");
+    const path = catalogCollectionPath(companyId, "categories");
+    const current = (await listCatalogCategories("", companyId)).find((item) => item.id === safeText(categoryId, 120));
     if (!current) return null;
-    const next = normalizeCategory({ ...current, ...input, id: current.id, companyId: scope.companyId, updatedAt: nowIso() });
+    const next = normalizeCategory({ ...current, ...input, id: current.id, companyId, updatedAt: nowIso() });
+    debugCatalogLog("update_category:start", {
+        companyId,
+        path,
+        recordId: current.id,
+        payload: { name: next.name, slug: next.slug, status: next.status },
+    });
     try {
-        const saved = await setCategoryToFirestore(scope.companyId, next);
-        if (!saved) upsertMemory(memory.categoriesByCompany, scope.companyId, next);
-    } catch {
-        upsertMemory(memory.categoriesByCompany, scope.companyId, next);
+        const saved = await setCategoryToFirestore(companyId, next);
+        if (!saved) {
+            debugCatalogLog("update_category:db_unavailable", { companyId, path, recordId: current.id });
+            return null;
+        }
+    } catch (error) {
+        debugCatalogLog("update_category:failed", { companyId, path, recordId: current.id, error: toErrorMessage(error) });
+        return null;
     }
+    upsertMemory(memory.categoriesByCompany, companyId, next);
+    debugCatalogLog("update_category:success", { companyId, path, recordId: next.id });
     return next;
 }
 
-export async function deleteCatalogCategory(categoryId: string): Promise<boolean> {
-    const scope = await resolveSessionScope();
-    if (!scope) return false;
+export async function deleteCatalogCategory(categoryId: string, companyIdOverride?: string): Promise<boolean> {
+    const companyId = await resolveCompanyIdOrThrow(companyIdOverride, "deleteCatalogCategory");
+    const path = catalogCollectionPath(companyId, "categories");
     const target = safeText(categoryId, 120);
     if (!target) return false;
+    debugCatalogLog("delete_category:start", { companyId, path, recordId: target });
     try {
-        const deleted = await deleteCategoryInFirestore(scope.companyId, target);
-        if (deleted === null) removeFromMemory(memory.categoriesByCompany, scope.companyId, target);
-    } catch {
-        removeFromMemory(memory.categoriesByCompany, scope.companyId, target);
+        const deleted = await deleteCategoryInFirestore(companyId, target);
+        if (!deleted) {
+            debugCatalogLog("delete_category:db_unavailable", { companyId, path, recordId: target });
+            return false;
+        }
+    } catch (error) {
+        debugCatalogLog("delete_category:failed", { companyId, path, recordId: target, error: toErrorMessage(error) });
+        return false;
     }
+    removeFromMemory(memory.categoriesByCompany, companyId, target);
+    debugCatalogLog("delete_category:success", { companyId, path, recordId: target });
     return true;
 }
 
@@ -521,6 +675,79 @@ export async function createCatalogProductNameEntry(input: Partial<ProductNameEn
     return next;
 }
 
+export async function createCatalogSupplier(input: Partial<SupplierDoc>, companyIdOverride?: string): Promise<SupplierDoc | null> {
+    const companyId = await resolveCompanyIdOrThrow(companyIdOverride, "createCatalogSupplier");
+    const path = catalogCollectionPath(companyId, "suppliers");
+    const ts = nowIso();
+    const next = normalizeSupplier({ id: id("supplier"), companyId, ...input, createdAt: ts, updatedAt: ts });
+    debugCatalogLog("create_supplier:start", {
+        companyId,
+        path,
+        payload: { name: next.name, slug: next.slug, status: next.status },
+    });
+    try {
+        const saved = await setSupplierToFirestore(companyId, next);
+        if (!saved) {
+            debugCatalogLog("create_supplier:db_unavailable", { companyId, path });
+            return null;
+        }
+    } catch (error) {
+        debugCatalogLog("create_supplier:failed", { companyId, path, error: toErrorMessage(error) });
+        return null;
+    }
+    upsertMemory(memory.suppliersByCompany, companyId, next);
+    debugCatalogLog("create_supplier:success", { companyId, path, recordId: next.id });
+    return next;
+}
+
+export async function updateCatalogSupplier(supplierId: string, input: Partial<SupplierDoc>, companyIdOverride?: string): Promise<SupplierDoc | null> {
+    const companyId = await resolveCompanyIdOrThrow(companyIdOverride, "updateCatalogSupplier");
+    const path = catalogCollectionPath(companyId, "suppliers");
+    const current = (await listCatalogSuppliers("", companyId)).find((item) => item.id === safeText(supplierId, 120));
+    if (!current) return null;
+    const next = normalizeSupplier({ ...current, ...input, id: current.id, companyId, updatedAt: nowIso() });
+    debugCatalogLog("update_supplier:start", {
+        companyId,
+        path,
+        recordId: current.id,
+        payload: { name: next.name, slug: next.slug, status: next.status },
+    });
+    try {
+        const saved = await setSupplierToFirestore(companyId, next);
+        if (!saved) {
+            debugCatalogLog("update_supplier:db_unavailable", { companyId, path, recordId: current.id });
+            return null;
+        }
+    } catch (error) {
+        debugCatalogLog("update_supplier:failed", { companyId, path, recordId: current.id, error: toErrorMessage(error) });
+        return null;
+    }
+    upsertMemory(memory.suppliersByCompany, companyId, next);
+    debugCatalogLog("update_supplier:success", { companyId, path, recordId: next.id });
+    return next;
+}
+
+export async function deleteCatalogSupplier(supplierId: string, companyIdOverride?: string): Promise<boolean> {
+    const companyId = await resolveCompanyIdOrThrow(companyIdOverride, "deleteCatalogSupplier");
+    const path = catalogCollectionPath(companyId, "suppliers");
+    const target = safeText(supplierId, 120);
+    if (!target) return false;
+    debugCatalogLog("delete_supplier:start", { companyId, path, recordId: target });
+    try {
+        const deleted = await deleteSupplierInFirestore(companyId, target);
+        if (!deleted) {
+            debugCatalogLog("delete_supplier:db_unavailable", { companyId, path, recordId: target });
+            return false;
+        }
+    } catch (error) {
+        debugCatalogLog("delete_supplier:failed", { companyId, path, recordId: target, error: toErrorMessage(error) });
+        return false;
+    }
+    removeFromMemory(memory.suppliersByCompany, companyId, target);
+    debugCatalogLog("delete_supplier:success", { companyId, path, recordId: target });
+    return true;
+}
+
 export async function updateCatalogProductNameEntry(entryId: string, input: Partial<ProductNameEntryDoc>): Promise<ProductNameEntryDoc | null> {
     const scope = await resolveSessionScope();
     if (!scope) return null;
@@ -550,12 +777,11 @@ export async function deleteCatalogProductNameEntry(entryId: string): Promise<bo
     return true;
 }
 
-export async function getCatalogDimensionBundle(): Promise<DimensionPickerBundle> {
-    const [categories, brands, models, entries] = await Promise.all([
-        listCatalogCategories(),
+export async function getCatalogDimensionBundle(companyIdOverride?: string): Promise<DimensionPickerBundle> {
+    const [categories, brands, models] = await Promise.all([
+        listCatalogCategories("", companyIdOverride),
         listCatalogBrands(),
         listCatalogModels(),
-        listCatalogProductNameEntries(),
     ]);
 
     const toOption = (item: { id: string; name: string; slug: string; status: CatalogRecordStatus }) => ({
@@ -563,11 +789,25 @@ export async function getCatalogDimensionBundle(): Promise<DimensionPickerBundle
         name: item.name,
         slug: item.slug,
     });
+    const toBrandOption = (item: BrandDoc) => ({
+        id: item.id,
+        name: item.name,
+        slug: item.slug,
+        categoryNames: item.linkedCategoryNames ?? [],
+    });
+    const toModelOption = (item: ModelDoc) => ({
+        id: item.id,
+        name: item.name,
+        slug: item.slug,
+        brandId: item.brandId,
+        brandName: item.brandName,
+        categoryId: item.categoryId,
+        categoryName: item.categoryName,
+    });
 
     return {
         categories: categories.filter((item) => item.status === "active").map(toOption),
-        brands: brands.filter((item) => item.status === "active").map(toOption),
-        models: models.filter((item) => item.status === "active").map(toOption),
-        nameEntries: entries.filter((item) => item.status === "active").map(toOption),
+        brands: brands.filter((item) => item.status === "active").map(toBrandOption),
+        models: models.filter((item) => item.status === "active").map(toModelOption),
     };
 }

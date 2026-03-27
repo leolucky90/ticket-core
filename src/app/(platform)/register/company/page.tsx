@@ -4,17 +4,16 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { AuthClientBlock } from "@/components/auth/AuthClientBlock";
 import { AuthPageShell } from "@/components/auth/ui/AuthPageShell";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getCurrentSessionAccountContext } from "@/lib/services/staff.service";
 
 export default async function CompanyRegisterPage() {
     const session = await getSessionUser();
     if (session) {
-        const userDoc = await getUserDoc(session.uid);
-        const accountType = toAccountType(userDoc?.role ?? null);
-        if (accountType === "company") {
+        const accountContext = await getCurrentSessionAccountContext();
+        if (accountContext?.accountType === "company") {
             redirect("/dashboard");
         }
-        const tenantId = getShowcaseTenantId(userDoc, session.uid);
+        const tenantId = accountContext?.tenantId ?? null;
         if (tenantId) {
             redirect(`/${encodeURIComponent(tenantId)}/dashboard`);
         }
@@ -68,6 +67,10 @@ export default async function CompanyRegisterPage() {
                     <div className="pt-2 text-center text-xs text-[rgb(var(--muted))]">
                         <Link className="text-[rgb(var(--accent))] hover:underline" href="/login">
                             返回登入頁面
+                        </Link>
+                        <span className="px-1">·</span>
+                        <Link className="text-[rgb(var(--accent))] hover:underline" href="/forgot-password">
+                            忘記密碼
                         </Link>
                     </div>
                 </AuthShell>

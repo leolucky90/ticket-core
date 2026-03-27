@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { TenantShopPage } from "@/features/showcase/components/TenantShopPage";
 import { getShowcasePreferences } from "@/features/showcase/services/showcasePreferences.server";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getCurrentSessionAccountContext } from "@/lib/services/staff.service";
 import { listPublicProductsByTenant } from "@/lib/services/commerce";
 
 function normalizeTenantId(value: string): string | null {
@@ -30,10 +30,9 @@ export default async function TenantShopRoutePage({ params }: { params: Promise<
     let navAccountType: "guest" | "company" | "customer" = "guest";
     const sessionUser = await getSessionUser();
     if (sessionUser) {
-        const userDoc = await getUserDoc(sessionUser.uid);
-        const sessionTenantId = getShowcaseTenantId(userDoc, sessionUser.uid);
-        if (sessionTenantId === tenantId) {
-            navAccountType = toAccountType(userDoc?.role ?? null);
+        const accountContext = await getCurrentSessionAccountContext();
+        if (accountContext?.tenantId === tenantId) {
+            navAccountType = accountContext.accountType;
         }
     }
 

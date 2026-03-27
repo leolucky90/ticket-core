@@ -1,18 +1,39 @@
 import "server-only";
+import { FieldPath } from "firebase-admin/firestore";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
+import { createDeleteLog } from "@/lib/services/delete-log.service";
+import { syncUsedProductTypeSettings } from "@/lib/services/used-product-type-settings.service";
 import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import {
+    createCatalogBrand,
+    createCatalogCategory,
+    createCatalogModel,
+    createCatalogSupplier,
+    listCatalogBrands,
+    listCatalogCategories,
+    listCatalogModels,
+    listCatalogSuppliers,
+    updateCatalogBrand,
+    updateCatalogCategory,
+    updateCatalogModel,
+    updateCatalogSupplier,
+} from "@/lib/services/merchant/catalog-service";
+import type { CursorPageResult } from "@/lib/types/pagination";
 import type {
     Activity,
     ActivityItem,
     ActivityStatus,
     BossAdminCompanyRecord,
     CompanyCustomer,
+    CompanyCustomerListRow,
     CompanyDashboardStats,
+    CustomerCaseState,
     InventoryStockLog,
     Product,
     RepairBrand,
+    RepairBrandModelGroup,
     RevenuePoint,
 } from "@/lib/types/commerce";
 import { buildProductNameSuggestion, buildProductNormalizedName, buildProductSearchKeywords, normalizeAliasList, parseProductNamingMode } from "@/lib/services/productNaming";
@@ -20,6 +41,7 @@ import type { Sale } from "@/lib/types/sale";
 import type { Ticket } from "@/lib/types/ticket";
 import { listSales, queryCheckoutSales } from "@/lib/services/sales";
 import { listTickets } from "@/lib/services/ticket";
+import { normalizeSecuritySettings, securitySettingsDocPath, type SecuritySettings } from "@/lib/schema";
 
 const MAX_TEXT = 160;
 const MAX_LONG_TEXT = 800;
@@ -86,6 +108,21 @@ function toStr(value: unknown): string {
 
 function safeText(value: unknown, max = MAX_TEXT): string {
     return toStr(value).replace(/[\u0000-\u001F\u007F]/g, "").slice(0, max).trim();
+}
+
+function normalizeTextArray(values: unknown[], maxItems = 40, maxText = 80): string[] {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const value of values) {
+        const text = safeText(value, maxText);
+        if (!text) continue;
+        const key = text.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(text);
+        if (out.length >= maxItems) break;
+    }
+    return out;
 }
 
 function toNumber(value: unknown, fallback = 0): number {
@@ -303,19 +340,132 @@ function normalizeProduct(input: Partial<Product> & { id: string }): Product {
 
 function normalizeBrand(input: Partial<RepairBrand> & { id: string }): RepairBrand {
     const createdAt = toTimestamp(input.createdAt, now());
-    const rawModels = Array.isArray(input.models) ? input.models : [];
-    const models = rawModels
-        .map((model) => safeText(model, 80))
-        .filter((model) => model.length > 0)
-        .slice(0, 120);
+    const modelsByType = normalizeBrandModelGroups(input.modelsByType);
+    const linkedCategoryNames = normalizeTextArray(Array.isArray(input.linkedCategoryNames) ? input.linkedCategoryNames : [], 80, 120);
+    const productTypes = normalizeTextArray(
+        [...(Array.isArray(input.productTypes) ? input.productTypes : []), ...modelsByType.map((group) => group.typeName)],
+        40,
+        120,
+    );
+    const models = normalizeTextArray(
+        [...(Array.isArray(input.models) ? input.models : []), ...modelsByType.flatMap((group) => group.models)],
+        120,
+        80,
+    );
+    const usedProductTypes = normalizeTextArray(Array.isArray(input.usedProductTypes) ? input.usedProductTypes : [], 40, 120);
 
     return {
         id: safeText(input.id, 120) || id("brand"),
         name: safeText(input.name) || "未命名品牌",
+        linkedCategoryNames,
+        productTypes,
+        modelsByType,
         models,
+        usedProductTypes,
         createdAt,
         updatedAt: toTimestamp(input.updatedAt, createdAt),
     };
+}
+
+function normalizeBrandModelGroups(input: unknown): RepairBrandModelGroup[] {
+    if (!Array.isArray(input)) return [];
+
+    const groups: RepairBrandModelGroup[] = [];
+    for (const value of input) {
+        if (!value || typeof value !== "object") continue;
+        const candidate = value as Partial<RepairBrandModelGroup>;
+        const typeName = safeText(candidate.typeName, 120);
+        if (!typeName) continue;
+
+        const models = normalizeTextArray(Array.isArray(candidate.models) ? candidate.models : [], 120, 80);
+        const matchedIndex = groups.findIndex((group) => group.typeName.toLowerCase() === typeName.toLowerCase());
+        if (matchedIndex < 0) {
+            groups.push({ typeName, models });
+            continue;
+        }
+
+        groups[matchedIndex] = {
+            typeName: groups[matchedIndex].typeName,
+            models: normalizeTextArray([...groups[matchedIndex].models, ...models], 120, 80),
+        };
+    }
+
+    return groups;
+}
+
+function getRepairBrandTypeNames(brand: Pick<RepairBrand, "productTypes" | "modelsByType" | "usedProductTypes">): string[] {
+    return normalizeTextArray(
+        [...(Array.isArray(brand.productTypes) ? brand.productTypes : []), ...(brand.modelsByType ?? []).map((group) => group.typeName), ...(Array.isArray(brand.usedProductTypes) ? brand.usedProductTypes : [])],
+        40,
+        120,
+    );
+}
+
+function removeBrandModelsForType(groups: RepairBrandModelGroup[], typeName: string): RepairBrandModelGroup[] {
+    const requestedTypeName = safeText(typeName, 120);
+    if (!requestedTypeName) return normalizeBrandModelGroups(groups);
+    return normalizeBrandModelGroups(groups).filter((group) => group.typeName.toLowerCase() !== requestedTypeName.toLowerCase());
+}
+
+function renameBrandModelsForType(groups: RepairBrandModelGroup[], oldTypeName: string, nextTypeName: string): RepairBrandModelGroup[] {
+    const requestedOldTypeName = safeText(oldTypeName, 120);
+    const requestedNextTypeName = safeText(nextTypeName, 120);
+    if (!requestedOldTypeName || !requestedNextTypeName) return normalizeBrandModelGroups(groups);
+
+    const existingModels = getBrandModelsForType({ models: [], modelsByType: groups, productTypes: [], usedProductTypes: [] }, requestedOldTypeName);
+    const remainingGroups = removeBrandModelsForType(groups, requestedOldTypeName);
+    const mergedModels = normalizeTextArray(
+        [...getBrandModelsForType({ models: [], modelsByType: remainingGroups, productTypes: [], usedProductTypes: [] }, requestedNextTypeName), ...existingModels],
+        120,
+        80,
+    );
+
+    return replaceBrandModelsForType(remainingGroups, requestedNextTypeName, mergedModels);
+}
+
+function resolveBrandModelTypeName(brand: Pick<RepairBrand, "productTypes" | "modelsByType" | "usedProductTypes">, value: unknown): string {
+    const requestedTypeName = safeText(value, 120);
+    const brandTypeNames = getRepairBrandTypeNames(brand);
+    const matched = brandTypeNames.find((typeName) => typeName.toLowerCase() === requestedTypeName.toLowerCase());
+    if (matched) return matched;
+    if (!requestedTypeName && brandTypeNames.length === 1) return brandTypeNames[0];
+    return requestedTypeName;
+}
+
+function getBrandModelsForType(brand: Pick<RepairBrand, "models" | "modelsByType" | "productTypes" | "usedProductTypes">, typeName: string): string[] {
+    const requestedTypeName = safeText(typeName, 120);
+    const normalizedGroups = normalizeBrandModelGroups(brand.modelsByType);
+    if (!requestedTypeName) return normalizeTextArray(Array.isArray(brand.models) ? brand.models : [], 120, 80);
+
+    const matchedGroup = normalizedGroups.find((group) => group.typeName.toLowerCase() === requestedTypeName.toLowerCase()) ?? null;
+    if (matchedGroup) return matchedGroup.models;
+    if (normalizedGroups.length === 0) return normalizeTextArray(Array.isArray(brand.models) ? brand.models : [], 120, 80);
+
+    const brandTypeNames = getRepairBrandTypeNames(brand);
+    if (brandTypeNames.length <= 1) return normalizeTextArray(Array.isArray(brand.models) ? brand.models : [], 120, 80);
+    return [];
+}
+
+function replaceBrandModelsForType(groups: RepairBrandModelGroup[], typeName: string, nextModels: string[]): RepairBrandModelGroup[] {
+    const requestedTypeName = safeText(typeName, 120);
+    if (!requestedTypeName) return normalizeBrandModelGroups(groups);
+
+    const normalizedGroups = normalizeBrandModelGroups(groups);
+    const normalizedModels = normalizeTextArray(nextModels, 120, 80);
+    let matched = false;
+
+    const nextGroups = normalizedGroups.flatMap((group) => {
+        if (group.typeName.toLowerCase() !== requestedTypeName.toLowerCase()) return [group];
+        matched = true;
+        if (normalizedModels.length === 0) return [];
+        return [{ typeName: group.typeName, models: normalizedModels }];
+    });
+
+    if (!matched && normalizedModels.length > 0) {
+        nextGroups.push({ typeName: requestedTypeName, models: normalizedModels });
+    }
+
+    return nextGroups;
 }
 
 function normalizeCustomer(input: Partial<CompanyCustomer> & { id: string }): CompanyCustomer {
@@ -457,6 +607,20 @@ async function getFirestoreDb() {
     }
 }
 
+function isSoftDeletedRow(value: unknown): boolean {
+    if (!value || typeof value !== "object") return false;
+    const row = value as Record<string, unknown>;
+    if (row.isDeleted === true) return true;
+    return row.deleteStatus === "soft_deleted" || row.deleteStatus === "hard_deleted";
+}
+
+async function getDeleteSecuritySettings(companyId: string): Promise<SecuritySettings> {
+    const db = await getFirestoreDb();
+    if (!db) return normalizeSecuritySettings(null, "system");
+    const snap = await db.doc(securitySettingsDocPath(companyId)).get();
+    return normalizeSecuritySettings(snap.exists ? (snap.data() as Partial<SecuritySettings>) : null, "system");
+}
+
 function companyActivityRef(db: Awaited<ReturnType<typeof getFirestoreDb>>, companyId: string) {
     return db!.collection(`companies/${companyId}/campaigns`);
 }
@@ -471,6 +635,10 @@ function companyBrandRef(db: Awaited<ReturnType<typeof getFirestoreDb>>, company
 
 function companyCustomerRef(db: Awaited<ReturnType<typeof getFirestoreDb>>, companyId: string) {
     return db!.collection(`companies/${companyId}/customers`);
+}
+
+function companySalesRef(db: Awaited<ReturnType<typeof getFirestoreDb>>, companyId: string) {
+    return db!.collection(`companies/${companyId}/sales`);
 }
 
 function companyStockLogRef(db: Awaited<ReturnType<typeof getFirestoreDb>>, companyId: string) {
@@ -500,7 +668,10 @@ async function listActivitiesFromFirebase(companyId: string): Promise<Activity[]
     if (!db) return null;
 
     const snap = await companyActivityRef(db, companyId).orderBy("updatedAt", "desc").limit(MAX_LIST_SIZE).get();
-    return snap.docs.map((doc) => normalizeActivity({ id: doc.id, ...(doc.data() as Partial<Activity>) }));
+    return snap.docs
+        .map((doc) => ({ id: doc.id, ...(doc.data() as Partial<Activity>) }))
+        .filter((row) => !isSoftDeletedRow(row))
+        .map((row) => normalizeActivity(row));
 }
 
 async function listProductsFromFirebase(companyId: string): Promise<Product[] | null> {
@@ -508,7 +679,69 @@ async function listProductsFromFirebase(companyId: string): Promise<Product[] | 
     if (!db) return null;
 
     const snap = await companyProductRef(db, companyId).orderBy("updatedAt", "desc").limit(MAX_LIST_SIZE).get();
-    return snap.docs.map((doc) => normalizeProduct({ id: doc.id, ...(doc.data() as Partial<Product>) }));
+    return snap.docs
+        .map((doc) => ({ id: doc.id, ...(doc.data() as Partial<Product>) }))
+        .filter((row) => !isSoftDeletedRow(row))
+        .map((row) => normalizeProduct(row));
+}
+
+async function listProductsPageFromFirebase(companyId: string, params: ProductPageQuery): Promise<CursorPageResult<Product> | null> {
+    const db = await getFirestoreDb();
+    if (!db) return null;
+
+    const pageSize = normalizePageSize(params.pageSize, 20);
+    const batchSize = Math.max(pageSize * 3, 40);
+    const decodedCursor = decodeProductCursorValue(params.cursor);
+    const buildBaseQuery = () => {
+        let query = companyProductRef(db, companyId).orderBy("updatedAt", "desc").orderBy(FieldPath.documentId(), "desc");
+        if (params.status) query = query.where("status", "==", params.status);
+        if (params.categoryId) query = query.where("categoryId", "==", params.categoryId);
+        if (params.brandId) query = query.where("brandId", "==", params.brandId);
+        if (params.modelId) query = query.where("modelId", "==", params.modelId);
+        if (params.supplier) query = query.where("supplier", "==", params.supplier);
+        return query;
+    };
+
+    let query = buildBaseQuery();
+    if (decodedCursor) query = query.startAfter(decodedCursor.updatedAt, decodedCursor.id);
+
+    const items: Product[] = [];
+
+    for (let round = 0; round < 8; round += 1) {
+        const snap = await query.limit(batchSize).get();
+        if (snap.empty) break;
+
+        const docs = snap.docs;
+        let lastCursorInBatch: ProductCursor | null = null;
+
+        for (let index = 0; index < docs.length; index += 1) {
+            const doc = docs[index];
+            const product = normalizeProduct({ id: doc.id, ...(doc.data() as Partial<Product>) });
+            lastCursorInBatch = { updatedAt: product.updatedAt, id: product.id };
+            if (isSoftDeletedRow(product)) continue;
+            if (!matchesProductPageQuery(product, params)) continue;
+            items.push(product);
+            if (items.length >= pageSize) {
+                const hasNextPage = index < docs.length - 1 || docs.length === batchSize;
+                return {
+                    items,
+                    pageSize,
+                    nextCursor: hasNextPage ? encodeProductCursorValue(lastCursorInBatch) : "",
+                    hasNextPage,
+                };
+            }
+        }
+
+        if (!lastCursorInBatch || docs.length < batchSize) break;
+        query = buildBaseQuery().startAfter(lastCursorInBatch.updatedAt, lastCursorInBatch.id);
+    }
+
+    return {
+        items,
+        pageSize,
+        nextCursor: "",
+        hasNextPage: false,
+    };
 }
 
 async function listBrandsFromFirebase(companyId: string): Promise<RepairBrand[] | null> {
@@ -516,7 +749,10 @@ async function listBrandsFromFirebase(companyId: string): Promise<RepairBrand[] 
     if (!db) return null;
 
     const snap = await companyBrandRef(db, companyId).orderBy("updatedAt", "desc").limit(MAX_LIST_SIZE).get();
-    return snap.docs.map((doc) => normalizeBrand({ id: doc.id, ...(doc.data() as Partial<RepairBrand>) }));
+    return snap.docs
+        .map((doc) => ({ id: doc.id, ...(doc.data() as Partial<RepairBrand>) }))
+        .filter((row) => !isSoftDeletedRow(row))
+        .map((row) => normalizeBrand(row));
 }
 
 async function listCustomersFromFirebase(companyId: string): Promise<CompanyCustomer[] | null> {
@@ -524,7 +760,35 @@ async function listCustomersFromFirebase(companyId: string): Promise<CompanyCust
     if (!db) return null;
 
     const snap = await companyCustomerRef(db, companyId).orderBy("updatedAt", "desc").limit(MAX_LIST_SIZE).get();
-    return snap.docs.map((doc) => normalizeCustomer({ id: doc.id, ...(doc.data() as Partial<CompanyCustomer>) }));
+    return snap.docs
+        .map((doc) => ({ id: doc.id, ...(doc.data() as Partial<CompanyCustomer>) }))
+        .filter((row) => !isSoftDeletedRow(row))
+        .map((row) => normalizeCustomer(row));
+}
+
+function listProductsPageFromMemory(companyId: string, params: ProductPageQuery): CursorPageResult<Product> {
+    const pageSize = normalizePageSize(params.pageSize, 20);
+    const currentCursor = decodeProductCursorValue(params.cursor);
+    const ordered = listFromMemory(memory.productsByCompany, companyId)
+        .filter((item) => !isSoftDeletedRow(item))
+        .map((item) => normalizeProduct(item))
+        .sort((a, b) => (b.updatedAt === a.updatedAt ? b.id.localeCompare(a.id) : b.updatedAt - a.updatedAt))
+        .filter((product) => matchesProductPageQuery(product, params));
+    const startIndex = currentCursor
+        ? Math.max(
+              0,
+              ordered.findIndex((item) => item.updatedAt === currentCursor.updatedAt && item.id === currentCursor.id) + 1,
+          )
+        : 0;
+    const items = ordered.slice(startIndex, startIndex + pageSize);
+    const lastItem = items.at(-1);
+    const hasNextPage = startIndex + pageSize < ordered.length;
+    return {
+        items,
+        pageSize,
+        nextCursor: hasNextPage && lastItem ? encodeProductCursorValue({ updatedAt: lastItem.updatedAt, id: lastItem.id }) : "",
+        hasNextPage,
+    };
 }
 
 function normalizeInventoryStockLog(input: Partial<InventoryStockLog> & { id: string }): InventoryStockLog {
@@ -606,34 +870,216 @@ async function setCustomerToFirebase(companyId: string, customer: CompanyCustome
     return true;
 }
 
-async function deleteActivityInFirebase(companyId: string, activityId: string): Promise<boolean | null> {
-    const db = await getFirestoreDb();
-    if (!db) return null;
-
-    await companyActivityRef(db, companyId).doc(activityId).delete();
-    return true;
-}
-
-async function deleteProductInFirebase(companyId: string, productId: string): Promise<boolean | null> {
-    const db = await getFirestoreDb();
-    if (!db) return null;
-
-    await companyProductRef(db, companyId).doc(productId).delete();
-    return true;
-}
-
-async function deleteBrandInFirebase(companyId: string, brandId: string): Promise<boolean | null> {
-    const db = await getFirestoreDb();
-    if (!db) return null;
-
-    await companyBrandRef(db, companyId).doc(brandId).delete();
-    return true;
-}
-
 function queryByKeyword<T>(list: T[], keyword: string, resolver: (item: T) => string[]): T[] {
     const q = safeText(keyword, 120).toLowerCase();
     if (!q) return list;
     return list.filter((item) => resolver(item).join(" ").toLowerCase().includes(q));
+}
+
+function normalizePageSize(input: number | undefined, fallback = 20): number {
+    const value = Number(input);
+    if (!Number.isFinite(value)) return fallback;
+    if (value <= 10) return 10;
+    if (value <= 20) return 20;
+    if (value <= 50) return 50;
+    return 100;
+}
+
+function normalizeDashboardPageSize(input: number | undefined, fallback = 10): number {
+    const value = Number(input);
+    if (!Number.isFinite(value)) return fallback;
+    if (value <= 5) return 5;
+    if (value <= 10) return 10;
+    if (value <= 15) return 15;
+    return 20;
+}
+
+function encodeProductCursorValue(cursor: ProductCursor): string {
+    return Buffer.from(JSON.stringify(cursor)).toString("base64url");
+}
+
+function decodeProductCursorValue(value: string | undefined): ProductCursor | null {
+    const text = safeText(value ?? "", 240);
+    if (!text) return null;
+    try {
+        const parsed = JSON.parse(Buffer.from(text, "base64url").toString("utf8")) as Partial<ProductCursor>;
+        const updatedAt = Number(parsed.updatedAt);
+        const idValue = safeText(parsed.id, 120);
+        if (!Number.isFinite(updatedAt) || updatedAt <= 0 || !idValue) return null;
+        return { updatedAt: Math.round(updatedAt), id: idValue };
+    } catch {
+        return null;
+    }
+}
+
+function encodeCustomerCursorValue(cursor: CustomerCursor): string {
+    return Buffer.from(JSON.stringify(cursor)).toString("base64url");
+}
+
+function decodeCustomerCursorValue(value: string | undefined): CustomerCursor | null {
+    const text = safeText(value ?? "", 240);
+    if (!text) return null;
+    try {
+        const parsed = JSON.parse(Buffer.from(text, "base64url").toString("utf8")) as Partial<CustomerCursor>;
+        const idValue = safeText(parsed.id, 120);
+        const orderValue = typeof parsed.orderValue === "number" ? Math.round(parsed.orderValue) : safeText(parsed.orderValue, 240);
+        if (!idValue) return null;
+        if (typeof orderValue !== "number" && !orderValue) return null;
+        return { id: idValue, orderValue };
+    } catch {
+        return null;
+    }
+}
+
+function encodeActivityCursorValue(cursor: ActivityCursor): string {
+    return Buffer.from(JSON.stringify(cursor)).toString("base64url");
+}
+
+function decodeActivityCursorValue(value: string | undefined): ActivityCursor | null {
+    const text = safeText(value ?? "", 240);
+    if (!text) return null;
+    try {
+        const parsed = JSON.parse(Buffer.from(text, "base64url").toString("utf8")) as Partial<ActivityCursor>;
+        const idValue = safeText(parsed.id, 120);
+        const orderValue = Number(parsed.orderValue);
+        if (!idValue || !Number.isFinite(orderValue) || orderValue <= 0) return null;
+        return { id: idValue, orderValue: Math.round(orderValue) };
+    } catch {
+        return null;
+    }
+}
+
+function getCustomerPageSort(order?: CustomerListOrder): {
+    field: "updatedAt" | "createdAt" | "name";
+    direction: "asc" | "desc";
+    getValue: (customer: CompanyCustomer) => number | string;
+} {
+    if (order === "updated_earliest") return { field: "updatedAt", direction: "asc", getValue: (customer) => customer.updatedAt };
+    if (order === "created_latest") return { field: "createdAt", direction: "desc", getValue: (customer) => customer.createdAt };
+    if (order === "created_earliest") return { field: "createdAt", direction: "asc", getValue: (customer) => customer.createdAt };
+    if (order === "name_asc") return { field: "name", direction: "asc", getValue: (customer) => customer.name };
+    if (order === "name_desc") return { field: "name", direction: "desc", getValue: (customer) => customer.name };
+    return { field: "updatedAt", direction: "desc", getValue: (customer) => customer.updatedAt };
+}
+
+function getActivityPageSort(order?: ActivityListOrder): {
+    field: "updatedAt" | "startAt";
+    direction: "asc" | "desc";
+    getValue: (activity: Activity) => number;
+} {
+    if (order === "updated_earliest") return { field: "updatedAt", direction: "asc", getValue: (activity) => activity.updatedAt };
+    if (order === "start_latest") return { field: "startAt", direction: "desc", getValue: (activity) => activity.startAt };
+    if (order === "start_earliest") return { field: "startAt", direction: "asc", getValue: (activity) => activity.startAt };
+    return { field: "updatedAt", direction: "desc", getValue: (activity) => activity.updatedAt };
+}
+
+function matchesCustomerKeyword(customer: CompanyCustomer, keyword?: string): boolean {
+    const q = safeText(keyword ?? "", 120).toLowerCase();
+    if (!q) return true;
+    return [customer.name, customer.phone, customer.email, customer.address].join(" ").toLowerCase().includes(q);
+}
+
+function matchesCustomerCaseFilter(row: CompanyCustomerListRow, caseState?: CustomerCaseState | "all"): boolean {
+    if (!caseState || caseState === "all") return true;
+    return row.caseState === caseState;
+}
+
+function matchesActivityPageQuery(activity: Activity, params: ActivityPageQuery): boolean {
+    if (params.status && params.status !== "all" && activity.status !== params.status) return false;
+    const keyword = safeText(params.keyword ?? "", 120).toLowerCase();
+    if (!keyword) return true;
+    const haystack = [
+        activity.name,
+        activity.message,
+        activity.productName ?? "",
+        activity.categoryName ?? "",
+        ...activity.items.map((item) => item.itemName),
+    ]
+        .join(" ")
+        .toLowerCase();
+    return haystack.includes(keyword);
+}
+
+async function buildCustomerListRows(companyId: string, customers: CompanyCustomer[]): Promise<CompanyCustomerListRow[]> {
+    if (customers.length === 0) return [];
+    const ids = customers.map((customer) => customer.id).filter(Boolean);
+    const caseCounts = new Map<string, { open: number; closed: number }>();
+    const spendByCustomer = new Map<string, number>();
+    const db = await getFirestoreDb();
+
+    if (db) {
+        for (let index = 0; index < ids.length; index += 10) {
+            const batchIds = ids.slice(index, index + 10);
+            const [caseSnap, salesSnap] = await Promise.all([
+                db.collection(`companies/${companyId}/cases`).where("customerId", "in", batchIds).get(),
+                companySalesRef(db, companyId).where("customerId", "in", batchIds).get(),
+            ]);
+
+            for (const doc of caseSnap.docs) {
+                const raw = (doc.data() ?? {}) as Record<string, unknown>;
+                const customerId = safeText(raw.customerId, 120);
+                if (!customerId) continue;
+                const current = caseCounts.get(customerId) ?? { open: 0, closed: 0 };
+                const status = safeText(raw.status, 40);
+                if (status === "closed") current.closed += 1;
+                else current.open += 1;
+                caseCounts.set(customerId, current);
+            }
+
+            for (const doc of salesSnap.docs) {
+                const raw = (doc.data() ?? {}) as Record<string, unknown>;
+                const customerId = safeText(raw.customerId, 120);
+                if (!customerId) continue;
+                spendByCustomer.set(customerId, (spendByCustomer.get(customerId) ?? 0) + toMoney(raw.amount));
+            }
+        }
+    } else {
+        const [ticketList, salesList] = await Promise.all([listTickets(), listSales()]);
+        for (const ticket of ticketList) {
+            const customerId = safeText(ticket.customerId, 120);
+            if (!customerId || !ids.includes(customerId)) continue;
+            const current = caseCounts.get(customerId) ?? { open: 0, closed: 0 };
+            if (ticket.status === "closed") current.closed += 1;
+            else current.open += 1;
+            caseCounts.set(customerId, current);
+        }
+        for (const sale of salesList) {
+            const customerId = safeText(sale.customerId, 120);
+            if (!customerId || !ids.includes(customerId)) continue;
+            spendByCustomer.set(customerId, (spendByCustomer.get(customerId) ?? 0) + toMoney(sale.amount));
+        }
+    }
+
+    return customers.map((customer) => {
+        const counts = caseCounts.get(customer.id) ?? { open: 0, closed: 0 };
+        const totalCaseCount = counts.open + counts.closed;
+        const caseState: CustomerCaseState = totalCaseCount === 0 ? "no_case" : counts.open > 0 ? "active_case" : "closed_case";
+        return {
+            customer,
+            openCaseCount: counts.open,
+            closedCaseCount: counts.closed,
+            caseState,
+            activitySpend: spendByCustomer.get(customer.id) ?? 0,
+        };
+    });
+}
+
+function matchesProductPageQuery(product: Product, params: ProductPageQuery): boolean {
+    const keyword = safeText(params.keyword ?? "", 120).toLowerCase();
+    if (keyword) {
+        const haystack = buildProductSearchKeywords(product).join(" ").toLowerCase();
+        if (!haystack.includes(keyword)) return false;
+    }
+    if (params.supplier && product.supplier !== params.supplier) return false;
+    if (params.status && (product.status ?? "active") !== params.status) return false;
+    if (params.categoryId && (product.categoryId || "") !== params.categoryId) return false;
+    if (params.brandId && (product.brandId || "") !== params.brandId) return false;
+    if (params.modelId && (product.modelId || "") !== params.modelId) return false;
+    if (params.minStock !== null && params.minStock !== undefined && product.stock < params.minStock) return false;
+    if (params.maxStock !== null && params.maxStock !== undefined && product.stock > params.maxStock) return false;
+    if (params.minPrice !== null && params.minPrice !== undefined && product.price < params.minPrice) return false;
+    if (params.maxPrice !== null && params.maxPrice !== undefined && product.price > params.maxPrice) return false;
+    return true;
 }
 
 function getRedirectTab(formData: FormData, fallback: string): string {
@@ -641,8 +1087,62 @@ function getRedirectTab(formData: FormData, fallback: string): string {
     return tab || fallback;
 }
 
+function parseBrandTypeNames(formData: FormData): string[] {
+    return normalizeTextArray(formData.getAll("brandTypeNames"), 40, 120);
+}
+
+function parseUsedProductTypeNames(formData: FormData): string[] {
+    return normalizeTextArray(formData.getAll("usedProductTypeNames"), 40, 120);
+}
+
+function parseBrandCategoryNames(formData: FormData): string[] {
+    return normalizeTextArray(formData.getAll("brandCategoryNames"), 80, 120);
+}
+
 type InventoryView = "stock" | "settings" | "stock-in" | "stock-out" | "product-management";
-type ProductRedirectPath = "" | "/dashboard/products";
+type ProductRedirectPath = string;
+type ProductCursor = {
+    updatedAt: number;
+    id: string;
+};
+type CustomerListOrder = "updated_latest" | "updated_earliest" | "created_latest" | "created_earliest" | "name_asc" | "name_desc";
+type CustomerCursor = {
+    orderValue: number | string;
+    id: string;
+};
+type CustomerPageQuery = {
+    keyword?: string;
+    caseState?: CustomerCaseState | "all";
+    order?: CustomerListOrder;
+    pageSize?: number;
+    cursor?: string;
+};
+type ActivityListOrder = "updated_latest" | "updated_earliest" | "start_latest" | "start_earliest";
+type ActivityCursor = {
+    orderValue: number;
+    id: string;
+};
+type ActivityPageQuery = {
+    keyword?: string;
+    status?: Activity["status"] | "all";
+    order?: ActivityListOrder;
+    pageSize?: number;
+    cursor?: string;
+};
+type ProductPageQuery = {
+    keyword?: string;
+    supplier?: string;
+    categoryId?: string;
+    brandId?: string;
+    modelId?: string;
+    status?: string;
+    minStock?: number | null;
+    maxStock?: number | null;
+    minPrice?: number | null;
+    maxPrice?: number | null;
+    pageSize?: number;
+    cursor?: string;
+};
 
 function getRedirectInventoryView(formData: FormData, fallback: InventoryView = "stock"): InventoryView {
     const raw = safeText(formData.get("inventoryView"), 40);
@@ -655,8 +1155,80 @@ function getRedirectInventoryView(formData: FormData, fallback: InventoryView = 
 }
 
 function getProductRedirectPath(formData: FormData): ProductRedirectPath {
-    const raw = safeText(formData.get("redirectPath"), 120);
-    return raw === "/dashboard/products" ? "/dashboard/products" : "";
+    const raw = safeText(formData.get("redirectPath"), 400);
+    if (!raw.startsWith("/dashboard/products")) return "";
+    if (raw.includes("://")) return "";
+    return raw;
+}
+
+function catalogCategoryCollectionPath(companyId: string): string {
+    return `companies/${companyId}/categories`;
+}
+
+function catalogSupplierCollectionPath(companyId: string): string {
+    return `companies/${companyId}/suppliers`;
+}
+
+function toErrorMessage(error: unknown): string {
+    if (error instanceof Error && error.message) return error.message;
+    return String(error);
+}
+
+function toRawString(value: unknown): string {
+    return typeof value === "string" ? value : "";
+}
+
+async function verifyEmailPassword(email: string, password: string): Promise<boolean> {
+    const accountEmail = safeText(email, 160).toLowerCase();
+    const apiKey = safeText(process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? "", 200);
+    if (!accountEmail || !password || !apiKey) return false;
+    const endpoint = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(apiKey)}`;
+    try {
+        const res = await fetch(endpoint, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+                email: accountEmail,
+                password,
+                returnSecureToken: false,
+            }),
+            cache: "no-store",
+        });
+        return res.ok;
+    } catch {
+        return false;
+    }
+}
+
+async function enforceDeletePassword(
+    formData: FormData,
+    scope: SessionScope,
+    tab: string,
+    options?: { inventoryView?: InventoryView; redirectPath?: ProductRedirectPath },
+): Promise<{ reason: string; settings: SecuritySettings }> {
+    const settings = await getDeleteSecuritySettings(scope.companyId);
+    const reason = safeText(formData.get("deleteReason"), MAX_LONG_TEXT);
+    if (settings.requireReasonOnDelete && !reason) {
+        dashboardRedirect(tab, "delete_reason_required", options);
+    }
+
+    const password = toRawString(formData.get("confirmPassword"));
+    const shouldVerifyPassword = !settings.deleteButtonEnabled && settings.requirePasswordWhenDeleteDisabled;
+    if (shouldVerifyPassword) {
+        if (!password) {
+            dashboardRedirect(tab, "delete_auth_required", options);
+        }
+        const verified = await verifyEmailPassword(scope.operatorEmail, password);
+        if (!verified) {
+            dashboardRedirect(tab, "delete_auth_failed", options);
+        }
+    }
+    return { reason, settings };
+}
+
+function debugMarketingAction(event: string, payload: Record<string, unknown>) {
+    if (process.env.NODE_ENV === "production") return;
+    console.info(`[commerce:marketing] ${event}`, payload);
 }
 
 function dashboardRedirect(tab: string, flash: string, options?: { inventoryView?: InventoryView; redirectPath?: ProductRedirectPath }): never {
@@ -795,28 +1367,25 @@ type ProductFormFields = {
 };
 
 function readProductFormFields(formData: FormData): ProductFormFields {
-    const namingMode = parseProductNamingMode(formData.get("namingMode"));
     const categoryRef = parseDimensionRef(formData.get("categoryRef"));
     const brandRef = parseDimensionRef(formData.get("brandRef"));
     const modelRef = parseDimensionRef(formData.get("modelRef"));
-    const nameEntryRef = parseDimensionRef(formData.get("nameEntryRef"));
     const categoryId = categoryRef.id || safeText(formData.get("categoryId"), 120);
     const categoryName = categoryRef.name || safeText(formData.get("categoryName"));
     const brandId = brandRef.id || safeText(formData.get("brandId"), 120);
     const brandName = brandRef.name || safeText(formData.get("brandName"));
     const modelId = modelRef.id || safeText(formData.get("modelId"), 120);
     const modelName = modelRef.name || safeText(formData.get("modelName"));
-    const nameEntryId = nameEntryRef.id || safeText(formData.get("nameEntryId"), 120);
-    const nameEntryName = nameEntryRef.name || safeText(formData.get("nameEntryName"));
-    const customLabel = safeText(formData.get("customLabel"));
-    const aliases = normalizeAliasList([...formData.getAll("aliases[]"), formData.get("aliases"), formData.get("aliasText")]);
+    const namingMode: Product["namingMode"] = categoryName || brandName || modelName ? "structured" : "custom";
+    const nameEntryId = "";
+    const nameEntryName = "";
+    const customLabel = "";
+    const aliases: string[] = [];
     const suggestedName = buildProductNameSuggestion({
         namingMode,
         categoryName,
         brandName,
         modelName,
-        nameEntryName,
-        customLabel,
     });
     const name = safeText(formData.get("name")) || suggestedName;
 
@@ -925,11 +1494,105 @@ export async function listActivities(keyword = ""): Promise<Activity[]> {
     }
 
     const normalized = list
+        .filter((item) => !isSoftDeletedRow(item))
         .map((item) => normalizeActivity(item))
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .slice(0, MAX_LIST_SIZE);
 
     return queryByKeyword(normalized, keyword, (item) => [item.name, item.message, item.items.map((card) => card.itemName).join(" ")]);
+}
+
+export async function queryActivitiesPage(params: ActivityPageQuery = {}): Promise<CursorPageResult<Activity>> {
+    const scope = await resolveSessionScope(true);
+    const pageSize = normalizeDashboardPageSize(params.pageSize, 10);
+    if (!scope) {
+        return {
+            items: [],
+            pageSize,
+            nextCursor: "",
+            hasNextPage: false,
+        };
+    }
+
+    const sort = getActivityPageSort(params.order);
+    const decodedCursor = decodeActivityCursorValue(params.cursor);
+    const db = await getFirestoreDb();
+
+    if (db) {
+        const batchSize = Math.max(pageSize * 3, 30);
+        const buildBaseQuery = () => {
+            let query = companyActivityRef(db, scope.companyId).orderBy(sort.field, sort.direction).orderBy(FieldPath.documentId(), sort.direction);
+            if (params.status && params.status !== "all") query = query.where("status", "==", params.status);
+            return query;
+        };
+
+        let query = buildBaseQuery();
+        if (decodedCursor) query = query.startAfter(decodedCursor.orderValue, decodedCursor.id);
+        const items: Activity[] = [];
+
+        for (let round = 0; round < 8; round += 1) {
+            const snap = await query.limit(batchSize).get();
+            if (snap.empty) break;
+
+            const docs = snap.docs;
+            let lastCursorInBatch: ActivityCursor | null = null;
+
+            for (let index = 0; index < docs.length; index += 1) {
+                const doc = docs[index];
+                const raw = (doc.data() ?? {}) as Partial<Activity>;
+                if (isSoftDeletedRow(raw)) continue;
+                const activity = normalizeActivity({ id: doc.id, ...raw });
+                lastCursorInBatch = { orderValue: sort.getValue(activity), id: activity.id };
+                if (!matchesActivityPageQuery(activity, params)) continue;
+                items.push(activity);
+                if (items.length >= pageSize) {
+                    const hasNextPage = index < docs.length - 1 || docs.length === batchSize;
+                    return {
+                        items,
+                        pageSize,
+                        nextCursor: hasNextPage && lastCursorInBatch ? encodeActivityCursorValue(lastCursorInBatch) : "",
+                        hasNextPage,
+                    };
+                }
+            }
+
+            if (!lastCursorInBatch || docs.length < batchSize) break;
+            query = buildBaseQuery().startAfter(lastCursorInBatch.orderValue, lastCursorInBatch.id);
+        }
+
+        return {
+            items,
+            pageSize,
+            nextCursor: "",
+            hasNextPage: false,
+        };
+    }
+
+    const ordered = listFromMemory(memory.activitiesByCompany, scope.companyId)
+        .filter((item) => !isSoftDeletedRow(item))
+        .map((item) => normalizeActivity(item))
+        .filter((activity) => matchesActivityPageQuery(activity, params))
+        .sort((left, right) => {
+            const leftValue = sort.getValue(left);
+            const rightValue = sort.getValue(right);
+            if (leftValue === rightValue) return sort.direction === "desc" ? right.id.localeCompare(left.id) : left.id.localeCompare(right.id);
+            return sort.direction === "desc" ? Number(rightValue) - Number(leftValue) : Number(leftValue) - Number(rightValue);
+        });
+    const startIndex = decodedCursor
+        ? Math.max(
+              0,
+              ordered.findIndex((item) => item.id === decodedCursor.id) + 1,
+          )
+        : 0;
+    const items = ordered.slice(startIndex, startIndex + pageSize);
+    const lastItem = items.at(-1);
+    const hasNextPage = startIndex + pageSize < ordered.length;
+    return {
+        items,
+        pageSize,
+        nextCursor: hasNextPage && lastItem ? encodeActivityCursorValue({ orderValue: sort.getValue(lastItem), id: lastItem.id }) : "",
+        hasNextPage,
+    };
 }
 
 export async function listProducts(keyword = ""): Promise<Product[]> {
@@ -951,11 +1614,136 @@ export async function listProducts(keyword = ""): Promise<Product[]> {
     }
 
     const normalized = list
+        .filter((item) => !isSoftDeletedRow(item))
         .map((item) => normalizeProduct(item))
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .slice(0, MAX_LIST_SIZE);
 
     return queryByKeyword(normalized, keyword, (item) => buildProductSearchKeywords(item));
+}
+
+export async function queryProductsPage(params: ProductPageQuery = {}): Promise<CursorPageResult<Product>> {
+    const scope = await resolveSessionScope(true);
+    if (!scope) {
+        return {
+            items: [],
+            pageSize: normalizePageSize(params.pageSize, 20),
+            nextCursor: "",
+            hasNextPage: false,
+        };
+    }
+
+    try {
+        const firebasePage = await listProductsPageFromFirebase(scope.companyId, params);
+        if (firebasePage) return firebasePage;
+    } catch {
+        // fallback to memory
+    }
+
+    return listProductsPageFromMemory(scope.companyId, params);
+}
+
+export async function queryCompanyCustomersPage(params: CustomerPageQuery = {}): Promise<CursorPageResult<CompanyCustomerListRow>> {
+    const scope = await resolveSessionScope(true);
+    const pageSize = normalizeDashboardPageSize(params.pageSize, 10);
+    if (!scope) {
+        return {
+            items: [],
+            pageSize,
+            nextCursor: "",
+            hasNextPage: false,
+        };
+    }
+
+    const sort = getCustomerPageSort(params.order);
+    const decodedCursor = decodeCustomerCursorValue(params.cursor);
+    const db = await getFirestoreDb();
+
+    if (db) {
+        const batchSize = Math.max(pageSize * 3, 30);
+        const buildBaseQuery = () => companyCustomerRef(db, scope.companyId).orderBy(sort.field, sort.direction).orderBy(FieldPath.documentId(), sort.direction);
+        let query = buildBaseQuery();
+        if (decodedCursor) query = query.startAfter(decodedCursor.orderValue, decodedCursor.id);
+        const items: CompanyCustomerListRow[] = [];
+
+        for (let round = 0; round < 8; round += 1) {
+            const snap = await query.limit(batchSize).get();
+            if (snap.empty) break;
+
+            const docs = snap.docs;
+            let lastCursorInBatch: CustomerCursor | null = null;
+            const batchCustomers: CompanyCustomer[] = [];
+
+            for (const doc of docs) {
+                const raw = (doc.data() ?? {}) as Partial<CompanyCustomer>;
+                if (isSoftDeletedRow(raw)) continue;
+                const customer = normalizeCustomer({ id: doc.id, ...raw });
+                lastCursorInBatch = { orderValue: sort.getValue(customer), id: customer.id };
+                if (!matchesCustomerKeyword(customer, params.keyword)) continue;
+                batchCustomers.push(customer);
+            }
+
+            const enrichedRows = await buildCustomerListRows(scope.companyId, batchCustomers);
+            for (const row of enrichedRows) {
+                if (!matchesCustomerCaseFilter(row, params.caseState)) continue;
+                items.push(row);
+                if (items.length >= pageSize) {
+                    const hasNextPage = docs.length === batchSize;
+                    return {
+                        items,
+                        pageSize,
+                        nextCursor: hasNextPage && lastCursorInBatch ? encodeCustomerCursorValue(lastCursorInBatch) : "",
+                        hasNextPage,
+                    };
+                }
+            }
+
+            if (!lastCursorInBatch || docs.length < batchSize) break;
+            query = buildBaseQuery().startAfter(lastCursorInBatch.orderValue, lastCursorInBatch.id);
+        }
+
+        return {
+            items,
+            pageSize,
+            nextCursor: "",
+            hasNextPage: false,
+        };
+    }
+
+    const allCustomers = listFromMemory(memory.customersByCompany, scope.companyId)
+        .filter((item) => !isSoftDeletedRow(item))
+        .map((item) => normalizeCustomer(item))
+        .filter((customer) => matchesCustomerKeyword(customer, params.keyword))
+        .sort((left, right) => {
+            const leftValue = sort.getValue(left);
+            const rightValue = sort.getValue(right);
+            if (leftValue === rightValue) return sort.direction === "desc" ? right.id.localeCompare(left.id) : left.id.localeCompare(right.id);
+            if (typeof leftValue === "string" || typeof rightValue === "string") {
+                return sort.direction === "desc"
+                    ? String(rightValue).localeCompare(String(leftValue), "zh-Hant")
+                    : String(leftValue).localeCompare(String(rightValue), "zh-Hant");
+            }
+            return sort.direction === "desc" ? Number(rightValue) - Number(leftValue) : Number(leftValue) - Number(rightValue);
+        });
+    const enrichedRows = (await buildCustomerListRows(scope.companyId, allCustomers)).filter((row) => matchesCustomerCaseFilter(row, params.caseState));
+    const startIndex = decodedCursor
+        ? Math.max(
+              0,
+              enrichedRows.findIndex((row) => row.customer.id === decodedCursor.id) + 1,
+          )
+        : 0;
+    const items = enrichedRows.slice(startIndex, startIndex + pageSize);
+    const lastItem = items.at(-1);
+    const hasNextPage = startIndex + pageSize < enrichedRows.length;
+    return {
+        items,
+        pageSize,
+        nextCursor:
+            hasNextPage && lastItem
+                ? encodeCustomerCursorValue({ orderValue: sort.getValue(lastItem.customer), id: lastItem.customer.id })
+                : "",
+        hasNextPage,
+    };
 }
 
 export async function listInventoryStockLogs(keyword = ""): Promise<InventoryStockLog[]> {
@@ -996,6 +1784,133 @@ export async function listRepairBrands(keyword = ""): Promise<RepairBrand[]> {
     const scope = await resolveSessionScope(true);
     if (!scope) return [];
 
+    const catalogBrands = await listCatalogBrands();
+    const catalogModels = await listCatalogModels();
+    if (catalogBrands.length > 0 || catalogModels.length > 0) {
+        let existingBrandMappings: RepairBrand[] = [];
+        try {
+            const firebaseList = await listBrandsFromFirebase(scope.companyId);
+            if (firebaseList) {
+                existingBrandMappings = firebaseList;
+                replaceMemoryList(memory.brandsByCompany, scope.companyId, firebaseList);
+            } else {
+                existingBrandMappings = listFromMemory(memory.brandsByCompany, scope.companyId);
+            }
+        } catch {
+            existingBrandMappings = listFromMemory(memory.brandsByCompany, scope.companyId);
+        }
+        const usedTypeByBrandId = new Map<string, string[]>();
+        const usedTypeByBrandName = new Map<string, string[]>();
+        const productTypeByBrandId = new Map<string, string[]>();
+        const productTypeByBrandName = new Map<string, string[]>();
+        const linkedCategoryByBrandId = new Map<string, string[]>();
+        const linkedCategoryByBrandName = new Map<string, string[]>();
+        for (const row of existingBrandMappings) {
+            const mappedProductTypes = getRepairBrandTypeNames(row);
+            if (mappedProductTypes.length > 0) {
+                productTypeByBrandId.set(row.id, mappedProductTypes);
+                productTypeByBrandName.set(row.name.trim().toLowerCase(), mappedProductTypes);
+            }
+            const mappedCategories = normalizeTextArray(row.linkedCategoryNames ?? [], 80, 120);
+            if (mappedCategories.length > 0) {
+                linkedCategoryByBrandId.set(row.id, mappedCategories);
+                linkedCategoryByBrandName.set(row.name.trim().toLowerCase(), mappedCategories);
+            }
+            const mapped = normalizeTextArray(row.usedProductTypes ?? [], 40, 120);
+            if (mapped.length === 0) continue;
+            usedTypeByBrandId.set(row.id, mapped);
+            usedTypeByBrandName.set(row.name.trim().toLowerCase(), mapped);
+        }
+
+        const byId = new Map<string, RepairBrand>();
+        const byName = new Map<string, RepairBrand>();
+
+        for (const item of catalogBrands) {
+            if (item.status !== "active") continue;
+            const catalogProductTypes = normalizeTextArray(item.productTypes ?? [], 40, 120);
+            const catalogMappedTypes = normalizeTextArray(item.usedProductTypes ?? [], 40, 120);
+            const catalogLinkedCategories = normalizeTextArray(item.linkedCategoryNames ?? [], 80, 120);
+            const existingMapping =
+                existingBrandMappings.find((row) => row.id === item.id) ??
+                existingBrandMappings.find((row) => row.name.trim().toLowerCase() === item.name.trim().toLowerCase()) ??
+                null;
+            const mappedCategories =
+                catalogLinkedCategories.length > 0
+                    ? catalogLinkedCategories
+                    : linkedCategoryByBrandId.get(item.id) ??
+                      linkedCategoryByBrandName.get(item.name.trim().toLowerCase()) ??
+                      [];
+            const mappedProductTypes =
+                catalogProductTypes.length > 0
+                    ? catalogProductTypes
+                    : productTypeByBrandId.get(item.id) ??
+                      productTypeByBrandName.get(item.name.trim().toLowerCase()) ??
+                      [];
+            const mappedTypes =
+                catalogMappedTypes.length > 0
+                    ? catalogMappedTypes
+                    : usedTypeByBrandId.get(item.id) ??
+                      usedTypeByBrandName.get(item.name.trim().toLowerCase()) ??
+                      [];
+            const brand = normalizeBrand({
+                id: item.id,
+                name: item.name,
+                linkedCategoryNames: mappedCategories,
+                productTypes: mappedProductTypes,
+                models: existingMapping?.models ?? [],
+                modelsByType: existingMapping?.modelsByType ?? [],
+                usedProductTypes: mappedTypes,
+                createdAt: toTimestamp(item.createdAt, now()),
+                updatedAt: toTimestamp(item.updatedAt, now()),
+            });
+            byId.set(brand.id, brand);
+            byName.set(brand.name.toLowerCase(), brand);
+        }
+
+        for (const model of catalogModels) {
+            if (model.status !== "active") continue;
+            const modelName = safeText(model.name, 80);
+            if (!modelName) continue;
+            const owner =
+                (model.brandId ? byId.get(model.brandId) : null) ??
+                (model.brandName ? byName.get(model.brandName.toLowerCase()) : null) ??
+                null;
+            if (!owner) continue;
+            if (!owner.models.some((row) => row.toLowerCase() === modelName.toLowerCase())) {
+                owner.models = [...owner.models, modelName];
+            }
+            const inferredTypeName = safeText(model.categoryName, 120) || (owner.usedProductTypes.length === 1 ? owner.usedProductTypes[0] : "");
+            if (inferredTypeName) {
+                owner.modelsByType = replaceBrandModelsForType(owner.modelsByType, inferredTypeName, [...getBrandModelsForType(owner, inferredTypeName), modelName]);
+            }
+            owner.updatedAt = Math.max(owner.updatedAt, toTimestamp(model.updatedAt, owner.updatedAt));
+        }
+
+        const normalized = [...byId.values()]
+            .map((item) =>
+                normalizeBrand({
+                    ...item,
+                    models: [...item.models].sort((a, b) => a.localeCompare(b, "zh-Hant")),
+                    modelsByType: item.modelsByType
+                        .map((group) => ({
+                            typeName: group.typeName,
+                            models: [...group.models].sort((a, b) => a.localeCompare(b, "zh-Hant")),
+                        }))
+                        .sort((a, b) => a.typeName.localeCompare(b.typeName, "zh-Hant")),
+                }),
+            )
+            .sort((a, b) => b.updatedAt - a.updatedAt)
+            .slice(0, MAX_LIST_SIZE);
+
+        return queryByKeyword(normalized, keyword, (item) => [
+            item.name,
+            item.models.join(" "),
+            item.linkedCategoryNames.join(" "),
+            item.productTypes.join(" "),
+            item.usedProductTypes.join(" "),
+        ]);
+    }
+
     let list: RepairBrand[] = [];
 
     try {
@@ -1011,11 +1926,18 @@ export async function listRepairBrands(keyword = ""): Promise<RepairBrand[]> {
     }
 
     const normalized = list
+        .filter((item) => !isSoftDeletedRow(item))
         .map((item) => normalizeBrand(item))
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .slice(0, MAX_LIST_SIZE);
 
-    return queryByKeyword(normalized, keyword, (item) => [item.name, item.models.join(" ")]);
+    return queryByKeyword(normalized, keyword, (item) => [
+        item.name,
+        item.models.join(" "),
+        item.linkedCategoryNames.join(" "),
+        item.productTypes.join(" "),
+        item.usedProductTypes.join(" "),
+    ]);
 }
 
 export async function listCompanyCustomers(keyword = ""): Promise<CompanyCustomer[]> {
@@ -1029,6 +1951,7 @@ export async function listCompanyCustomers(keyword = ""): Promise<CompanyCustome
         }
         if (firebaseCustomers && firebaseCustomers.length > 0) {
             const normalized = firebaseCustomers
+                .filter((item) => !isSoftDeletedRow(item))
                 .map((item) => normalizeCustomer(item))
                 .sort((a, b) => b.updatedAt - a.updatedAt)
                 .slice(0, MAX_LIST_SIZE);
@@ -1039,6 +1962,7 @@ export async function listCompanyCustomers(keyword = ""): Promise<CompanyCustome
     }
 
     const memoryCustomers = listFromMemory(memory.customersByCompany, scope.companyId)
+        .filter((item) => !isSoftDeletedRow(item))
         .map((item) => normalizeCustomer(item))
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .slice(0, MAX_LIST_SIZE);
@@ -1382,13 +2306,45 @@ export async function deleteActivity(formData: FormData): Promise<void> {
 
     const activityId = safeText(formData.get("activityId"), 120);
     if (!activityId) dashboardRedirect(tab, "invalid");
+    const current = (await listActivities()).find((item) => item.id === activityId);
+    if (!current) dashboardRedirect(tab, "invalid");
+    const deleteGuard = await enforceDeletePassword(formData, scope, tab);
 
     try {
-        const deleted = await deleteActivityInFirebase(scope.companyId, activityId);
-        if (deleted === null) removeFromMemory(memory.activitiesByCompany, scope.companyId, activityId);
+        const db = await getFirestoreDb();
+        if (db) {
+            await companyActivityRef(db, scope.companyId)
+                .doc(activityId)
+                .set(
+                    {
+                        isDeleted: true,
+                        deleteStatus: "soft_deleted",
+                        deletedAt: new Date().toISOString(),
+                        deletedBy: scope.uid,
+                        deletedReason: deleteGuard.reason || undefined,
+                        updatedAt: now(),
+                    },
+                    { merge: true },
+                );
+        } else {
+            removeFromMemory(memory.activitiesByCompany, scope.companyId, activityId);
+        }
     } catch {
         removeFromMemory(memory.activitiesByCompany, scope.companyId, activityId);
     }
+
+    await createDeleteLog({
+        module: "campaigns",
+        targetId: current.id,
+        targetType: "activity",
+        targetLabel: current.name,
+        snapshot: current as unknown as Record<string, unknown>,
+        deleteReason: deleteGuard.reason,
+        deletedBy: scope.uid,
+        deletedByName: scope.operatorName,
+        canRestore: deleteGuard.settings.restoreEnabled,
+        canHardDelete: !deleteGuard.settings.softDeleteOnly && deleteGuard.settings.hardDeleteEnabled,
+    });
 
     revalidatePath("/dashboard");
     dashboardRedirect(tab, "activity_deleted");
@@ -1516,13 +2472,45 @@ export async function deleteProduct(formData: FormData): Promise<void> {
 
     const productId = safeText(formData.get("productId"), 120);
     if (!productId) dashboardRedirect(tab, "invalid", { inventoryView, redirectPath });
+    const current = (await listProducts()).find((product) => product.id === productId);
+    if (!current) dashboardRedirect(tab, "invalid", { inventoryView, redirectPath });
+    const deleteGuard = await enforceDeletePassword(formData, scope, tab, { inventoryView, redirectPath });
 
     try {
-        const deleted = await deleteProductInFirebase(scope.companyId, productId);
-        if (deleted === null) removeFromMemory(memory.productsByCompany, scope.companyId, productId);
+        const db = await getFirestoreDb();
+        if (db) {
+            await companyProductRef(db, scope.companyId)
+                .doc(productId)
+                .set(
+                    {
+                        isDeleted: true,
+                        deleteStatus: "soft_deleted",
+                        deletedAt: new Date().toISOString(),
+                        deletedBy: scope.uid,
+                        deletedReason: deleteGuard.reason || undefined,
+                        updatedAt: now(),
+                    },
+                    { merge: true },
+                );
+        } else {
+            removeFromMemory(memory.productsByCompany, scope.companyId, productId);
+        }
     } catch {
         removeFromMemory(memory.productsByCompany, scope.companyId, productId);
     }
+
+    await createDeleteLog({
+        module: "products",
+        targetId: current.id,
+        targetType: "product",
+        targetLabel: current.name,
+        snapshot: current as unknown as Record<string, unknown>,
+        deleteReason: deleteGuard.reason,
+        deletedBy: scope.uid,
+        deletedByName: scope.operatorName,
+        canRestore: deleteGuard.settings.restoreEnabled,
+        canHardDelete: !deleteGuard.settings.softDeleteOnly && deleteGuard.settings.hardDeleteEnabled,
+    });
 
     revalidatePath("/dashboard");
     revalidatePath("/dashboard/products");
@@ -1653,13 +2641,40 @@ export async function createRepairBrand(formData: FormData): Promise<void> {
     if (!scope) dashboardRedirect(tab, "invalid");
 
     const name = safeText(formData.get("brandName"));
+    const linkedCategoryNames = parseBrandCategoryNames(formData);
+    const productTypes = parseBrandTypeNames(formData);
+    const usedProductTypes = parseUsedProductTypeNames(formData).filter((typeName) =>
+        productTypes.some((row) => row.toLowerCase() === typeName.toLowerCase()),
+    );
     if (!name) dashboardRedirect(tab, "invalid");
+
+    const existingCatalogBrand = (await listCatalogBrands()).find((item) => item.name.toLowerCase() === name.toLowerCase());
+    if (!existingCatalogBrand) {
+        await createCatalogBrand({
+            name,
+            linkedCategoryNames,
+            productTypes,
+            usedProductTypes,
+            status: "active",
+        });
+    } else if (linkedCategoryNames.length > 0 || productTypes.length > 0 || usedProductTypes.length > 0) {
+        await updateCatalogBrand(existingCatalogBrand.id, {
+            linkedCategoryNames,
+            productTypes,
+            usedProductTypes,
+            status: "active",
+        });
+    }
 
     const ts = now();
     const brand = normalizeBrand({
         id: id("brand"),
         name,
+        linkedCategoryNames,
+        productTypes,
+        modelsByType: [],
         models: [],
+        usedProductTypes,
         createdAt: ts,
         updatedAt: ts,
     });
@@ -1671,7 +2686,11 @@ export async function createRepairBrand(formData: FormData): Promise<void> {
         upsertMemory(memory.brandsByCompany, scope.companyId, brand);
     }
 
+    const nextBrandList = [...(await listRepairBrands()), brand];
+    await syncUsedProductTypeSettings(nextBrandList.flatMap((row) => row.usedProductTypes ?? []));
+
     revalidatePath("/dashboard");
+    revalidatePath("/dashboard/products");
     dashboardRedirect(tab, "brand_created");
 }
 
@@ -1684,15 +2703,39 @@ export async function updateRepairBrand(formData: FormData): Promise<void> {
 
     const brandId = safeText(formData.get("brandId"), 120);
     const name = safeText(formData.get("brandName"));
+    const brandTypesMode = safeText(formData.get("brandTypesMode"), 40);
+    const requestedCategoryNames = parseBrandCategoryNames(formData);
+    const requestedTypes = normalizeTextArray(
+        [...parseBrandTypeNames(formData), safeText(formData.get("newBrandTypeName"), 120)],
+        40,
+        120,
+    );
+    const requestedUsedTypes = parseUsedProductTypeNames(formData).filter((typeName) =>
+        requestedTypes.some((row) => row.toLowerCase() === typeName.toLowerCase()),
+    );
     if (!brandId || !name) dashboardRedirect(tab, "invalid");
 
     const current = (await listRepairBrands()).find((brand) => brand.id === brandId);
     if (!current) dashboardRedirect(tab, "invalid");
+    const nextLinkedCategoryNames = requestedCategoryNames;
+    const nextProductTypes = brandTypesMode === "sync" ? requestedTypes : current.productTypes;
+    const nextUsedTypes = brandTypesMode === "sync" ? requestedUsedTypes : current.usedProductTypes;
+
+    await updateCatalogBrand(brandId, {
+        name,
+        linkedCategoryNames: nextLinkedCategoryNames,
+        productTypes: nextProductTypes,
+        usedProductTypes: nextUsedTypes,
+        status: "active",
+    });
 
     const next = normalizeBrand({
         ...current,
         id: brandId,
         name,
+        linkedCategoryNames: nextLinkedCategoryNames,
+        productTypes: nextProductTypes,
+        usedProductTypes: nextUsedTypes,
         updatedAt: now(),
     });
 
@@ -1703,8 +2746,144 @@ export async function updateRepairBrand(formData: FormData): Promise<void> {
         upsertMemory(memory.brandsByCompany, scope.companyId, next);
     }
 
+    const nextBrandList = [...(await listRepairBrands()).filter((brand) => brand.id !== brandId), next];
+    await syncUsedProductTypeSettings(nextBrandList.flatMap((brand) => brand.usedProductTypes ?? []));
+
     revalidatePath("/dashboard");
+    revalidatePath("/dashboard/products");
     dashboardRedirect(tab, "brand_updated");
+}
+
+export async function renameRepairBrandType(formData: FormData): Promise<void> {
+    "use server";
+
+    const scope = await resolveSessionScope(true);
+    const tab = getRedirectTab(formData, "marketing");
+    if (!scope) dashboardRedirect(tab, "invalid");
+
+    const brandId = safeText(formData.get("brandId"), 120);
+    const oldTypeName = safeText(formData.get("oldTypeName"), 120);
+    const nextTypeName = safeText(formData.get("nextTypeName"), 120);
+    if (!brandId || !oldTypeName || !nextTypeName) dashboardRedirect(tab, "invalid");
+
+    const current = (await listRepairBrands()).find((brand) => brand.id === brandId);
+    if (!current) dashboardRedirect(tab, "invalid");
+
+    const nextProductTypes = normalizeTextArray(
+        current.productTypes.map((typeName) => (typeName.toLowerCase() === oldTypeName.toLowerCase() ? nextTypeName : typeName)),
+        40,
+        120,
+    );
+    const nextUsedTypes = normalizeTextArray(
+        current.usedProductTypes.map((typeName) => (typeName.toLowerCase() === oldTypeName.toLowerCase() ? nextTypeName : typeName)),
+        40,
+        120,
+    );
+    const nextModelsByType = renameBrandModelsForType(current.modelsByType, oldTypeName, nextTypeName);
+    const renamedModels = getBrandModelsForType(current, oldTypeName);
+
+    await updateCatalogBrand(brandId, {
+        name: current.name,
+        linkedCategoryNames: current.linkedCategoryNames,
+        productTypes: nextProductTypes,
+        usedProductTypes: nextUsedTypes,
+        status: "active",
+    });
+
+    await Promise.all(
+        (await listCatalogModels())
+            .filter((item) => item.brandId === brandId && renamedModels.some((modelName) => modelName.toLowerCase() === item.name.toLowerCase()))
+            .map((item) =>
+                updateCatalogModel(item.id, {
+                    brandId,
+                    brandName: current.name,
+                    categoryName: nextTypeName,
+                    status: "active",
+                }),
+            ),
+    );
+
+    const next = normalizeBrand({
+        ...current,
+        id: brandId,
+        productTypes: nextProductTypes,
+        modelsByType: nextModelsByType,
+        usedProductTypes: nextUsedTypes,
+        updatedAt: now(),
+    });
+
+    try {
+        const saved = await setBrandToFirebase(scope.companyId, next);
+        if (!saved) upsertMemory(memory.brandsByCompany, scope.companyId, next);
+    } catch {
+        upsertMemory(memory.brandsByCompany, scope.companyId, next);
+    }
+
+    const nextBrandList = [...(await listRepairBrands()).filter((brand) => brand.id !== brandId), next];
+    await syncUsedProductTypeSettings(nextBrandList.flatMap((brand) => brand.usedProductTypes ?? []));
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/products");
+    dashboardRedirect(tab, "brand_type_updated");
+}
+
+export async function deleteRepairBrandType(formData: FormData): Promise<void> {
+    "use server";
+
+    const scope = await resolveSessionScope(true);
+    const tab = getRedirectTab(formData, "marketing");
+    if (!scope) dashboardRedirect(tab, "invalid");
+
+    const brandId = safeText(formData.get("brandId"), 120);
+    const oldTypeName = safeText(formData.get("oldTypeName"), 120);
+    if (!brandId || !oldTypeName) dashboardRedirect(tab, "invalid");
+
+    const current = (await listRepairBrands()).find((brand) => brand.id === brandId);
+    if (!current) dashboardRedirect(tab, "invalid");
+
+    const removedModels = getBrandModelsForType(current, oldTypeName);
+    const nextProductTypes = current.productTypes.filter((typeName) => typeName.toLowerCase() !== oldTypeName.toLowerCase());
+    const nextUsedTypes = current.usedProductTypes.filter((typeName) => typeName.toLowerCase() !== oldTypeName.toLowerCase());
+    const nextModelsByType = removeBrandModelsForType(current.modelsByType, oldTypeName);
+    const nextModels = current.models.filter((modelName) => !removedModels.some((row) => row.toLowerCase() === modelName.toLowerCase()));
+
+    await updateCatalogBrand(brandId, {
+        name: current.name,
+        linkedCategoryNames: current.linkedCategoryNames,
+        productTypes: nextProductTypes,
+        usedProductTypes: nextUsedTypes,
+        status: "active",
+    });
+
+    await Promise.all(
+        (await listCatalogModels())
+            .filter((item) => item.brandId === brandId && removedModels.some((modelName) => modelName.toLowerCase() === item.name.toLowerCase()))
+            .map((item) => updateCatalogModel(item.id, { status: "inactive" })),
+    );
+
+    const next = normalizeBrand({
+        ...current,
+        id: brandId,
+        productTypes: nextProductTypes,
+        modelsByType: nextModelsByType,
+        models: nextModels,
+        usedProductTypes: nextUsedTypes,
+        updatedAt: now(),
+    });
+
+    try {
+        const saved = await setBrandToFirebase(scope.companyId, next);
+        if (!saved) upsertMemory(memory.brandsByCompany, scope.companyId, next);
+    } catch {
+        upsertMemory(memory.brandsByCompany, scope.companyId, next);
+    }
+
+    const nextBrandList = [...(await listRepairBrands()).filter((brand) => brand.id !== brandId), next];
+    await syncUsedProductTypeSettings(nextBrandList.flatMap((brand) => brand.usedProductTypes ?? []));
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/products");
+    dashboardRedirect(tab, "brand_type_deleted");
 }
 
 export async function deleteRepairBrand(formData: FormData): Promise<void> {
@@ -1716,15 +2895,59 @@ export async function deleteRepairBrand(formData: FormData): Promise<void> {
 
     const brandId = safeText(formData.get("brandId"), 120);
     if (!brandId) dashboardRedirect(tab, "invalid");
+    const current = (await listRepairBrands()).find((brand) => brand.id === brandId);
+    if (!current) dashboardRedirect(tab, "invalid");
+    const deleteGuard = await enforceDeletePassword(formData, scope, tab);
+
+    await updateCatalogBrand(brandId, { status: "inactive" });
+    const catalogModels = await listCatalogModels();
+    await Promise.all(
+        catalogModels
+            .filter((item) => item.brandId === brandId)
+            .map((item) => updateCatalogModel(item.id, { status: "inactive" })),
+    );
 
     try {
-        const deleted = await deleteBrandInFirebase(scope.companyId, brandId);
-        if (deleted === null) removeFromMemory(memory.brandsByCompany, scope.companyId, brandId);
+        const db = await getFirestoreDb();
+        if (db) {
+            await companyBrandRef(db, scope.companyId)
+                .doc(brandId)
+                .set(
+                    {
+                        isDeleted: true,
+                        deleteStatus: "soft_deleted",
+                        deletedAt: new Date().toISOString(),
+                        deletedBy: scope.uid,
+                        deletedReason: deleteGuard.reason || undefined,
+                        updatedAt: now(),
+                    },
+                    { merge: true },
+                );
+        } else {
+            removeFromMemory(memory.brandsByCompany, scope.companyId, brandId);
+        }
     } catch {
         removeFromMemory(memory.brandsByCompany, scope.companyId, brandId);
     }
 
+    const remainingBrands = (await listRepairBrands()).filter((brand) => brand.id !== brandId);
+    await syncUsedProductTypeSettings(remainingBrands.flatMap((brand) => brand.usedProductTypes ?? []));
+
+    await createDeleteLog({
+        module: "settings",
+        targetId: current.id,
+        targetType: "repair_brand",
+        targetLabel: current.name,
+        snapshot: current as unknown as Record<string, unknown>,
+        deleteReason: deleteGuard.reason,
+        deletedBy: scope.uid,
+        deletedByName: scope.operatorName,
+        canRestore: deleteGuard.settings.restoreEnabled,
+        canHardDelete: !deleteGuard.settings.softDeleteOnly && deleteGuard.settings.hardDeleteEnabled,
+    });
+
     revalidatePath("/dashboard");
+    revalidatePath("/dashboard/products");
     dashboardRedirect(tab, "brand_deleted");
 }
 
@@ -1737,14 +2960,41 @@ export async function createRepairModel(formData: FormData): Promise<void> {
 
     const brandId = safeText(formData.get("brandId"), 120);
     const modelName = safeText(formData.get("modelName"), 80);
+    const modelTypeNameInput = safeText(formData.get("modelTypeName"), 120);
     if (!brandId || !modelName) dashboardRedirect(tab, "invalid");
 
     const current = (await listRepairBrands()).find((brand) => brand.id === brandId);
     if (!current) dashboardRedirect(tab, "invalid");
+    const modelTypeName = resolveBrandModelTypeName(current, modelTypeNameInput);
+
+    const existingCatalogModel = (await listCatalogModels()).find(
+        (item) => item.brandId === brandId && item.name.toLowerCase() === modelName.toLowerCase(),
+    );
+    if (!existingCatalogModel) {
+        await createCatalogModel({
+            name: modelName,
+            brandId,
+            brandName: current.name,
+            categoryName: modelTypeName || undefined,
+            status: "active",
+            isUniversal: false,
+        });
+    } else if (modelTypeName) {
+        await updateCatalogModel(existingCatalogModel.id, {
+            brandId,
+            brandName: current.name,
+            categoryName: modelTypeName,
+            status: "active",
+        });
+    }
 
     const exists = current.models.some((item) => item.toLowerCase() === modelName.toLowerCase());
+    const currentTypeModels = getBrandModelsForType(current, modelTypeName);
     const next = normalizeBrand({
         ...current,
+        modelsByType: modelTypeName
+            ? replaceBrandModelsForType(current.modelsByType, modelTypeName, exists ? currentTypeModels : [...currentTypeModels, modelName])
+            : current.modelsByType,
         models: exists ? current.models : [...current.models, modelName],
         updatedAt: now(),
     });
@@ -1757,6 +3007,7 @@ export async function createRepairModel(formData: FormData): Promise<void> {
     }
 
     revalidatePath("/dashboard");
+    revalidatePath("/dashboard/products");
     dashboardRedirect(tab, "model_created");
 }
 
@@ -1770,14 +3021,37 @@ export async function updateRepairModel(formData: FormData): Promise<void> {
     const brandId = safeText(formData.get("brandId"), 120);
     const oldModel = safeText(formData.get("oldModel"), 80);
     const modelName = safeText(formData.get("modelName"), 80);
+    const modelTypeNameInput = safeText(formData.get("modelTypeName"), 120);
     if (!brandId || !oldModel || !modelName) dashboardRedirect(tab, "invalid");
 
     const current = (await listRepairBrands()).find((brand) => brand.id === brandId);
     if (!current) dashboardRedirect(tab, "invalid");
+    const modelTypeName = resolveBrandModelTypeName(current, modelTypeNameInput);
+
+    const targetCatalogModels = (await listCatalogModels()).filter(
+        (item) =>
+            item.brandId === brandId &&
+            item.name.toLowerCase() === oldModel.toLowerCase() &&
+            (!modelTypeName || !safeText(item.categoryName, 120) || safeText(item.categoryName, 120).toLowerCase() === modelTypeName.toLowerCase()),
+    );
+    await Promise.all(
+        targetCatalogModels.map((item) =>
+            updateCatalogModel(item.id, {
+                name: modelName,
+                brandId,
+                brandName: current.name,
+                categoryName: modelTypeName || undefined,
+                status: "active",
+            }),
+        ),
+    );
 
     const nextModels = current.models.map((item) => (item === oldModel ? modelName : item));
+    const currentTypeModels = getBrandModelsForType(current, modelTypeName);
+    const nextTypeModels = currentTypeModels.map((item) => (item === oldModel ? modelName : item));
     const next = normalizeBrand({
         ...current,
+        modelsByType: modelTypeName ? replaceBrandModelsForType(current.modelsByType, modelTypeName, nextTypeModels) : current.modelsByType,
         models: nextModels,
         updatedAt: now(),
     });
@@ -1790,6 +3064,7 @@ export async function updateRepairModel(formData: FormData): Promise<void> {
     }
 
     revalidatePath("/dashboard");
+    revalidatePath("/dashboard/products");
     dashboardRedirect(tab, "model_updated");
 }
 
@@ -1802,13 +3077,32 @@ export async function deleteRepairModel(formData: FormData): Promise<void> {
 
     const brandId = safeText(formData.get("brandId"), 120);
     const modelName = safeText(formData.get("modelName"), 80);
+    const modelTypeNameInput = safeText(formData.get("modelTypeName"), 120);
     if (!brandId || !modelName) dashboardRedirect(tab, "invalid");
+    const deleteGuard = await enforceDeletePassword(formData, scope, tab);
 
     const current = (await listRepairBrands()).find((brand) => brand.id === brandId);
     if (!current) dashboardRedirect(tab, "invalid");
+    const modelTypeName = resolveBrandModelTypeName(current, modelTypeNameInput);
 
+    const targetCatalogModels = (await listCatalogModels()).filter(
+        (item) =>
+            item.brandId === brandId &&
+            item.name.toLowerCase() === modelName.toLowerCase() &&
+            (!modelTypeName || !safeText(item.categoryName, 120) || safeText(item.categoryName, 120).toLowerCase() === modelTypeName.toLowerCase()),
+    );
+    await Promise.all(targetCatalogModels.map((item) => updateCatalogModel(item.id, { status: "inactive" })));
+
+    const currentTypeModels = getBrandModelsForType(current, modelTypeName);
     const next = normalizeBrand({
         ...current,
+        modelsByType: modelTypeName
+            ? replaceBrandModelsForType(
+                  current.modelsByType,
+                  modelTypeName,
+                  currentTypeModels.filter((item) => item !== modelName),
+              )
+            : current.modelsByType,
         models: current.models.filter((item) => item !== modelName),
         updatedAt: now(),
     });
@@ -1820,8 +3114,372 @@ export async function deleteRepairModel(formData: FormData): Promise<void> {
         upsertMemory(memory.brandsByCompany, scope.companyId, next);
     }
 
+    await createDeleteLog({
+        module: "settings",
+        targetId: `${brandId}:${modelName}`,
+        targetType: "repair_model",
+        targetLabel: `${current.name} / ${modelName}`,
+        snapshot: { brandId, brandName: current.name, modelName },
+        deleteReason: deleteGuard.reason,
+        deletedBy: scope.uid,
+        deletedByName: scope.operatorName,
+        canRestore: deleteGuard.settings.restoreEnabled,
+        canHardDelete: !deleteGuard.settings.softDeleteOnly && deleteGuard.settings.hardDeleteEnabled,
+    });
+
     revalidatePath("/dashboard");
+    revalidatePath("/dashboard/products");
     dashboardRedirect(tab, "model_deleted");
+}
+
+export async function createProductCategory(formData: FormData): Promise<void> {
+    "use server";
+
+    const scope = await resolveSessionScope(true);
+    const tab = getRedirectTab(formData, "marketing");
+    if (!scope) dashboardRedirect(tab, "invalid");
+
+    const categoryName = safeText(formData.get("categoryName"));
+    if (!categoryName) dashboardRedirect(tab, "invalid");
+
+    const companyId = scope.companyId;
+    const path = catalogCategoryCollectionPath(companyId);
+    debugMarketingAction("create_category:start", {
+        companyId,
+        path,
+        payload: { name: categoryName, status: "active" },
+    });
+
+    try {
+        let categoryList: Awaited<ReturnType<typeof listCatalogCategories>> = [];
+        try {
+            categoryList = await listCatalogCategories("", companyId);
+        } catch (listError) {
+            debugMarketingAction("create_category:list_failed", {
+                companyId,
+                path,
+                error: toErrorMessage(listError),
+            });
+        }
+        debugMarketingAction("create_category:before_fetch", {
+            companyId,
+            path,
+            fetchedCount: categoryList.length,
+        });
+
+        const existingCategory = categoryList.find((item) => item.name.toLowerCase() === categoryName.toLowerCase());
+        let writeResultId = "";
+
+        if (!existingCategory) {
+            const createdCategory = await createCatalogCategory(
+                {
+                    name: categoryName,
+                    status: "active",
+                },
+                companyId,
+            );
+            if (!createdCategory?.id) throw new Error("Category write failed: missing created record id");
+            writeResultId = createdCategory.id;
+        } else if (existingCategory.status !== "active") {
+            const updatedCategory = await updateCatalogCategory(
+                existingCategory.id,
+                {
+                    name: categoryName,
+                    status: "active",
+                },
+                companyId,
+            );
+            if (!updatedCategory?.id) throw new Error("Category write failed: missing updated record id");
+            writeResultId = updatedCategory.id;
+        } else {
+            debugMarketingAction("create_category:duplicate_active", {
+                companyId,
+                path,
+                existingId: existingCategory.id,
+            });
+            throw new Error("duplicate_active_category");
+        }
+
+        debugMarketingAction("create_category:write_success", {
+            companyId,
+            path,
+            writeResultId,
+        });
+        try {
+            const refreshedCategoryList = await listCatalogCategories("", companyId);
+            debugMarketingAction("create_category:after_fetch", {
+                companyId,
+                path,
+                fetchedCount: refreshedCategoryList.length,
+            });
+        } catch (refreshError) {
+            debugMarketingAction("create_category:after_fetch_failed", {
+                companyId,
+                path,
+                error: toErrorMessage(refreshError),
+            });
+        }
+    } catch (error) {
+        const message = toErrorMessage(error);
+        debugMarketingAction("create_category:failed", {
+            companyId,
+            path,
+            error: message,
+        });
+        if (message === "duplicate_active_category") dashboardRedirect(tab, "invalid");
+        dashboardRedirect(tab, "error");
+    }
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/products");
+    dashboardRedirect(tab, "category_created");
+}
+
+export async function createProductSupplier(formData: FormData): Promise<void> {
+    "use server";
+
+    const scope = await resolveSessionScope(true);
+    const tab = getRedirectTab(formData, "marketing");
+    if (!scope) dashboardRedirect(tab, "invalid");
+
+    const supplierName = safeText(formData.get("supplierName"));
+    if (!supplierName) dashboardRedirect(tab, "invalid");
+
+    const companyId = scope.companyId;
+    const path = catalogSupplierCollectionPath(companyId);
+    debugMarketingAction("create_supplier:start", {
+        companyId,
+        path,
+        payload: { name: supplierName, status: "active" },
+    });
+
+    try {
+        let supplierList: Awaited<ReturnType<typeof listCatalogSuppliers>> = [];
+        try {
+            supplierList = await listCatalogSuppliers("", companyId);
+        } catch (listError) {
+            debugMarketingAction("create_supplier:list_failed", {
+                companyId,
+                path,
+                error: toErrorMessage(listError),
+            });
+        }
+        debugMarketingAction("create_supplier:before_fetch", {
+            companyId,
+            path,
+            fetchedCount: supplierList.length,
+        });
+
+        const existingSupplier = supplierList.find((item) => item.name.toLowerCase() === supplierName.toLowerCase());
+        let writeResultId = "";
+
+        if (!existingSupplier) {
+            const createdSupplier = await createCatalogSupplier(
+                {
+                    name: supplierName,
+                    status: "active",
+                },
+                companyId,
+            );
+            if (!createdSupplier?.id) throw new Error("Supplier write failed: missing created record id");
+            writeResultId = createdSupplier.id;
+        } else if (existingSupplier.status !== "active") {
+            const updatedSupplier = await updateCatalogSupplier(
+                existingSupplier.id,
+                {
+                    name: supplierName,
+                    status: "active",
+                },
+                companyId,
+            );
+            if (!updatedSupplier?.id) throw new Error("Supplier write failed: missing updated record id");
+            writeResultId = updatedSupplier.id;
+        } else {
+            debugMarketingAction("create_supplier:duplicate_active", {
+                companyId,
+                path,
+                existingId: existingSupplier.id,
+            });
+            throw new Error("duplicate_active_supplier");
+        }
+
+        debugMarketingAction("create_supplier:write_success", {
+            companyId,
+            path,
+            writeResultId,
+        });
+        try {
+            const refreshedSupplierList = await listCatalogSuppliers("", companyId);
+            debugMarketingAction("create_supplier:after_fetch", {
+                companyId,
+                path,
+                fetchedCount: refreshedSupplierList.length,
+            });
+        } catch (refreshError) {
+            debugMarketingAction("create_supplier:after_fetch_failed", {
+                companyId,
+                path,
+                error: toErrorMessage(refreshError),
+            });
+        }
+    } catch (error) {
+        const message = toErrorMessage(error);
+        debugMarketingAction("create_supplier:failed", {
+            companyId,
+            path,
+            error: message,
+        });
+        if (message === "duplicate_active_supplier") dashboardRedirect(tab, "invalid");
+        dashboardRedirect(tab, "error");
+    }
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/products");
+    dashboardRedirect(tab, "supplier_created");
+}
+
+export async function updateProductCategory(formData: FormData): Promise<void> {
+    "use server";
+
+    const scope = await resolveSessionScope(true);
+    const tab = getRedirectTab(formData, "marketing");
+    if (!scope) dashboardRedirect(tab, "invalid");
+
+    const categoryId = safeText(formData.get("categoryId"), 120);
+    const categoryName = safeText(formData.get("categoryName"));
+    if (!categoryId || !categoryName) dashboardRedirect(tab, "invalid");
+
+    const companyId = scope.companyId;
+    const categoryList = await listCatalogCategories("", companyId);
+    const duplicated = categoryList.some((item) => item.id !== categoryId && item.name.toLowerCase() === categoryName.toLowerCase() && item.status === "active");
+    if (duplicated) dashboardRedirect(tab, "invalid");
+
+    const updated = await updateCatalogCategory(
+        categoryId,
+        {
+            name: categoryName,
+            status: "active",
+        },
+        companyId,
+    );
+    if (!updated?.id) dashboardRedirect(tab, "error");
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/products");
+    dashboardRedirect(tab, "category_updated");
+}
+
+export async function deleteProductCategory(formData: FormData): Promise<void> {
+    "use server";
+
+    const scope = await resolveSessionScope(true);
+    const tab = getRedirectTab(formData, "marketing");
+    if (!scope) dashboardRedirect(tab, "invalid");
+
+    const categoryId = safeText(formData.get("categoryId"), 120);
+    if (!categoryId) dashboardRedirect(tab, "invalid");
+    const deleteGuard = await enforceDeletePassword(formData, scope, tab);
+    const categories = await listCatalogCategories("", scope.companyId);
+    const target = categories.find((item) => item.id === categoryId);
+    if (!target) dashboardRedirect(tab, "invalid");
+
+    const updated = await updateCatalogCategory(
+        categoryId,
+        {
+            status: "inactive",
+        },
+        scope.companyId,
+    );
+    if (!updated) dashboardRedirect(tab, "error");
+
+    await createDeleteLog({
+        module: "settings",
+        targetId: target.id,
+        targetType: "product_category",
+        targetLabel: target.name,
+        snapshot: target as unknown as Record<string, unknown>,
+        deleteReason: deleteGuard.reason,
+        deletedBy: scope.uid,
+        deletedByName: scope.operatorName,
+        canRestore: deleteGuard.settings.restoreEnabled,
+        canHardDelete: !deleteGuard.settings.softDeleteOnly && deleteGuard.settings.hardDeleteEnabled,
+    });
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/products");
+    dashboardRedirect(tab, "category_deleted");
+}
+
+export async function updateProductSupplier(formData: FormData): Promise<void> {
+    "use server";
+
+    const scope = await resolveSessionScope(true);
+    const tab = getRedirectTab(formData, "marketing");
+    if (!scope) dashboardRedirect(tab, "invalid");
+
+    const supplierId = safeText(formData.get("supplierId"), 120);
+    const supplierName = safeText(formData.get("supplierName"));
+    if (!supplierId || !supplierName) dashboardRedirect(tab, "invalid");
+
+    const companyId = scope.companyId;
+    const supplierList = await listCatalogSuppliers("", companyId);
+    const duplicated = supplierList.some((item) => item.id !== supplierId && item.name.toLowerCase() === supplierName.toLowerCase() && item.status === "active");
+    if (duplicated) dashboardRedirect(tab, "invalid");
+
+    const updated = await updateCatalogSupplier(
+        supplierId,
+        {
+            name: supplierName,
+            status: "active",
+        },
+        companyId,
+    );
+    if (!updated?.id) dashboardRedirect(tab, "error");
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/products");
+    dashboardRedirect(tab, "supplier_updated");
+}
+
+export async function deleteProductSupplier(formData: FormData): Promise<void> {
+    "use server";
+
+    const scope = await resolveSessionScope(true);
+    const tab = getRedirectTab(formData, "marketing");
+    if (!scope) dashboardRedirect(tab, "invalid");
+
+    const supplierId = safeText(formData.get("supplierId"), 120);
+    if (!supplierId) dashboardRedirect(tab, "invalid");
+    const deleteGuard = await enforceDeletePassword(formData, scope, tab);
+    const suppliers = await listCatalogSuppliers("", scope.companyId);
+    const target = suppliers.find((item) => item.id === supplierId);
+    if (!target) dashboardRedirect(tab, "invalid");
+
+    const updated = await updateCatalogSupplier(
+        supplierId,
+        {
+            status: "inactive",
+        },
+        scope.companyId,
+    );
+    if (!updated) dashboardRedirect(tab, "error");
+
+    await createDeleteLog({
+        module: "settings",
+        targetId: target.id,
+        targetType: "product_supplier",
+        targetLabel: target.name,
+        snapshot: target as unknown as Record<string, unknown>,
+        deleteReason: deleteGuard.reason,
+        deletedBy: scope.uid,
+        deletedByName: scope.operatorName,
+        canRestore: deleteGuard.settings.restoreEnabled,
+        canHardDelete: !deleteGuard.settings.softDeleteOnly && deleteGuard.settings.hardDeleteEnabled,
+    });
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/products");
+    dashboardRedirect(tab, "supplier_deleted");
 }
 
 export async function getDashboardBundle(params?: {
@@ -1832,6 +3490,7 @@ export async function getDashboardBundle(params?: {
     activityKeyword?: string;
     productKeyword?: string;
     brandKeyword?: string;
+    scope?: "full" | "inventory" | "marketing" | "basic";
 }) {
     const scope = await resolveSessionScope(true);
     if (!scope) {
@@ -1849,33 +3508,41 @@ export async function getDashboardBundle(params?: {
         };
     }
 
+    const scopeMode =
+        params?.scope === "inventory" || params?.scope === "marketing" || params?.scope === "basic" ? params.scope : "full";
+    const needsFullRelations = scopeMode === "full";
+    const needsInventoryData = scopeMode === "full" || scopeMode === "inventory";
+    const needsMarketingData = scopeMode === "full" || scopeMode === "marketing";
+
     const [sales, tickets, customers, activities, products, brands, purchases, stockLogs] = await Promise.all([
-        listSales(),
-        listTickets(),
-        listCompanyCustomers(params?.customerKeyword ?? ""),
-        listActivities(params?.activityKeyword ?? ""),
-        listProducts(params?.productKeyword ?? ""),
-        listRepairBrands(params?.brandKeyword ?? ""),
-        listActivityPurchases(),
-        listInventoryStockLogs(params?.productKeyword ?? ""),
+        needsFullRelations ? listSales() : Promise.resolve([] as Sale[]),
+        needsFullRelations ? listTickets() : Promise.resolve([] as Ticket[]),
+        needsFullRelations ? listCompanyCustomers(params?.customerKeyword ?? "") : Promise.resolve([] as CompanyCustomer[]),
+        needsFullRelations ? listActivities(params?.activityKeyword ?? "") : Promise.resolve([] as Activity[]),
+        needsInventoryData ? listProducts(params?.productKeyword ?? "") : Promise.resolve([] as Product[]),
+        needsMarketingData ? listRepairBrands(params?.brandKeyword ?? "") : Promise.resolve([] as RepairBrand[]),
+        needsFullRelations ? listActivityPurchases() : Promise.resolve([] as Awaited<ReturnType<typeof listActivityPurchases>>),
+        needsInventoryData ? listInventoryStockLogs(params?.productKeyword ?? "") : Promise.resolve([] as InventoryStockLog[]),
     ]);
 
     const caseStatus = safeText(params?.caseStatus);
     const caseOrder = params?.caseOrder === "earliest" ? "earliest" : "latest";
     const caseKeyword = safeText(params?.caseKeyword);
 
-    const filteredTickets = queryByKeyword(tickets, caseKeyword, (ticket) => [
-        ticket.customer.name,
-        ticket.customer.phone,
-        ticket.device.name,
-        ticket.device.model,
-        ticket.id,
-    ])
-        .filter((ticket) => {
-            if (!caseStatus || caseStatus === "all") return true;
-            return ticket.status === caseStatus;
-        })
-        .sort((a, b) => (caseOrder === "latest" ? b.updatedAt - a.updatedAt : a.updatedAt - b.updatedAt));
+    const filteredTickets = needsFullRelations
+        ? queryByKeyword(tickets, caseKeyword, (ticket) => [
+              ticket.customer.name,
+              ticket.customer.phone,
+              ticket.device.name,
+              ticket.device.model,
+              ticket.id,
+          ])
+              .filter((ticket) => {
+                  if (!caseStatus || caseStatus === "all") return true;
+                  return ticket.status === caseStatus;
+              })
+              .sort((a, b) => (caseOrder === "latest" ? b.updatedAt - a.updatedAt : a.updatedAt - b.updatedAt))
+        : [];
 
     return {
         companyId: scope.companyId,
@@ -1887,7 +3554,7 @@ export async function getDashboardBundle(params?: {
         brands,
         purchases,
         stockLogs,
-        stats: buildRevenueStatsFromSales(sales),
+        stats: buildRevenueStatsFromSales(needsFullRelations ? sales : []),
     };
 }
 

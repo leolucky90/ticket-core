@@ -1,9 +1,8 @@
 import { ProductManagementWorkspace } from "@/components/dashboard/ProductManagementWorkspace";
 import { MerchantPageShell } from "@/components/merchant/shell";
-import { getCatalogDimensionBundle } from "@/lib/services/merchant/catalog-service";
-import { buildDimensionBundleFromProducts, listMerchantProducts } from "@/lib/services/merchant/product-service";
-import { createProduct, deleteProduct, listProducts, updateProduct } from "@/lib/services/commerce";
-import type { Product } from "@/lib/types/commerce";
+import { getCatalogDimensionBundle, listCatalogSuppliers } from "@/lib/services/merchant/catalog-service";
+import { createProduct, deleteProduct, listRepairBrands, queryProductsPage, updateProduct } from "@/lib/services/commerce";
+import type { DimensionOption } from "@/lib/types/catalog";
 
 type ProductManagementPageProps = {
     searchParams: Promise<{
@@ -19,6 +18,9 @@ type ProductManagementPageProps = {
         maxStock?: string;
         minPrice?: string;
         maxPrice?: string;
+        pageSize?: string;
+        cursor?: string;
+        cursorStack?: string;
     }>;
 };
 
@@ -29,22 +31,59 @@ function parseOptionalNumber(text: string): number | null {
     return value;
 }
 
-function matchesKeyword(product: Product, keyword: string): boolean {
-    if (!keyword) return true;
-    const q = keyword.toLowerCase();
-    return [
-        product.name,
-        product.sku,
-        product.supplier,
-        product.categoryName,
-        product.brandName,
-        product.modelName,
-        product.nameEntryName,
-        product.customLabel,
-    ]
-        .join(" ")
-        .toLowerCase()
-        .includes(q);
+function parsePageSize(text: string): number {
+    const value = Number.parseInt(text, 10);
+    if (!Number.isFinite(value)) return 20;
+    if (value <= 10) return 10;
+    if (value <= 20) return 20;
+    if (value <= 50) return 50;
+    return 100;
+}
+
+function decodeCursorStack(text: string): string[] {
+    if (!text) return [];
+    try {
+        const parsed = JSON.parse(Buffer.from(text, "base64url").toString("utf8"));
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+    } catch {
+        return [];
+    }
+}
+
+function encodeCursorStack(items: string[]): string {
+    if (items.length === 0) return "";
+    return Buffer.from(JSON.stringify(items)).toString("base64url");
+}
+
+function dedupeDimensionOptions(items: DimensionOption[]): DimensionOption[] {
+    const seen = new Set<string>();
+    const out: DimensionOption[] = [];
+
+    for (const item of items) {
+        const id = (item.id ?? "").trim();
+        const name = (item.name ?? "").trim();
+        const brandId = (item.brandId ?? "").trim();
+        const brandName = (item.brandName ?? "").trim();
+        const categoryId = (item.categoryId ?? "").trim();
+        const categoryName = (item.categoryName ?? "").trim();
+        if (!id && !name) continue;
+        const normalized: DimensionOption = {
+            id: id || name,
+            name: name || id,
+            slug: item.slug,
+            brandId: brandId || undefined,
+            brandName: brandName || undefined,
+            categoryId: categoryId || undefined,
+            categoryName: categoryName || undefined,
+        };
+        const key = `${normalized.id}::${normalized.name}::${brandId}::${categoryId}`.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(normalized);
+    }
+
+    return out.sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
 }
 
 export default async function ProductManagementPage({ searchParams }: ProductManagementPageProps) {
@@ -59,41 +98,54 @@ export default async function ProductManagementPage({ searchParams }: ProductMan
     const maxStockInput = (sp.maxStock ?? "").trim();
     const minPriceInput = (sp.minPrice ?? "").trim();
     const maxPriceInput = (sp.maxPrice ?? "").trim();
+    const currentCursor = (sp.cursor ?? "").trim();
+    const currentCursorStack = decodeCursorStack((sp.cursorStack ?? "").trim());
+    const pageSize = parsePageSize((sp.pageSize ?? "").trim());
 
     const minStock = parseOptionalNumber(minStockInput);
     const maxStock = parseOptionalNumber(maxStockInput);
     const minPrice = parseOptionalNumber(minPriceInput);
     const maxPrice = parseOptionalNumber(maxPriceInput);
 
-    const allProducts = await listProducts();
-    const products = allProducts.filter((product) => {
-        if (!matchesKeyword(product, productKeyword)) return false;
-        if (supplierFilter && product.supplier !== supplierFilter) return false;
-        if (statusFilter && (product.status ?? "active") !== statusFilter) return false;
-        if (categoryFilter && (product.categoryId || "") !== categoryFilter) return false;
-        if (brandFilter && (product.brandId || "") !== brandFilter) return false;
-        if (modelFilter && (product.modelId || "") !== modelFilter) return false;
-        if (minStock !== null && product.stock < minStock) return false;
-        if (maxStock !== null && product.stock > maxStock) return false;
-        if (minPrice !== null && product.price < minPrice) return false;
-        if (maxPrice !== null && product.price > maxPrice) return false;
-        return true;
-    });
-    const supplierOptions = Array.from(
-        new Set(
-            allProducts
-                .map((product) => product.supplier.trim())
-                .filter((supplier) => supplier.length > 0),
+    const [productPage, catalogBundle, supplierRecords] = await Promise.all([
+        queryProductsPage({
+            keyword: productKeyword,
+            supplier: supplierFilter || undefined,
+            categoryId: categoryFilter || undefined,
+            brandId: brandFilter || undefined,
+            modelId: modelFilter || undefined,
+            status: statusFilter || undefined,
+            minStock,
+            maxStock,
+            minPrice,
+            maxPrice,
+            pageSize,
+            cursor: currentCursor || undefined,
+        }),
+        getCatalogDimensionBundle(),
+        listCatalogSuppliers(),
+    ]);
+    const needsRepairFallback = catalogBundle.brands.length === 0 || catalogBundle.models.length === 0;
+    const repairBrands = needsRepairFallback ? await listRepairBrands() : [];
+    const fallbackBrandOptions = dedupeDimensionOptions(repairBrands.map((brand) => ({ id: brand.id, name: brand.name })));
+    const fallbackModelOptions = dedupeDimensionOptions(
+        repairBrands.flatMap((brand) =>
+            brand.models.map((modelName) => ({
+                id: modelName,
+                name: modelName,
+                brandId: brand.id,
+                brandName: brand.name,
+            })),
         ),
-    ).sort((a, b) => a.localeCompare(b, "zh-Hant"));
-    const [catalogBundle, merchantProducts] = await Promise.all([getCatalogDimensionBundle(), listMerchantProducts()]);
-    const fallbackBundle = buildDimensionBundleFromProducts(merchantProducts);
+    );
     const dimensionBundle = {
-        categories: catalogBundle.categories.length > 0 ? catalogBundle.categories : fallbackBundle.categories,
-        brands: catalogBundle.brands.length > 0 ? catalogBundle.brands : fallbackBundle.brands,
-        models: catalogBundle.models.length > 0 ? catalogBundle.models : fallbackBundle.models,
-        nameEntries: catalogBundle.nameEntries.length > 0 ? catalogBundle.nameEntries : fallbackBundle.nameEntries,
+        categories: catalogBundle.categories,
+        brands: catalogBundle.brands.length > 0 ? catalogBundle.brands : fallbackBrandOptions,
+        models: catalogBundle.models.length > 0 ? catalogBundle.models : fallbackModelOptions,
     };
+    const previousCursor = currentCursorStack.at(-1) ?? "";
+    const previousCursorStack = encodeCursorStack(currentCursorStack.slice(0, -1));
+    const nextCursorStack = encodeCursorStack(currentCursor ? [...currentCursorStack, currentCursor] : currentCursorStack);
 
     return (
         <MerchantPageShell
@@ -109,9 +161,9 @@ export default async function ProductManagementPage({ searchParams }: ProductMan
             ]}
         >
             <ProductManagementWorkspace
-                products={products}
+                products={productPage.items}
                 productKeyword={productKeyword}
-                supplierOptions={supplierOptions}
+                supplierItems={supplierRecords.map((supplier) => ({ id: supplier.id, name: supplier.name, status: supplier.status }))}
                 supplierFilter={supplierFilter}
                 categoryFilter={categoryFilter}
                 brandFilter={brandFilter}
@@ -124,6 +176,14 @@ export default async function ProductManagementPage({ searchParams }: ProductMan
                 dimensionBundle={dimensionBundle}
                 flash={(sp.flash ?? "").trim()}
                 actionTs={(sp.ts ?? "").trim()}
+                pageSize={String(productPage.pageSize)}
+                currentCursor={currentCursor}
+                currentCursorStack={encodeCursorStack(currentCursorStack)}
+                previousCursor={previousCursor}
+                previousCursorStack={previousCursorStack}
+                nextCursor={productPage.nextCursor}
+                nextCursorStack={nextCursorStack}
+                hasNextPage={productPage.hasNextPage}
                 createProductAction={createProduct}
                 updateProductAction={updateProduct}
                 deleteProductAction={deleteProduct}

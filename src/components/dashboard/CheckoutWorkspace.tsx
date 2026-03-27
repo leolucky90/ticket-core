@@ -1,32 +1,40 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { CirclePlus, Eye, ShoppingCart, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { IconActionButton } from "@/components/ui/icon-action-button";
+import { IconTextActionButton } from "@/components/ui/icon-text-action-button";
+import { UsedProductStatusBadge } from "@/components/used-products";
 import { MerchantPredictiveSearchInput } from "@/components/merchant/search";
 import { isTicketLinkedToCustomer } from "@/lib/services/customerRelationships";
 import type { Activity, CompanyCustomer, Product } from "@/lib/types/commerce";
 import type { Ticket } from "@/lib/types/ticket";
+import type { CompanyProfile, UsedProduct } from "@/lib/schema";
 
 type CheckoutWorkspaceProps = {
     customers: CompanyCustomer[];
     tickets: Ticket[];
     products: Product[];
+    usedProducts: UsedProduct[];
+    companyProfile: CompanyProfile | null;
     activeActivities: Activity[];
     createCheckoutAction: (formData: FormData) => Promise<void>;
     flash: string;
     actionTs: string;
     initialCustomerId?: string;
+    initialUsedProductId?: string;
 };
 
 type LineDraft = {
     id: string;
     productId: string;
     qty: number;
+    isUsedProduct: boolean;
+    usedProductId?: string;
 };
 
 type PromotionSelectionDraft = {
@@ -108,11 +116,14 @@ export function CheckoutWorkspace({
     customers,
     tickets,
     products,
+    usedProducts,
+    companyProfile,
     activeActivities,
     createCheckoutAction,
     flash,
     actionTs,
     initialCustomerId,
+    initialUsedProductId,
 }: CheckoutWorkspaceProps) {
     const hasInitialCustomer = Boolean(initialCustomerId && customers.some((item) => item.id === initialCustomerId));
     const initialCustomerQuery = hasInitialCustomer
@@ -131,13 +142,30 @@ export function CheckoutWorkspace({
     const [paymentMethod, setPaymentMethod] = useState<"cash" | "card">("cash");
     const [paymentStatus, setPaymentStatus] = useState<"unpaid" | "paid" | "deposit" | "installment">("paid");
     const [checkoutAt, setCheckoutAt] = useState("");
-    const [lines, setLines] = useState<LineDraft[]>([
-        {
-            id: "line_init_0",
-            productId: products[0]?.id ?? "",
-            qty: 1,
-        },
-    ]);
+    const [usedProductQuery, setUsedProductQuery] = useState("");
+    const [lines, setLines] = useState<LineDraft[]>(() => {
+        if (initialUsedProductId && usedProducts.some((row) => row.id === initialUsedProductId)) {
+            return [
+                {
+                    id: "line_init_used",
+                    productId: initialUsedProductId,
+                    qty: 1,
+                    isUsedProduct: true,
+                    usedProductId: initialUsedProductId,
+                },
+            ];
+        }
+
+        return [
+            {
+                id: "line_init_0",
+                productId: products[0]?.id ?? "",
+                qty: 1,
+                isUsedProduct: false,
+                usedProductId: undefined,
+            },
+        ];
+    });
 
     useEffect(() => {
         if (!flash) return;
@@ -157,6 +185,14 @@ export function CheckoutWorkspace({
     }, []);
 
     const selectedCustomer = useMemo(() => customers.find((item) => item.id === customerId) ?? null, [customers, customerId]);
+    const defaultCompanyCustomer = useMemo(
+        () => ({
+            name: companyProfile?.displayName || companyProfile?.companyName || "過路客",
+            phone: companyProfile?.phone || "",
+            email: companyProfile?.email || "",
+        }),
+        [companyProfile],
+    );
 
     const filteredCustomers = useMemo(() => {
         const q = normalizeComparable(customerQuery);
@@ -182,15 +218,22 @@ export function CheckoutWorkspace({
         [availableCases, selectedCaseIds],
     );
     const selectedActivityIdSet = useMemo(() => new Set(selectedPromotions.map((activity) => activity.promotionId)), [selectedPromotions]);
-    const appendLine = (productId?: string) => {
+    const appendLine = (productId?: string, options?: { isUsedProduct?: boolean; usedProductId?: string }) => {
         setLines((prev) => [
             ...prev,
             {
                 id: `line_${Date.now()}_${prev.length}`,
                 productId: productId ?? products[0]?.id ?? "",
                 qty: 1,
+                isUsedProduct: options?.isUsedProduct === true,
+                usedProductId: options?.usedProductId,
             },
         ]);
+    };
+    const appendUsedProductLine = (usedProductId: string) => {
+        const exists = lines.some((line) => line.isUsedProduct && line.usedProductId === usedProductId);
+        if (exists) return;
+        appendLine(usedProductId, { isUsedProduct: true, usedProductId });
     };
 
     const productMap = useMemo(() => {
@@ -198,20 +241,42 @@ export function CheckoutWorkspace({
         for (const product of products) map.set(product.id, product);
         return map;
     }, [products]);
+    const usedProductMap = useMemo(() => {
+        const map = new Map<string, UsedProduct>();
+        for (const product of usedProducts) map.set(product.id, product);
+        return map;
+    }, [usedProducts]);
 
     const lineDetails = useMemo(
         () =>
             lines.map((line) => {
-                const product = productMap.get(line.productId) ?? null;
-                const unitPrice = product?.price ?? 0;
-                const subtotal = Math.max(0, line.qty) * Math.max(0, unitPrice);
-                return { line, product, unitPrice, subtotal };
+                const usedProduct = line.isUsedProduct ? usedProductMap.get(line.usedProductId ?? "") ?? null : null;
+                const product = line.isUsedProduct ? null : productMap.get(line.productId) ?? null;
+                const unitPrice = line.isUsedProduct ? usedProduct?.salePrice ?? usedProduct?.suggestedSalePrice ?? 0 : product?.price ?? 0;
+                const qty = line.isUsedProduct ? 1 : Math.max(0, line.qty);
+                const subtotal = qty * Math.max(0, unitPrice);
+                return { line, product, usedProduct, unitPrice, subtotal };
             }),
-        [lines, productMap],
+        [lines, productMap, usedProductMap],
     );
+    const filteredUsedProducts = useMemo(() => {
+        const q = normalizeComparable(usedProductQuery);
+        if (!q) return usedProducts.slice(0, 12);
+        return usedProducts
+            .filter((item) =>
+                [item.name, item.brand, item.model, item.serialNumber ?? "", item.imeiNumber ?? "", item.grade, item.gradeLabel ?? ""]
+                    .join(" ")
+                    .toLowerCase()
+                    .includes(q),
+            )
+            .slice(0, 12);
+    }, [usedProductQuery, usedProducts]);
 
     const totalAmount = useMemo(() => lineDetails.reduce((sum, row) => sum + row.subtotal, 0), [lineDetails]);
-    const hasValidLine = useMemo(() => lineDetails.some((row) => row.product && row.line.qty > 0), [lineDetails]);
+    const hasValidLine = useMemo(
+        () => lineDetails.some((row) => (row.product || row.usedProduct) && (row.line.isUsedProduct ? 1 : row.line.qty) > 0),
+        [lineDetails],
+    );
     const toggleActivitySelection = (activity: Activity, checked: boolean) => {
         setSelectedPromotions((prev) => {
             if (checked) {
@@ -257,9 +322,7 @@ export function CheckoutWorkspace({
                         <div className="text-base font-semibold">結帳中心</div>
                         <div className="text-xs text-[rgb(var(--muted))]">建立可追蹤的收據明細，供客戶歷史與分析使用</div>
                     </div>
-                    <Link href="/dashboard?tab=inventory" className="text-sm text-[rgb(var(--accent))] hover:underline">
-                        前往庫存管理
-                    </Link>
+                    <IconTextActionButton icon={ShoppingCart} href="/dashboard?tab=inventory" label="前往庫存管理" tooltip="前往庫存管理" />
                 </div>
 
                 <form action={createCheckoutAction} className="grid gap-3">
@@ -367,9 +430,21 @@ export function CheckoutWorkspace({
 
                         <input type="hidden" name="customerMode" value={customerMode} />
                         <input type="hidden" name="customerId" value={customerMode === "customer" ? customerId : ""} />
-                        <input type="hidden" name="customerName" value={customerMode === "customer" ? selectedCustomer?.name ?? "" : "過路客"} />
-                        <input type="hidden" name="customerPhone" value={customerMode === "customer" ? selectedCustomer?.phone ?? "" : ""} />
-                        <input type="hidden" name="customerEmail" value={customerMode === "customer" ? selectedCustomer?.email ?? "" : ""} />
+                        <input
+                            type="hidden"
+                            name="customerName"
+                            value={customerMode === "customer" ? selectedCustomer?.name ?? "" : defaultCompanyCustomer.name}
+                        />
+                        <input
+                            type="hidden"
+                            name="customerPhone"
+                            value={customerMode === "customer" ? selectedCustomer?.phone ?? "" : defaultCompanyCustomer.phone}
+                        />
+                        <input
+                            type="hidden"
+                            name="customerEmail"
+                            value={customerMode === "customer" ? selectedCustomer?.email ?? "" : defaultCompanyCustomer.email}
+                        />
                     </Card>
 
                     <Card className="rounded-xl p-3">
@@ -636,13 +711,7 @@ export function CheckoutWorkspace({
                     <Card className="rounded-xl p-3">
                         <div className="mb-2 flex items-center justify-between gap-2">
                             <div className="text-sm font-semibold">商品明細</div>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                onClick={() => appendLine()}
-                            >
-                                + 加入商品
-                            </Button>
+                            <IconTextActionButton icon={CirclePlus} type="button" label="加入商品" tooltip="加入一般商品明細" onClick={() => appendLine()} />
                         </div>
                         <div className="mb-3">
                             <MerchantPredictiveSearchInput
@@ -659,66 +728,156 @@ export function CheckoutWorkspace({
                                 }}
                             />
                         </div>
+                        <div className="mb-3 grid gap-2 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                            <div className="text-sm font-semibold">二手商品快捷加入</div>
+                            <Input
+                                value={usedProductQuery}
+                                onChange={(event) => setUsedProductQuery(event.currentTarget.value)}
+                                placeholder="搜尋二手商品（品牌、型號、序號、IMEI、等級）"
+                            />
+                            {filteredUsedProducts.length === 0 ? (
+                                <div className="text-xs text-[rgb(var(--muted))]">找不到可銷售的二手商品。</div>
+                            ) : (
+                                <div className="grid gap-2 md:grid-cols-2">
+                                    {filteredUsedProducts.map((item) => (
+                                        <div key={`used-quick-${item.id}`} className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-2">
+                                            <div className="mb-1 flex items-start justify-between gap-2">
+                                                <div>
+                                                    <div className="text-sm font-medium">{item.name}</div>
+                                                    <div className="text-xs text-[rgb(var(--muted))]">
+                                                        {item.brand} / {item.model} / {item.serialNumber || item.imeiNumber || "-"}
+                                                    </div>
+                                                </div>
+                                                <UsedProductStatusBadge
+                                                    product={{
+                                                        grade: item.grade,
+                                                        gradeLabel: item.gradeLabel,
+                                                        isRefurbished: item.isRefurbished,
+                                                        refurbishmentStatus: item.refurbishmentStatus,
+                                                        saleStatus: item.saleStatus,
+                                                    }}
+                                                />
+                                            </div>
+                                            <div className="flex items-center justify-between gap-2">
+                                                <div className="text-sm">售價：{formatMoney(item.salePrice ?? item.suggestedSalePrice ?? 0)}</div>
+                                                <div className="flex gap-1">
+                                                    <IconActionButton
+                                                        href={`/products/used/${encodeURIComponent(item.id)}`}
+                                                        icon={Eye}
+                                                        label="查看二手商品"
+                                                        tooltip="查看二手商品明細"
+                                                    />
+                                                    <IconActionButton
+                                                        icon={ShoppingCart}
+                                                        label="加入購物車"
+                                                        tooltip="加入購物車"
+                                                        onClick={() => appendUsedProductLine(item.id)}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
 
                         <div className="grid gap-2">
-                            {lineDetails.map(({ line, product, unitPrice, subtotal }, index) => (
-                                <div key={line.id} className="grid gap-2 rounded-lg border border-[rgb(var(--border))] p-3 md:grid-cols-5">
-                                    <label className="grid gap-1 text-sm md:col-span-2">
-                                        <span className="text-xs text-[rgb(var(--muted))]">產品名稱 #{index + 1}</span>
-                                        <Select
-                                            value={line.productId}
-                                            onChange={(event) => {
-                                                const value = event.target.value;
-                                                setLines((prev) => prev.map((row) => (row.id === line.id ? { ...row, productId: value } : row)));
-                                            }}
-                                        >
-                                            <option value="">請選擇商品</option>
-                                            {products.map((item) => (
-                                                <option key={item.id} value={item.id}>
-                                                    {item.name} / 單價 {formatMoney(item.price)} / On hand {item.onHandQty ?? item.stock} / Reserved {item.reservedQty ?? 0} / Available{" "}
-                                                    {item.availableQty ?? Math.max((item.onHandQty ?? item.stock) - (item.reservedQty ?? 0), 0)}
-                                                </option>
-                                            ))}
-                                        </Select>
-                                    </label>
-                                    <label className="grid gap-1 text-sm">
-                                        <span className="text-xs text-[rgb(var(--muted))]">數量</span>
-                                        <Input
-                                            type="number"
-                                            min={1}
-                                            value={line.qty}
-                                            onChange={(event) => {
-                                                const value = Math.max(1, Number.parseInt(event.target.value || "1", 10));
-                                                setLines((prev) => prev.map((row) => (row.id === line.id ? { ...row, qty: value } : row)));
-                                            }}
-                                        />
-                                    </label>
-                                    <div className="grid gap-1 text-sm">
-                                        <span className="text-xs text-[rgb(var(--muted))]">單價</span>
-                                        <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2">
-                                            {formatMoney(unitPrice)}
+                            {lineDetails.map(({ line, product, usedProduct, unitPrice, subtotal }, index) => {
+                                const resolvedName = usedProduct?.name ?? product?.name ?? "";
+                                const resolvedId = usedProduct?.id ?? product?.id ?? "";
+                                return (
+                                    <div key={line.id} className="grid gap-2 rounded-lg border border-[rgb(var(--border))] p-3 md:grid-cols-[2fr_1fr_1fr_1fr_auto]">
+                                        <label className="grid gap-1 text-sm">
+                                            <span className="text-xs text-[rgb(var(--muted))]">商品 #{index + 1}</span>
+                                            {line.isUsedProduct ? (
+                                                <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2">
+                                                    <div className="font-medium">{usedProduct?.name ?? "已下架二手商品"}</div>
+                                                    <div className="text-xs text-[rgb(var(--muted))]">
+                                                        二手 / {usedProduct?.brand || "-"} / {usedProduct?.model || "-"} / {usedProduct?.serialNumber || usedProduct?.imeiNumber || "-"}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <Select
+                                                    value={line.productId}
+                                                    onChange={(event) => {
+                                                        const value = event.target.value;
+                                                        setLines((prev) =>
+                                                            prev.map((row) => (row.id === line.id ? { ...row, productId: value, isUsedProduct: false, usedProductId: undefined } : row)),
+                                                        );
+                                                    }}
+                                                >
+                                                    <option value="">請選擇商品</option>
+                                                    {products.map((item) => (
+                                                        <option key={item.id} value={item.id}>
+                                                            {item.name} / 單價 {formatMoney(item.price)} / On hand {item.onHandQty ?? item.stock} / Reserved {item.reservedQty ?? 0} / Available{" "}
+                                                            {item.availableQty ?? Math.max((item.onHandQty ?? item.stock) - (item.reservedQty ?? 0), 0)}
+                                                        </option>
+                                                    ))}
+                                                </Select>
+                                            )}
+                                        </label>
+                                        <label className="grid gap-1 text-sm">
+                                            <span className="text-xs text-[rgb(var(--muted))]">數量</span>
+                                            <Input
+                                                type="number"
+                                                min={1}
+                                                value={line.isUsedProduct ? 1 : line.qty}
+                                                disabled={line.isUsedProduct}
+                                                onChange={(event) => {
+                                                    const value = Math.max(1, Number.parseInt(event.target.value || "1", 10));
+                                                    setLines((prev) => prev.map((row) => (row.id === line.id ? { ...row, qty: value } : row)));
+                                                }}
+                                            />
+                                        </label>
+                                        <div className="grid gap-1 text-sm">
+                                            <span className="text-xs text-[rgb(var(--muted))]">單價</span>
+                                            <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2">
+                                                {formatMoney(unitPrice)}
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div className="grid gap-1 text-sm">
-                                        <span className="text-xs text-[rgb(var(--muted))]">小計</span>
-                                        <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2">
-                                            {formatMoney(subtotal)}
+                                        <div className="grid gap-1 text-sm">
+                                            <span className="text-xs text-[rgb(var(--muted))]">小計</span>
+                                            <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2">
+                                                {formatMoney(subtotal)}
+                                            </div>
                                         </div>
-                                    </div>
+                                        <div className="flex items-end justify-end gap-1">
+                                            {line.isUsedProduct && usedProduct ? (
+                                                <IconActionButton
+                                                    href={`/products/used/${encodeURIComponent(usedProduct.id)}`}
+                                                    icon={Eye}
+                                                    label="查看"
+                                                    tooltip="查看二手商品"
+                                                />
+                                            ) : null}
+                                            <IconActionButton
+                                                icon={Trash2}
+                                                label="移除"
+                                                tooltip="移除明細"
+                                                onClick={() => setLines((prev) => prev.filter((row) => row.id !== line.id))}
+                                            />
+                                        </div>
 
-                                    <input type="hidden" name="lineProductId[]" value={product?.id ?? ""} />
-                                    <input type="hidden" name="lineProductName[]" value={product?.name ?? ""} />
-                                    <input type="hidden" name="lineQty[]" value={String(Math.max(1, line.qty))} />
-                                    <input type="hidden" name="lineUnitPrice[]" value={String(unitPrice)} />
-                                </div>
-                            ))}
+                                        <input type="hidden" name="lineProductId[]" value={resolvedId} />
+                                        <input type="hidden" name="lineProductName[]" value={resolvedName} />
+                                        <input type="hidden" name="lineQty[]" value={String(line.isUsedProduct ? 1 : Math.max(1, line.qty))} />
+                                        <input type="hidden" name="lineUnitPrice[]" value={String(unitPrice)} />
+                                        <input type="hidden" name="lineIsUsedProduct[]" value={line.isUsedProduct ? "1" : "0"} />
+                                        <input type="hidden" name="lineUsedProductId[]" value={line.usedProductId ?? ""} />
+                                        <input type="hidden" name="lineUsedBrand[]" value={usedProduct?.brand ?? ""} />
+                                        <input type="hidden" name="lineUsedModel[]" value={usedProduct?.model ?? ""} />
+                                        <input type="hidden" name="lineUsedGrade[]" value={usedProduct?.gradeLabel || usedProduct?.grade || ""} />
+                                        <input type="hidden" name="lineUsedSerialOrImei[]" value={usedProduct?.serialNumber || usedProduct?.imeiNumber || ""} />
+                                    </div>
+                                );
+                            })}
                         </div>
                     </Card>
 
                     <Card className="rounded-xl p-3">
                         <div className="mb-2 text-sm font-semibold">收據預覽</div>
                         <div className="grid gap-1 text-sm">
-                            <div>客戶：{customerMode === "customer" ? selectedCustomer?.name || "未選擇" : "過路客"}</div>
+                            <div>客戶：{customerMode === "customer" ? selectedCustomer?.name || "未選擇" : defaultCompanyCustomer.name}</div>
                             {customerMode !== "customer" &&
                             selectedPromotions.some(
                                 (activity) => activity.effectType === "create_entitlement" || activity.effectType === "create_pickup_reservation",
@@ -774,14 +933,14 @@ export function CheckoutWorkspace({
                     </Card>
 
                     <div className="flex flex-wrap gap-2">
-                        <Button type="submit" disabled={!hasValidLine}>
-                            完成結帳並建立收據
-                        </Button>
-                        <Link href="/dashboard/receipts">
-                            <Button type="button" variant="ghost">
-                                查看收據中心
-                            </Button>
-                        </Link>
+                        <IconTextActionButton
+                            icon={ShoppingCart}
+                            type="submit"
+                            label="完成結帳"
+                            tooltip="完成結帳並建立收據"
+                            disabled={!hasValidLine}
+                        />
+                        <IconTextActionButton icon={Eye} href="/dashboard/receipts" label="收據中心" tooltip="查看收據中心" />
                     </div>
                 </form>
             </Card>

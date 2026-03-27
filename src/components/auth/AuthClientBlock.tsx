@@ -96,15 +96,25 @@ export function AuthClientBlock({
             const payload = (await sessionResponse.json().catch(() => null)) as { error?: unknown } | null;
             throw new Error(`server/${toServerErrorCode(payload?.error, "SESSION_CREATE_FAILED")}`);
         }
+        const sessionPayload = (await sessionResponse.json().catch(() => null)) as
+            | { mustChangePassword?: boolean; googleLinked?: boolean }
+            | null;
 
         let fallbackPath = tenantId ? `/${encodeURIComponent(tenantId)}/dashboard` : "/customer-dashboard";
         const bootstrapResponse = await fetch("/api/auth/bootstrap", { method: "POST" });
         if (bootstrapResponse.ok) {
             const payload = (await bootstrapResponse.json().catch(() => null)) as
-                | { user?: { role?: string | null } | null }
+                | { user?: { role?: string | null } | null; accountType?: "company" | "customer" | null; tenantId?: string | null }
                 | null;
-            const role = payload?.user?.role;
-            fallbackPath = role && role !== "customer" ? "/dashboard" : fallbackPath;
+            const resolvedTenantId = normalizeTenantId(payload?.tenantId ?? null);
+            if (payload?.accountType === "company") {
+                fallbackPath = "/dashboard";
+            } else if (resolvedTenantId) {
+                fallbackPath = `/${encodeURIComponent(resolvedTenantId)}/dashboard`;
+            }
+        }
+        if (sessionPayload?.mustChangePassword) {
+            fallbackPath = "/account/security?forcePasswordReset=1";
         }
 
         router.replace(next || fallbackPath);

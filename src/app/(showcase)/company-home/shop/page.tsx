@@ -3,23 +3,22 @@ import { redirect } from "next/navigation";
 import { TenantShopPage } from "@/features/showcase/components/TenantShopPage";
 import { getShowcasePreferences } from "@/features/showcase/services/showcasePreferences.server";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getCurrentSessionAccountContext } from "@/lib/services/staff.service";
 import { listPublicProductsByTenant } from "@/lib/services/commerce";
 
 export default async function CompanyHomeShopPage() {
     const sessionUser = await getSessionUser();
     if (!sessionUser) redirect("/login?next=/company-home/shop");
 
-    const userDoc = await getUserDoc(sessionUser.uid);
-    const accountType = toAccountType(userDoc?.role ?? null);
-    const fallbackTenantId = getShowcaseTenantId(userDoc, sessionUser.uid);
-    if (accountType !== "company") {
+    const accountContext = await getCurrentSessionAccountContext();
+    const fallbackTenantId = accountContext?.tenantId ?? null;
+    if (accountContext?.accountType !== "company") {
         if (fallbackTenantId) redirect(`/${encodeURIComponent(fallbackTenantId)}/dashboard`);
         redirect("/customer-dashboard");
     }
 
     const tenantId = fallbackTenantId;
-    if (!tenantId) redirect("/dashboard");
+    if (!tenantId) redirect("/company-home");
 
     const cookieStore = await cookies();
     const langCookie = cookieStore.get("lang")?.value;

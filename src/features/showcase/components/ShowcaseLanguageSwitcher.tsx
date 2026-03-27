@@ -16,11 +16,13 @@ export function ShowcaseLanguageSwitcher({ currentLang }: ShowcaseLanguageSwitch
     }
 
     return (
-        <div className="ml-1 flex items-center gap-1 rounded-full border border-[#191815] p-1">
+        <div className="ml-1 flex items-center gap-1 rounded-full p-1">
             <button
                 type="button"
-                className={`rounded-full px-2 py-1 text-[11px] font-bold leading-none ${
-                    currentLang === "zh" ? "bg-[#191815] text-[#ffcb2d]" : "text-[#191815] hover:bg-[#191815] hover:text-[#ffcb2d]"
+                className={`rounded-full px-2 py-1 text-[11px] font-semibold leading-none transition ${
+                    currentLang === "zh"
+                        ? "bg-[rgb(var(--showcase-accent))] text-[rgb(var(--showcase-accent-contrast))]"
+                        : "text-[rgb(var(--showcase-text))] hover:bg-[rgb(var(--showcase-accent-soft))]"
                 }`}
                 onClick={() => switchLang("zh")}
             >
@@ -28,8 +30,10 @@ export function ShowcaseLanguageSwitcher({ currentLang }: ShowcaseLanguageSwitch
             </button>
             <button
                 type="button"
-                className={`rounded-full px-2 py-1 text-[11px] font-bold leading-none ${
-                    currentLang === "en" ? "bg-[#191815] text-[#ffcb2d]" : "text-[#191815] hover:bg-[#191815] hover:text-[#ffcb2d]"
+                className={`rounded-full px-2 py-1 text-[11px] font-semibold leading-none transition ${
+                    currentLang === "en"
+                        ? "bg-[rgb(var(--showcase-accent))] text-[rgb(var(--showcase-accent-contrast))]"
+                        : "text-[rgb(var(--showcase-text))] hover:bg-[rgb(var(--showcase-accent-soft))]"
                 }`}
                 onClick={() => switchLang("en")}
             >

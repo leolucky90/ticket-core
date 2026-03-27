@@ -98,3 +98,109 @@ export type {
 } from "@/lib/schema/promotions";
 
 export { PROMOTION_EFFECT_TYPES, PROMOTION_TYPES } from "@/lib/schema/promotions";
+
+export type { SoftDeleteMeta, SoftDeleteStatus } from "@/lib/schema/softDelete";
+
+export {
+    createSoftDeleteMeta,
+    normalizeSoftDeleteMeta,
+    SOFT_DELETE_STATUSES,
+    withHardDeleted,
+    withRestored,
+    withSoftDeleted,
+} from "@/lib/schema/softDelete";
+
+export type {
+    PermissionLevel,
+    PermissionLevelNumber,
+} from "@/lib/schema/permissionLevels";
+
+export {
+    createDefaultPermissionLevel,
+    normalizePermissionLevel,
+    permissionLevelDocPath,
+    permissionLevelsCollectionPath,
+    PERMISSION_LEVEL_DEFAULT_NAMES,
+    PERMISSION_LEVEL_RANGE,
+} from "@/lib/schema/permissionLevels";
+
+export type { SecuritySettings } from "@/lib/schema/securitySettings";
+
+export {
+    createDefaultSecuritySettings,
+    normalizeSecuritySettings,
+    securitySettingsDocPath,
+} from "@/lib/schema/securitySettings";
+
+export type {
+    DeleteLog,
+    DeleteLogStatus,
+} from "@/lib/schema/deleteLogs";
+
+export {
+    deleteLogsCollectionPath,
+    DELETE_LOG_STATUSES,
+    normalizeDeleteLog,
+} from "@/lib/schema/deleteLogs";
+
+export type { AuditLog } from "@/lib/schema/auditLogs";
+
+export { auditLogsCollectionPath, normalizeAuditLog } from "@/lib/schema/auditLogs";
+
+export type {
+    CompanyProfile,
+} from "@/lib/schema/companyProfile";
+
+export {
+    companyProfileDocPath,
+    isCompanyProfile,
+    normalizeCompanyProfile,
+} from "@/lib/schema/companyProfile";
+
+export type {
+    CaseRecord,
+    CaseType,
+} from "@/lib/schema/cases";
+
+export { normalizeCaseRecord } from "@/lib/schema/cases";
+
+export type {
+    StaffMember,
+    StaffMemberStatus,
+} from "@/lib/schema/staffMembers";
+
+export {
+    normalizeStaffMember,
+    staffMembersCollectionPath,
+    STAFF_MEMBER_STATUSES,
+} from "@/lib/schema/staffMembers";
+
+export type {
+    UsedProduct,
+    UsedProductGrade,
+    UsedProductRefurbishmentStatus,
+    UsedProductSaleStatus,
+    UsedProductSpecificationItem,
+    UsedProductWarrantyUnit,
+} from "@/lib/schema/usedProducts";
+
+export {
+    isUsedProduct,
+    normalizeUsedProduct,
+    USED_PRODUCT_GRADES,
+    USED_PRODUCT_REFURBISHMENT_STATUSES,
+    USED_PRODUCT_SALE_STATUSES,
+    USED_PRODUCT_WARRANTY_UNITS,
+    usedProductsCollectionPath,
+} from "@/lib/schema/usedProducts";
+
+export type {
+    UsedProductTypeSetting,
+    UsedProductTypeSpecificationTemplate,
+} from "@/lib/schema/usedProductTypeSettings";
+
+export {
+    isUsedProductTypeSetting,
+    normalizeUsedProductTypeSetting,
+    usedProductTypeSettingsCollectionPath,
+} from "@/lib/schema/usedProductTypeSettings";

@@ -2,7 +2,7 @@ import { ShowHomePage } from "@/features/showcase/components/ShowHomePage";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getCurrentSessionAccountContext } from "@/lib/services/staff.service";
 import { getShowcasePreferences } from "@/features/showcase/services/showcasePreferences.server";
 
 export async function TenantShowcasePage({ tenantId, homeHref }: { tenantId: string; homeHref?: string }) {
@@ -15,10 +15,9 @@ export async function TenantShowcasePage({ tenantId, homeHref }: { tenantId: str
 
     const sessionUser = await getSessionUser();
     if (sessionUser) {
-        const userDoc = await getUserDoc(sessionUser.uid);
-        const sessionTenantId = getShowcaseTenantId(userDoc, sessionUser.uid);
-        if (sessionTenantId === tenantId) {
-            navAccountType = toAccountType(userDoc?.role ?? null);
+        const accountContext = await getCurrentSessionAccountContext();
+        if (accountContext?.tenantId === tenantId) {
+            navAccountType = accountContext.accountType;
         }
     }
 

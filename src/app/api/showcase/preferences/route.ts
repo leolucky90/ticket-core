@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 import { getShowcasePreferences, saveShowcasePreferences } from "@/features/showcase/services/showcasePreferences.server";
+import { getCurrentSessionAccountContext } from "@/lib/services/staff.service";
 
 type UpdateShowcasePreferencesBody = {
     themeColors?: unknown;
@@ -10,13 +10,8 @@ type UpdateShowcasePreferencesBody = {
 };
 
 export async function GET() {
-    const session = await getSessionUser();
-    let tenantId: string | null = null;
-
-    if (session) {
-        const userDoc = await getUserDoc(session.uid);
-        tenantId = getShowcaseTenantId(userDoc, session.uid);
-    }
+    const accountContext = await getCurrentSessionAccountContext();
+    const tenantId = accountContext?.tenantId ?? null;
 
     const preferences = await getShowcasePreferences({ tenantId });
     return NextResponse.json({ ok: true, preferences });
@@ -26,11 +21,11 @@ export async function PUT(req: Request) {
     const session = await getSessionUser();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const userDoc = await getUserDoc(session.uid);
-    if (toAccountType(userDoc?.role ?? null) !== "company") {
+    const accountContext = await getCurrentSessionAccountContext();
+    if (accountContext?.accountType !== "company") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    const tenantId = getShowcaseTenantId(userDoc, session.uid);
+    const tenantId = accountContext.tenantId;
     if (!tenantId) return NextResponse.json({ error: "Missing company tenant id" }, { status: 400 });
 
     let body: UpdateShowcasePreferencesBody;
@@ -44,13 +39,24 @@ export async function PUT(req: Request) {
         return NextResponse.json({ error: "No updatable fields" }, { status: 400 });
     }
 
-    const preferences = await saveShowcasePreferences({
-        tenantId,
-        updatedBy: session.uid,
-        themeColors: body.themeColors,
-        storefront: body.storefront,
-        content: body.content,
-    });
+    try {
+        const preferences = await saveShowcasePreferences({
+            tenantId,
+            updatedBy: session.uid,
+            themeColors: body.themeColors,
+            storefront: body.storefront,
+            content: body.content,
+        });
 
-    return NextResponse.json({ ok: true, preferences });
+        return NextResponse.json({ ok: true, preferences });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Save failed";
+        console.error("[showcase/preferences] save failed", {
+            tenantId,
+            accountType: accountContext.accountType,
+            uid: session.uid,
+            message,
+        });
+        return NextResponse.json({ error: message }, { status: 500 });
+    }
 }
