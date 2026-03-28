@@ -19,7 +19,7 @@ export function SectionShell({ id, eyebrow, title, description, className, child
                         {eyebrow}
                     </p>
                 ) : null}
-                <h2 className="[font-family:'Fraunces','Noto_Serif_TC',serif] text-3xl leading-tight text-[var(--biz-heading)] md:text-4xl">
+                <h2 className="[font-family:var(--font-display)] text-3xl leading-tight text-[var(--biz-heading)] md:text-4xl">
                     {title}
                 </h2>
                 {description ? <p className="text-base leading-relaxed text-[var(--biz-body)] md:text-lg">{description}</p> : null}

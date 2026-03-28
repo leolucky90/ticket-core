@@ -35,7 +35,7 @@ import {
 import { getCatalogDimensionBundle, listCatalogSuppliers } from "@/lib/services/merchant/catalog-service";
 import { decodeCursorStack, encodeCursorStack, parseListPageSize } from "@/lib/pagination/query-controls";
 import { getTicketAttributePreferences } from "@/lib/services/ticketAttributes";
-import { createTicket, queryTicketsPage, updateTicket } from "@/lib/services/ticket";
+import { createTicket, createWarrantyCaseFromExistingCase, queryTicketsPage, updateTicket } from "@/lib/services/ticket";
 import { listRepairTechnicians } from "@/lib/services/repair-technician.service";
 import {
     listUsedProductTypeSettings,
@@ -136,6 +136,36 @@ function toSpecTemplateKey(name: string): string {
         .slice(0, 120);
     if (normalized) return normalized;
     return "spec_name";
+}
+
+function toSpecInputType(value: FormDataEntryValue | null): "text" | "select" {
+    return value === "select" ? "select" : "text";
+}
+
+function parseSpecTemplateOptions(value: FormDataEntryValue | null): string[] {
+    if (typeof value !== "string" || !value.trim()) return [];
+
+    try {
+        const parsed = JSON.parse(value) as unknown[];
+        if (!Array.isArray(parsed)) return [];
+        const seen = new Set<string>();
+        const options: string[] = [];
+
+        for (const row of parsed) {
+            if (typeof row !== "string") continue;
+            const option = row.trim().slice(0, 120);
+            if (!option) continue;
+            const normalized = option.toLowerCase();
+            if (seen.has(normalized)) continue;
+            seen.add(normalized);
+            options.push(option);
+            if (options.length >= 40) break;
+        }
+
+        return options;
+    } catch {
+        return [];
+    }
 }
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<DashboardSearchParams> }) {
@@ -256,8 +286,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             const specName = String(formData.get("specName") ?? "").trim();
             const specPlaceholder = String(formData.get("specPlaceholder") ?? "").trim();
             const specRequired = formData.get("specRequired") === "on";
+            const specInputType = toSpecInputType(formData.get("specInputType"));
+            const specOptions = parseSpecTemplateOptions(formData.get("specOptionsJson"));
             if (!specName) {
                 return redirect(`/dashboard?tab=marketing&flash=${encodeURIComponent("規格名稱不可空白")}&ts=${Date.now()}`);
+            }
+            if (specInputType === "select" && specOptions.length === 0) {
+                return redirect(`/dashboard?tab=marketing&flash=${encodeURIComponent("下拉選單至少要有一個選項")}&ts=${Date.now()}`);
             }
             const specKey = toSpecTemplateKey(specName);
             const exists = current.specificationTemplates.some((row) => {
@@ -272,6 +307,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                           key: specKey,
                           label: specName,
                           placeholder: specPlaceholder || undefined,
+                          inputType: specInputType,
+                          options: specInputType === "select" ? specOptions : undefined,
                           isRequired: specRequired,
                       },
                   ];
@@ -280,6 +317,44 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 specificationTemplates: nextTemplates,
             });
             return redirect(`/dashboard?tab=marketing&flash=${encodeURIComponent("規格欄位已新增")}&ts=${Date.now()}`);
+        }
+
+        if (actionMode === "updateSpec") {
+            const specKey = String(formData.get("specKey") ?? "").trim();
+            const specName = String(formData.get("specName") ?? "").trim();
+            const specPlaceholder = String(formData.get("specPlaceholder") ?? "").trim();
+            const specRequired = formData.get("specRequired") === "on";
+            const specInputType = toSpecInputType(formData.get("specInputType"));
+            const specOptions = parseSpecTemplateOptions(formData.get("specOptionsJson"));
+
+            if (!specKey) {
+                return redirect(`/dashboard?tab=marketing&flash=${encodeURIComponent("找不到規格欄位")}&ts=${Date.now()}`);
+            }
+            if (!specName) {
+                return redirect(`/dashboard?tab=marketing&flash=${encodeURIComponent("規格名稱不可空白")}&ts=${Date.now()}`);
+            }
+            if (specInputType === "select" && specOptions.length === 0) {
+                return redirect(`/dashboard?tab=marketing&flash=${encodeURIComponent("下拉選單至少要有一個選項")}&ts=${Date.now()}`);
+            }
+
+            const nextTemplates = current.specificationTemplates.map((row) =>
+                row.key !== specKey
+                    ? row
+                    : {
+                          ...row,
+                          label: specName,
+                          placeholder: specPlaceholder || undefined,
+                          inputType: specInputType,
+                          options: specInputType === "select" ? specOptions : undefined,
+                          isRequired: specRequired,
+                      },
+            );
+
+            await updateUsedProductTypeSetting({
+                id,
+                specificationTemplates: nextTemplates,
+            });
+            return redirect(`/dashboard?tab=marketing&flash=${encodeURIComponent("規格欄位已更新")}&ts=${Date.now()}`);
         }
 
         if (actionMode === "removeSpec") {
@@ -324,6 +399,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 productKeyword={(sp.productQ ?? "").trim()}
                 brandKeyword={(sp.brandQ ?? "").trim()}
                 createCaseAction={createTicket}
+                createWarrantyCaseAction={async (formData: FormData) => {
+                    "use server";
+
+                    const sourceCaseId = String(formData.get("sourceCaseId") ?? "").trim();
+                    const created = await createWarrantyCaseFromExistingCase({ sourceCaseId });
+                    if (!created) {
+                        redirect(`/dashboard?tab=cases&flash=${encodeURIComponent("建立保固案件失敗")}&ts=${Date.now()}`);
+                    }
+                    redirect(`/dashboard?tab=cases&caseQ=${encodeURIComponent(created.id)}&flash=${encodeURIComponent("保固案件已建立")}&ts=${Date.now()}`);
+                }}
                 updateCaseAction={updateTicket}
                 repairTechnicians={repairTechnicians.map((row) => ({
                     id: row.id,

@@ -57,6 +57,7 @@ body {
   /* 背景使用 --bg */
   color: rgb(var(--text));
   /* 文字使用 --text */
+  font-family: var(--font-sans), "Noto Sans TC", sans-serif;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
@@ -106,4 +107,101 @@ body {
 
 .biz-delay-4 {
   animation-delay: 0.32s;
+}
+
+@keyframes bizFloat {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes bizPulse {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.18);
+  }
+}
+
+@keyframes bizRotateSlow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes bizMarquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes bizShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.biz-grid {
+  background-image:
+    linear-gradient(to right, var(--biz-grid-line, rgba(255, 255, 255, 0.06)) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--biz-grid-line, rgba(255, 255, 255, 0.06)) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.75), transparent 92%);
+}
+
+.biz-float {
+  animation: bizFloat 5.6s ease-in-out infinite;
+}
+
+.biz-pulse {
+  animation: bizPulse 1.8s ease-in-out infinite;
+}
+
+.biz-rotate-slow {
+  animation: bizRotateSlow 18s linear infinite;
+}
+
+.biz-marquee {
+  animation: bizMarquee 24s linear infinite;
+}
+
+.biz-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--biz-accent) 22%, transparent) 0%,
+    color-mix(in srgb, var(--biz-accent) 65%, transparent) 50%,
+    color-mix(in srgb, var(--biz-accent) 22%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: bizShimmer 3.2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .biz-fade-up,
+  .biz-float,
+  .biz-pulse,
+  .biz-rotate-slow,
+  .biz-marquee,
+  .biz-shimmer {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }

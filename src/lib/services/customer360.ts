@@ -123,11 +123,14 @@ export async function getCustomerRelationshipSnapshot(customerId: string): Promi
               ];
 
         for (const line of lineItems) {
+            const productName = line.usedSerialOrImei
+                ? `${line.productName} / IMEI ${line.usedSerialOrImei}`
+                : line.productName;
             orderItems.push({
                 id: `order_item_${orderId}_${line.productId || line.productName}`,
                 orderId,
                 productId: line.productId || "",
-                productName: line.productName,
+                productName,
                 qty: Math.max(1, Math.round(line.qty)),
                 unitPrice: Math.max(0, line.unitPrice),
                 subtotal: Math.max(0, line.subtotal),
@@ -190,7 +193,9 @@ export async function getCustomerRelationshipSnapshot(customerId: string): Promi
         });
     }
 
-    const warranties: Warranty[] = customerTickets.map((ticket) => {
+    const warrantyTickets = customerTickets.filter((ticket) => ticket.caseType === "warranty");
+
+    const warranties: Warranty[] = warrantyTickets.map((ticket) => {
         const status: Warranty["status"] = ticket.status === "closed" ? "expired" : "active";
         const expiresAt = ticket.updatedAt + 90 * 24 * 60 * 60 * 1000;
         return {

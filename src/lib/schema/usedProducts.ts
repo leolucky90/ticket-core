@@ -51,6 +51,7 @@ export type UsedProduct = {
     refurbishmentStatus: UsedProductRefurbishmentStatus;
     refurbishmentNote?: string;
     refurbishmentCaseId?: string;
+    refurbishmentCaseIds?: string[];
 
     purchaseDate: string;
     purchasePrice: number;
@@ -165,6 +166,23 @@ function normalizeSpecificationItems(value: unknown): UsedProductSpecificationIt
         .slice(0, 40);
 }
 
+function normalizeRefurbishmentCaseIds(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    const seen = new Set<string>();
+    const ids: string[] = [];
+
+    for (const row of value) {
+        const id = toText(row, 120);
+        if (!id) continue;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        ids.push(id);
+        if (ids.length >= 50) break;
+    }
+
+    return ids;
+}
+
 export function usedProductsCollectionPath(companyId: string): string {
     return `companies/${toText(companyId, 120)}/usedProducts`;
 }
@@ -173,6 +191,9 @@ export function normalizeUsedProduct(input: Partial<UsedProduct> & Pick<UsedProd
     const nowIso = new Date().toISOString();
     const createdAt = toIso(input.createdAt, nowIso);
     const specificationItems = normalizeSpecificationItems(input.specificationItems);
+    const refurbishmentCaseIds = normalizeRefurbishmentCaseIds(input.refurbishmentCaseIds);
+    const refurbishmentCaseId = toText(input.refurbishmentCaseId, 120) || refurbishmentCaseIds[refurbishmentCaseIds.length - 1] || undefined;
+    if (refurbishmentCaseId && !refurbishmentCaseIds.includes(refurbishmentCaseId)) refurbishmentCaseIds.push(refurbishmentCaseId);
 
     return {
         id: toText(input.id, 120),
@@ -196,7 +217,8 @@ export function normalizeUsedProduct(input: Partial<UsedProduct> & Pick<UsedProd
         isRefurbished: toBool(input.isRefurbished, false),
         refurbishmentStatus: toRefurbishmentStatus(input.refurbishmentStatus),
         refurbishmentNote: toText(input.refurbishmentNote, 2000) || undefined,
-        refurbishmentCaseId: toText(input.refurbishmentCaseId, 120) || undefined,
+        refurbishmentCaseId,
+        refurbishmentCaseIds: refurbishmentCaseIds.length > 0 ? refurbishmentCaseIds : undefined,
 
         purchaseDate: toDateOnlyIso(input.purchaseDate, nowIso),
         purchasePrice: toMoney(input.purchasePrice),

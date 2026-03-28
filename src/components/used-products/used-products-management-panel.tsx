@@ -64,7 +64,7 @@ export function UsedProductsManagementPanel({
                     <MerchantPredictiveSearchInput
                         name="q"
                         defaultValue={keyword}
-                        placeholder="搜尋名稱、品牌、型號、序號、IMEI、等級"
+                        placeholder="搜尋名稱、品牌、型號、序列號、IMEI、等級"
                         localSuggestions={productSuggestions}
                     />
                     <Select name="saleStatus" defaultValue={saleStatus}>
@@ -101,7 +101,7 @@ export function UsedProductsManagementPanel({
                                 <th className="px-2 py-2 text-left font-medium">品牌</th>
                                 <th className="px-2 py-2 text-left font-medium">型號</th>
                                 <th className="px-2 py-2 text-left font-medium">類型</th>
-                                <th className="px-2 py-2 text-left font-medium">序號 / IMEI</th>
+                                <th className="px-2 py-2 text-left font-medium">序列號/IMEI No</th>
                                 <th className="px-2 py-2 text-left font-medium">狀態</th>
                                 <th className="px-2 py-2 text-left font-medium">售價</th>
                                 <th className="px-2 py-2 text-left font-medium">保固</th>

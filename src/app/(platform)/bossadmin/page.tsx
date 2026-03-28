@@ -1,9 +1,11 @@
 import { cookies } from "next/headers";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { BossAdminWorkspace } from "@/components/dashboard/BossAdminWorkspace";
+import { MerchantAppShell, MerchantPageShell, type MerchantSidebarGroupConfig } from "@/components/merchant/shell";
 import { buildRevenueStatsFromSubscriptions, listBossAdminCompanies } from "@/lib/services/commerce";
 import { getBusinessHomepageContentPreferences } from "@/features/business/services/businessHomepageContent.server";
 import { BOSS_ADMIN_COOKIE, BOSS_ADMIN_EMAIL, BOSS_ADMIN_PASSWORD, isBossAdminAuthed } from "@/lib/services/bossadmin-auth";
@@ -15,6 +17,31 @@ function isBossTab(value: string | undefined): value is "dashboard" | "query" {
 function parseError(value: string | undefined): boolean {
     return value === "invalid";
 }
+
+const bossAdminSidebarGroups: MerchantSidebarGroupConfig[] = [
+    {
+        id: "overview",
+        title: "總覽",
+        items: [
+            { id: "boss-home", label: "首頁", href: "/", icon: "building" },
+            { id: "boss-dashboard", label: "儀表板", href: "/bossadmin?tab=dashboard", icon: "gauge" },
+        ],
+    },
+    {
+        id: "store",
+        title: "商店",
+        items: [
+            { id: "boss-homepage-studio", label: "展示頁設定", href: "/bossadmin?tab=dashboard", icon: "settings" },
+        ],
+    },
+    {
+        id: "admin",
+        title: "管理",
+        items: [
+            { id: "boss-query", label: "查詢頁面", href: "/bossadmin?tab=query", icon: "receipt-text" },
+        ],
+    },
+];
 
 export default async function BossAdminPage({
     searchParams,
@@ -68,7 +95,7 @@ export default async function BossAdminPage({
                 <div className="mx-auto flex min-h-dvh w-full max-w-3xl items-center justify-center px-4 py-10">
                     <Card className="w-full max-w-md">
                         <div className="mb-4 text-center">
-                            <h1 className="text-2xl font-semibold">商業儀錶板登入</h1>
+                            <h1 className="text-2xl font-semibold">商業儀表板登入</h1>
                             <p className="mt-1 text-sm text-[rgb(var(--muted))]">/bossadmin</p>
                         </div>
                         <form action={signInAction} className="grid gap-3">
@@ -88,15 +115,50 @@ export default async function BossAdminPage({
     const companies = await listBossAdminCompanies();
     const stats = buildRevenueStatsFromSubscriptions(companies);
     const homepagePreferences = await getBusinessHomepageContentPreferences();
+    const tabLabels: Record<typeof tab, { title: string; subtitle: string }> = {
+        dashboard: { title: "儀表板", subtitle: "官方站營運概覽、首頁展示設定與平台資訊整合。" },
+        query: { title: "查詢頁面", subtitle: "檢視公司訂閱、聯絡資料、付款資訊與到期時間。" },
+    };
+    const currentTabLabel = tabLabels[tab];
+    const topbarLinkClass = "rounded-md border border-[rgb(var(--border))] px-2 py-1 text-xs hover:bg-[rgb(var(--panel2))]";
+    const topbarActions = (
+        <nav className="flex items-center gap-2">
+            <Link href="/" className={topbarLinkClass}>
+                首頁
+            </Link>
+            <Link href="/bossadmin?tab=dashboard" className={topbarLinkClass}>
+                儀表板
+            </Link>
+            <Link href="/bossadmin?tab=dashboard" className={topbarLinkClass}>
+                展示頁設定
+            </Link>
+            <Link href="/bossadmin?tab=query" className={topbarLinkClass}>
+                查詢頁面
+            </Link>
+            <form action={signOutAction}>
+                <Button type="submit" variant="ghost" className="px-2 py-1 text-xs">
+                    登出
+                </Button>
+            </form>
+        </nav>
+    );
 
     return (
-        <BossAdminWorkspace
-            tab={tab}
-            stats={stats}
-            companies={companies}
-            homepageContent={homepagePreferences.content}
-            homepageUpdatedAt={homepagePreferences.updatedAt}
-            signOutAction={signOutAction}
-        />
+        <MerchantAppShell
+            sidebarGroups={bossAdminSidebarGroups}
+            topbarActions={topbarActions}
+            brandHref="/bossadmin?tab=dashboard"
+            brandLabel="Ticket Core"
+        >
+            <MerchantPageShell title={currentTabLabel.title} subtitle={currentTabLabel.subtitle} width="overview">
+                <BossAdminWorkspace
+                    tab={tab}
+                    stats={stats}
+                    companies={companies}
+                    homepageContent={homepagePreferences.content}
+                    homepageUpdatedAt={homepagePreferences.updatedAt}
+                />
+            </MerchantPageShell>
+        </MerchantAppShell>
     );
 }

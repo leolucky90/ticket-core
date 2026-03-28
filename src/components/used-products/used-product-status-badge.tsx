@@ -16,7 +16,6 @@ export function UsedProductStatusBadge({ product }: UsedProductStatusBadgeProps)
             <StatusBadge label={usedProductGradeLabel(product.grade, product.gradeLabel)} tone={gradeTone} />
             <StatusBadge label={usedProductRefurbishmentLabel(product.refurbishmentStatus)} tone={refurbTone} />
             <StatusBadge label={usedProductSaleStatusLabel(product.saleStatus)} tone={saleTone} />
-            <StatusBadge label={product.isRefurbished ? "已翻新" : "未翻新"} tone={product.isRefurbished ? "success" : "neutral"} />
         </div>
     );
 }

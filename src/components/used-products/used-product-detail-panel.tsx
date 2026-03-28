@@ -51,7 +51,7 @@ export function UsedProductDetailPanel({
                     <IconActionButton href={`/products/used/${encodeURIComponent(product.id)}/edit`} icon={Pencil} label="編輯" tooltip="編輯商品" />
                     <form action={createRefurbishmentCaseAction}>
                         <input type="hidden" name="usedProductId" value={product.id} />
-                        <IconActionButton icon={Wrench} type="submit" label="建立案件" tooltip="建立或前往翻新案件" />
+                        <IconActionButton icon={Wrench} type="submit" label="建立案件" tooltip="建立翻新案件" />
                     </form>
                     {product.isPublished ? (
                         <form action={unpublishAction}>
@@ -75,8 +75,7 @@ export function UsedProductDetailPanel({
                     <div>品牌：{fieldValue(product.brand)}</div>
                     <div>型號：{fieldValue(product.model)}</div>
                     <div>類型：{fieldValue(product.type)}</div>
-                    <div>序號：{fieldValue(product.serialNumber)}</div>
-                    <div>IMEI：{fieldValue(product.imeiNumber)}</div>
+                    <div>序列號/IMEI No：{fieldValue(product.serialNumber || product.imeiNumber)}</div>
                     <div>商品等級：{usedProductGradeLabel(product.grade, product.gradeLabel)}</div>
                     <div>規格摘要：{fieldValue(product.specifications)}</div>
                 </div>
@@ -101,10 +100,11 @@ export function UsedProductDetailPanel({
             <Card className="grid gap-3">
                 <div className="text-sm font-semibold">翻新資訊</div>
                 <div className="grid gap-2 md:grid-cols-2 text-sm">
-                    <div>是否翻新：{product.isRefurbished ? "是" : "否"}</div>
+                    <div>需翻新才能販賣：{product.refurbishmentStatus !== "no_need_refurbishment" ? "是" : "否"}</div>
                     <div>翻新狀態：{fieldValue(product.refurbishmentStatus)}</div>
                     <div className="md:col-span-2">翻新說明：{fieldValue(product.refurbishmentNote)}</div>
                     <div className="md:col-span-2">關聯案件：{fieldValue(product.refurbishmentCaseId)}</div>
+                    <div className="md:col-span-2">歷史翻新案件：{fieldValue((product.refurbishmentCaseIds ?? []).join("、"))}</div>
                 </div>
             </Card>
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent } from "react";
-import { Check, Eye, EyeOff, X } from "lucide-react";
+import { Check, Eye, EyeOff, Loader2, X } from "lucide-react";
 import {
     createUserWithEmailAndPassword,
     sendEmailVerification,
@@ -135,6 +135,7 @@ export function EmailAuthForm({
     const [showPw, setShowPw] = useState(false);
     const [showConfirmPw, setShowConfirmPw] = useState(false);
     const [msg, setMsg] = useState<string | null>(null);
+    const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
         setMode(initialMode);
@@ -172,6 +173,7 @@ export function EmailAuthForm({
     const showPasswordLabel = labels.showPassword ?? "顯示密碼";
     const hidePasswordLabel = labels.hidePassword ?? "隱藏密碼";
     const passwordPolicyError = labels.passwordPolicyError ?? "密碼規則不符合，請檢查提示。";
+    const submittingMessage = `${primaryLabel}中...`;
 
     function onEmailChange(e: ChangeEvent<HTMLInputElement>) {
         setEmail(e.target.value);
@@ -195,7 +197,7 @@ export function EmailAuthForm({
     return (
         <div className="auth-actions">
             <div className="auth-row">
-                <AuthInput placeholder={labels.email} autoComplete="email" value={email} onChange={onEmailChange} />
+                <AuthInput placeholder={labels.email} autoComplete="email" value={email} onChange={onEmailChange} disabled={submitting} />
 
                 <div className="auth-password-field">
                     <AuthInput
@@ -204,12 +206,14 @@ export function EmailAuthForm({
                         autoComplete={mode === "signUp" ? "new-password" : "current-password"}
                         value={pw}
                         onChange={onPwChange}
+                        disabled={submitting}
                         className="auth-password-input"
                     />
                     <button
                         type="button"
                         className="auth-password-toggle"
                         aria-label={showPw ? hidePasswordLabel : showPasswordLabel}
+                        disabled={submitting}
                         onClick={() => setShowPw((value) => !value)}
                     >
                         {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -244,12 +248,14 @@ export function EmailAuthForm({
                                 autoComplete="new-password"
                                 value={confirmPw}
                                 onChange={onConfirmPwChange}
+                                disabled={submitting}
                                 className="auth-password-input"
                             />
                             <button
                                 type="button"
                                 className="auth-password-toggle"
                                 aria-label={showConfirmPw ? hidePasswordLabel : showPasswordLabel}
+                                disabled={submitting}
                                 onClick={() => setShowConfirmPw((value) => !value)}
                             >
                                 {showConfirmPw ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -266,8 +272,9 @@ export function EmailAuthForm({
             <AuthButton
                 variant="primary"
                 type="button"
-                disabled={isSubmitDisabled}
+                disabled={isSubmitDisabled || submitting}
                 onClick={async () => {
+                    if (submitting) return;
                     setMsg(null);
 
                     if (mode === "signUp") {
@@ -283,6 +290,7 @@ export function EmailAuthForm({
 
                     const previousTenantId = fbAuth.tenantId ?? null;
                     fbAuth.tenantId = firebaseAuthTenantId ?? null;
+                    setSubmitting(true);
                     try {
                         const normalizedEmail = email.trim().toLowerCase();
                         if (mode === "signUp") {
@@ -338,17 +346,26 @@ export function EmailAuthForm({
                         const code = getAuthErrorCode(error);
                         setMsg(getAuthErrorMessage(code, mode, labels));
                     } finally {
+                        setSubmitting(false);
                         fbAuth.tenantId = previousTenantId;
                     }
                 }}
             >
-                {primaryLabel}
+                {submitting ? (
+                    <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                        <span>{submittingMessage}</span>
+                    </span>
+                ) : (
+                    primaryLabel
+                )}
             </AuthButton>
 
+            {submitting ? <div className="auth-muted text-sm">{submittingMessage}</div> : null}
             {msg ? <div className="auth-error">{msg}</div> : null}
 
             {msg === labels.verifyNeeded ? (
-                <AuthButton type="button" onClick={resendVerification}>
+                <AuthButton type="button" onClick={resendVerification} disabled={submitting}>
                     {labels.resendVerify}
                 </AuthButton>
             ) : null}
@@ -360,6 +377,7 @@ export function EmailAuthForm({
                 <button
                     type="button"
                     className="auth-link auth-switch"
+                    disabled={submitting}
                     onClick={() => setMode((currentMode) => (currentMode === "signIn" ? "signUp" : "signIn"))}
                 >
                     {mode === "signIn" ? labels.switchToSignUp : labels.switchToSignIn}

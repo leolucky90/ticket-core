@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { type DragEvent, useMemo, useRef, useState } from "react";
+import { type DragEvent, type KeyboardEvent, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -188,8 +188,8 @@ type ShowcaseBuilderProps = {
 };
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
-type PreviewAudience = "guest" | "company" | "customer";
 type PreviewViewport = "desktop" | "mobile";
+type PreviewScale = 0.5 | 0.6 | 0.7 | 0.8 | 0.9 | 1 | 1.1 | 1.2;
 
 type UploadImageResponse = {
     url?: string;
@@ -198,6 +198,8 @@ type UploadImageResponse = {
 
 const BLOCK_IDS: ShowContentBlockId[] = ["hero", "about", "services", "contact", "ad"];
 const SERVICE_CARD_COUNT = 9;
+const PREVIEW_SCALE_STEPS: PreviewScale[] = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2];
+const DEFAULT_PREVIEW_SCALE: PreviewScale = 0.7;
 const THEME_ROLES: ShowThemeColorRole[] = [
     "page",
     "header",
@@ -308,8 +310,8 @@ export function ShowcaseBuilder({
     const [activeBlockId, setActiveBlockId] = useState<ShowContentBlockId>("hero");
     const [dragging, setDragging] = useState<ShowContentBlockId | null>(null);
     const [dragOver, setDragOver] = useState<ShowContentBlockId | null>(null);
-    const [previewAudience, setPreviewAudience] = useState<PreviewAudience>("guest");
     const [previewViewport, setPreviewViewport] = useState<PreviewViewport>("desktop");
+    const [previewScale, setPreviewScale] = useState<PreviewScale>(DEFAULT_PREVIEW_SCALE);
     const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
     const [saveErrorDetail, setSaveErrorDetail] = useState("");
     const [uploadingCardIndex, setUploadingCardIndex] = useState<number | null>(null);
@@ -317,6 +319,8 @@ export function ShowcaseBuilder({
     const [uploadSuccessByCard, setUploadSuccessByCard] = useState<Record<number, string>>({});
     const [selectedUploadFiles, setSelectedUploadFiles] = useState<Record<number, File | null>>({});
     const [selectedPreviewByCard, setSelectedPreviewByCard] = useState<Record<number, string>>({});
+    const previewCanvasRef = useRef<HTMLDivElement | null>(null);
+    const previewFrameRef = useRef<HTMLDivElement | null>(null);
     const serviceImageInputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
     const currentBlock = contentState.locale[locale][activeBlockId];
@@ -324,6 +328,7 @@ export function ShowcaseBuilder({
     const currentHeroContent = activeBlockId === "hero" ? (currentBlock.content as ShowHeroBlockContent) : null;
     const currentContactContent = activeBlockId === "contact" ? (currentBlock.content as ShowContactBlockContent) : null;
     const currentServicesContent = activeBlockId === "services" ? (currentBlock.content as ShowServicesBlockContent) : null;
+    const desktopPreviewWidth = Math.round(1100 * previewScale);
 
     const blockNameMap: Record<ShowContentBlockId, string> = {
         hero: labels.blockHero,
@@ -642,7 +647,7 @@ export function ShowcaseBuilder({
     }
 
     function handleDragStart(id: ShowContentBlockId) {
-        return (event: DragEvent<HTMLButtonElement>) => {
+        return (event: DragEvent<HTMLDivElement>) => {
             setDragging(id);
             event.dataTransfer.effectAllowed = "move";
             event.dataTransfer.setData("text/plain", id);
@@ -650,7 +655,7 @@ export function ShowcaseBuilder({
     }
 
     function handleDragOver(id: ShowContentBlockId) {
-        return (event: DragEvent<HTMLButtonElement>) => {
+        return (event: DragEvent<HTMLDivElement>) => {
             event.preventDefault();
             if (!dragging || dragging === id) return;
             setDragOver(id);
@@ -659,7 +664,7 @@ export function ShowcaseBuilder({
     }
 
     function handleDrop(id: ShowContentBlockId) {
-        return (event: DragEvent<HTMLButtonElement>) => {
+        return (event: DragEvent<HTMLDivElement>) => {
             event.preventDefault();
             const sourceText = event.dataTransfer.getData("text/plain");
             const source = isBlockId(sourceText) ? sourceText : dragging;
@@ -682,6 +687,21 @@ export function ShowcaseBuilder({
     function handleDragEnd() {
         setDragging(null);
         setDragOver(null);
+    }
+
+    function updatePreviewScale(direction: -1 | 1) {
+        const currentIndex = PREVIEW_SCALE_STEPS.indexOf(previewScale);
+        if (currentIndex === -1) return;
+        const nextIndex = Math.min(PREVIEW_SCALE_STEPS.length - 1, Math.max(0, currentIndex + direction));
+        setPreviewScale(PREVIEW_SCALE_STEPS[nextIndex]);
+    }
+
+    function handleCardKeyDown(blockId: ShowContentBlockId) {
+        return (event: KeyboardEvent<HTMLDivElement>) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            setActiveBlockId(blockId);
+        };
     }
 
     function resetCurrentBlock() {
@@ -746,48 +766,88 @@ export function ShowcaseBuilder({
     }
 
     return (
-        <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)_380px] 2xl:grid-cols-[300px_minmax(0,1fr)_420px]">
-            <aside className="grid gap-4 rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-4 xl:sticky xl:top-4 xl:self-start">
+        <div className="relative overflow-hidden rounded-[2rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-4 md:p-5">
+            <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                <div className="biz-grid absolute inset-0 opacity-40" />
+                <div className="absolute -left-10 top-8 h-48 w-48 rounded-full bg-[rgb(var(--accent))]/10 blur-3xl" />
+                <div className="absolute right-0 top-20 h-60 w-60 rounded-full bg-white/4 blur-3xl" />
+            </div>
+
+            <div className="relative grid gap-4">
+                <section className="biz-fade-up grid gap-4 rounded-[1.8rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel))]/90 p-5 backdrop-blur-xl lg:grid-cols-[1.15fr_0.85fr]">
+                    <div className="grid gap-3">
+                        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-3 py-1 text-[11px] font-semibold tracking-[0.12em] text-[rgb(var(--muted))] uppercase">
+                            <span className="biz-pulse h-2 w-2 rounded-full bg-[rgb(var(--accent))]" />
+                            Showcase Studio
+                        </div>
+                        <div className="text-2xl font-semibold text-[rgb(var(--text))]">把前台展示頁的品牌感、區塊順序與內容編輯整合進同一個後台工作台</div>
+                        <div className="max-w-3xl text-sm leading-relaxed text-[rgb(var(--muted))]">
+                            這裡沿用和首頁相同的版面邏輯：左側是 block list，中間是 live canvas，右側是 inspector。這樣前台看到的視覺節奏與後台編輯體驗會更像同一套產品，而不是兩個分離系統。
+                        </div>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-3">
+                        {[
+                            [labels.sectionListTitle, labels.orderHint],
+                            [labels.previewTitle, labels.hint],
+                            [labels.inspectorTitle, labels.schemaHint],
+                        ].map(([title, note], index) => (
+                            <div
+                                key={title}
+                                className={`rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-4 ${index === 1 ? "biz-float" : index === 2 ? "biz-float biz-delay-1" : ""}`}
+                            >
+                                <div className="text-xs font-semibold tracking-[0.1em] text-[rgb(var(--muted))] uppercase">{title}</div>
+                                <div className="mt-2 line-clamp-3 text-sm text-[rgb(var(--text))]">{note}</div>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+
+                <div className="grid gap-3 xl:grid-cols-[252px_minmax(0,1fr)_336px] 2xl:grid-cols-[264px_minmax(0,1fr)_352px]">
+            <aside className="grid gap-3 rounded-[1.8rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel))]/90 p-3 backdrop-blur-xl xl:sticky xl:top-4 xl:self-start">
                 <div className="grid gap-1">
                     <div className="auth-title">{labels.sectionListTitle}</div>
                     <div className="text-xs text-[rgb(var(--muted))]">{labels.orderHint}</div>
                     <div className="text-xs text-[rgb(var(--muted))]">{labels.dragHint}</div>
                 </div>
 
-                <div className="inline-flex w-fit rounded-lg border border-[rgb(var(--border))] p-1">
+                <div className="inline-flex w-fit rounded-full border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-1">
                     <button
                         type="button"
-                        className={`rounded px-2 py-1 text-xs ${locale === "zh" ? "bg-[rgb(var(--accent))] text-[rgb(var(--bg))]" : "text-[rgb(var(--text))]"}`}
+                        className={`rounded-full px-3 py-1 text-xs ${locale === "zh" ? "bg-[rgb(var(--accent))] text-[rgb(var(--bg))]" : "text-[rgb(var(--text))]"}`}
                         onClick={() => setLocale("zh")}
                     >
                         {labels.localeZh}
                     </button>
                     <button
                         type="button"
-                        className={`rounded px-2 py-1 text-xs ${locale === "en" ? "bg-[rgb(var(--accent))] text-[rgb(var(--bg))]" : "text-[rgb(var(--text))]"}`}
+                        className={`rounded-full px-3 py-1 text-xs ${locale === "en" ? "bg-[rgb(var(--accent))] text-[rgb(var(--bg))]" : "text-[rgb(var(--text))]"}`}
                         onClick={() => setLocale("en")}
                     >
                         {labels.localeEn}
                     </button>
                 </div>
 
-                <div className="grid gap-2">
+                <div className="grid gap-1.5">
                     {contentState.order.map((blockId, index) => {
                         const block = contentState.locale[locale][blockId];
                         const isActive = activeBlockId === blockId;
                         const isDropTarget = dragOver === blockId && dragging !== null && dragging !== blockId;
                         return (
-                            <button
+                            <div
                                 key={blockId}
-                                type="button"
+                                role="button"
+                                tabIndex={0}
                                 draggable
+                                aria-pressed={isActive}
                                 onClick={() => setActiveBlockId(blockId)}
+                                onKeyDown={handleCardKeyDown(blockId)}
                                 onDragStart={handleDragStart(blockId)}
                                 onDragOver={handleDragOver(blockId)}
                                 onDrop={handleDrop(blockId)}
                                 onDragEnd={handleDragEnd}
                                 className={[
-                                    "grid gap-2 rounded-xl border px-3 py-3 text-left transition",
+                                    "grid gap-2 rounded-[1.2rem] border px-3 py-3 text-left transition",
                                     isActive ? "border-[rgb(var(--accent))] bg-[rgb(var(--panel2))]" : "border-[rgb(var(--border))] bg-[rgb(var(--panel2))]",
                                     isDropTarget ? "ring-1 ring-[rgb(var(--accent))]" : "",
                                 ].join(" ")}
@@ -826,12 +886,12 @@ export function ShowcaseBuilder({
                                         {labels.moveDown}
                                     </button>
                                 </div>
-                            </button>
+                            </div>
                         );
                     })}
                 </div>
 
-                <div className="grid gap-2 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                <div className="grid gap-2 rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
                     <div className="text-sm font-semibold">{labels.libraryTitle}</div>
                     <div className="text-xs text-[rgb(var(--muted))]">{labels.libraryHint}</div>
                     <div className="grid gap-2">
@@ -847,7 +907,7 @@ export function ShowcaseBuilder({
                 </div>
             </aside>
 
-            <section className="grid gap-4 rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-4">
+            <section className="grid gap-3 rounded-[1.8rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel))]/90 p-3 backdrop-blur-xl">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="grid gap-1">
                         <div className="auth-title">{labels.previewTitle}</div>
@@ -860,27 +920,7 @@ export function ShowcaseBuilder({
                     ) : null}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-4 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-3">
-                    <div className="grid gap-1">
-                        <div className="text-[11px] uppercase tracking-[0.08em] text-[rgb(var(--muted))]">{labels.audienceLabel}</div>
-                        <div className="inline-flex rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-1">
-                            {([
-                                ["guest", labels.audienceGuest],
-                                ["company", labels.audienceCompany],
-                                ["customer", labels.audienceCustomer],
-                            ] as const).map(([value, label]) => (
-                                <button
-                                    key={value}
-                                    type="button"
-                                    className={`rounded px-2 py-1 text-xs ${previewAudience === value ? "bg-[rgb(var(--accent))] text-[rgb(var(--bg))]" : "text-[rgb(var(--text))]"}`}
-                                    onClick={() => setPreviewAudience(value)}
-                                >
-                                    {label}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
+                <div className="flex flex-wrap items-center gap-3 rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2.5">
                     <div className="grid gap-1">
                         <div className="text-[11px] uppercase tracking-[0.08em] text-[rgb(var(--muted))]">{labels.viewportLabel}</div>
                         <div className="inline-flex rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-1">
@@ -899,12 +939,57 @@ export function ShowcaseBuilder({
                             ))}
                         </div>
                     </div>
+
+                    {previewViewport === "desktop" ? (
+                        <div className="grid gap-1">
+                            <div className="text-[11px] uppercase tracking-[0.08em] text-[rgb(var(--muted))]">縮放比例</div>
+                            <div className="inline-flex items-center gap-1 rounded-[1.1rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-1.5 shadow-sm">
+                                <div className="min-w-[4.4rem] rounded-[0.9rem] px-3 py-1.5 text-center text-sm font-medium text-[rgb(var(--text))]">
+                                    {Math.round(previewScale * 100)}%
+                                </div>
+                                <button
+                                    type="button"
+                                    className="grid h-9 w-9 place-items-center rounded-[0.85rem] text-lg text-[rgb(var(--text))] transition hover:bg-[rgb(var(--panel2))] disabled:cursor-not-allowed disabled:opacity-40"
+                                    onClick={() => updatePreviewScale(-1)}
+                                    disabled={previewScale === PREVIEW_SCALE_STEPS[0]}
+                                    aria-label="縮小預覽"
+                                >
+                                    -
+                                </button>
+                                <button
+                                    type="button"
+                                    className="grid h-9 w-9 place-items-center rounded-[0.85rem] text-xl text-[rgb(var(--text))] transition hover:bg-[rgb(var(--panel2))] disabled:cursor-not-allowed disabled:opacity-40"
+                                    onClick={() => updatePreviewScale(1)}
+                                    disabled={previewScale === PREVIEW_SCALE_STEPS[PREVIEW_SCALE_STEPS.length - 1]}
+                                    aria-label="放大預覽"
+                                >
+                                    +
+                                </button>
+                                <button
+                                    type="button"
+                                    className="rounded-full border border-[rgb(var(--accent))] px-4 py-1.5 text-sm font-medium text-[rgb(var(--text))] transition hover:bg-[rgb(var(--panel2))]"
+                                    onClick={() => setPreviewScale(DEFAULT_PREVIEW_SCALE)}
+                                >
+                                    重設
+                                </button>
+                            </div>
+                        </div>
+                    ) : null}
                 </div>
 
-                <div className="min-h-[680px] overflow-auto rounded-[28px] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                    <div className={previewViewport === "mobile" ? "mx-auto w-full max-w-[390px] overflow-hidden rounded-[24px] border border-[rgb(var(--border))] bg-white shadow-sm" : "overflow-hidden rounded-[24px] border border-[rgb(var(--border))] bg-white shadow-sm"}>
+                <div
+                    ref={previewCanvasRef}
+                    className="min-h-[760px] overflow-auto rounded-[28px] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-2.5 shadow-[0_30px_80px_-58px_rgb(var(--accent))]"
+                >
+                    <div
+                        ref={previewFrameRef}
+                        className={previewViewport === "mobile"
+                            ? "mx-auto w-full max-w-[390px] overflow-hidden rounded-[24px] border border-[rgb(var(--border))] bg-white shadow-sm"
+                            : "overflow-hidden rounded-[24px] border border-[rgb(var(--border))] bg-white shadow-sm"}
+                        style={previewViewport === "desktop" ? { width: `${desktopPreviewWidth}px` } : undefined}
+                    >
                         <ShowHomePage
-                            navAccountType={previewAudience}
+                            navAccountType="guest"
                             lang={locale}
                             showThemeColors={themeColors}
                             storefrontSettings={storefront}
@@ -916,7 +1001,7 @@ export function ShowcaseBuilder({
                 </div>
             </section>
 
-            <section className="grid gap-4 rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-4 xl:sticky xl:top-4 xl:max-h-[calc(100dvh-2rem)] xl:self-start xl:overflow-auto">
+            <section className="grid gap-3 rounded-[1.8rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel))]/90 p-3 backdrop-blur-xl xl:sticky xl:top-4 xl:max-h-[calc(100dvh-2rem)] xl:self-start xl:overflow-auto">
                 <div className="flex items-start justify-between gap-3">
                     <div className="grid gap-1">
                         <div className="auth-title">{labels.inspectorTitle}</div>
@@ -927,7 +1012,7 @@ export function ShowcaseBuilder({
                     </span>
                 </div>
 
-                <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-3">
+                <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-3">
                     <Button type="button" onClick={saveToFirebase} disabled={saveStatus === "saving"}>
                         {labels.save}
                     </Button>
@@ -947,7 +1032,7 @@ export function ShowcaseBuilder({
                     ) : null}
                 </div>
 
-                <details open className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                <details open className="rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
                     <summary className="cursor-pointer list-none text-sm font-medium">Block</summary>
                     <div className="mt-3 grid gap-3">
                         <label className="grid gap-1">
@@ -1315,7 +1400,7 @@ export function ShowcaseBuilder({
                     </div>
                 </details>
 
-                <details open className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                <details open className="rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
                     <summary className="cursor-pointer list-none text-sm font-medium">{labels.typographySectionTitle}</summary>
                     <div className="mt-3 grid gap-3 md:grid-cols-3">
                         <label className="grid gap-1">
@@ -1342,7 +1427,7 @@ export function ShowcaseBuilder({
                     </div>
                 </details>
 
-                <details open className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                <details open className="rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
                     <summary className="cursor-pointer list-none text-sm font-medium">{labels.styleSectionTitle}</summary>
                     <div className="mt-3 grid gap-3 md:grid-cols-3">
                         <label className="grid gap-1">
@@ -1425,7 +1510,7 @@ export function ShowcaseBuilder({
                     </div>
                 </details>
 
-                <details open className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                <details open className="rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
                     <summary className="cursor-pointer list-none text-sm font-medium">{labels.ctaSectionTitle}</summary>
                     <div className="mt-3 grid gap-3">
                         {(currentBlock.ctas ?? []).map((cta, index) => (
@@ -1475,7 +1560,7 @@ export function ShowcaseBuilder({
                     </div>
                 </details>
 
-                <details open className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                <details open className="rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
                     <summary className="cursor-pointer list-none text-sm font-medium">{labels.themeOverrideSectionTitle}</summary>
                     <div className="mt-3 grid gap-2">
                         <div className="text-xs text-[rgb(var(--muted))]">{labels.themeOverrideHint}</div>
@@ -1488,7 +1573,7 @@ export function ShowcaseBuilder({
                     </div>
                 </details>
 
-                <details open className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                <details open className="rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
                     <summary className="cursor-pointer list-none text-sm font-medium">{labels.themeSectionTitle}</summary>
                     <div className="mt-3 grid gap-3">
                         {THEME_ROLES.map((role) => {
@@ -1529,7 +1614,7 @@ export function ShowcaseBuilder({
                     </div>
                 </details>
 
-                <details open className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                <details open className="rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
                     <summary className="cursor-pointer list-none text-sm font-medium">{labels.storefrontTitle}</summary>
                     <div className="mt-3 grid gap-2">
                         <div className="text-xs text-[rgb(var(--muted))]">{labels.storefrontHint}</div>
@@ -1569,7 +1654,7 @@ export function ShowcaseBuilder({
                     </div>
                 </details>
 
-                <details className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                <details className="rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
                     <summary className="cursor-pointer list-none text-sm font-medium">{labels.schemaSectionTitle}</summary>
                     <div className="mt-3 grid gap-2">
                         <div className="text-xs text-[rgb(var(--muted))]">{labels.schemaHint}</div>
@@ -1577,6 +1662,8 @@ export function ShowcaseBuilder({
                     </div>
                 </details>
             </section>
+                </div>
+            </div>
         </div>
     );
 }

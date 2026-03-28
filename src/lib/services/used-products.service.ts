@@ -33,6 +33,27 @@ function makeId(prefix = "up"): string {
     return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now()}`;
 }
 
+function toFirestoreData<T>(input: T): T {
+    const walk = (value: unknown): unknown => {
+        if (Array.isArray(value)) {
+            return value.map((item) => walk(item)).filter((item) => item !== undefined);
+        }
+        if (value && typeof value === "object") {
+            const out: Record<string, unknown> = {};
+            for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+                const next = walk(raw);
+                if (next !== undefined) {
+                    out[key] = next;
+                }
+            }
+            return out;
+        }
+        if (value === undefined) return undefined;
+        return value;
+    };
+    return walk(input) as T;
+}
+
 function parseIso(value: unknown, fallback = new Date().toISOString()): string {
     if (typeof value === "string" && value.trim()) {
         const ts = Date.parse(value);
@@ -143,7 +164,7 @@ async function patchUsedProduct(
     const db = await getDb();
     if (!db) return next;
 
-    await db.collection(usedProductsCollectionPath(scope.companyId)).doc(targetId).set(next, { merge: true });
+    await db.collection(usedProductsCollectionPath(scope.companyId)).doc(targetId).set(toFirestoreData(next), { merge: true });
     return next;
 }
 
@@ -162,6 +183,23 @@ function addWarranty(startAtIso: string, duration: number, unit: UsedProduct["wa
         date.setUTCMonth(date.getUTCMonth() + Math.max(0, Math.round(duration)));
     }
     return date.toISOString();
+}
+
+function usedProductSerialOrImei(product: Pick<UsedProduct, "serialNumber" | "imeiNumber">): string {
+    return toText(product.serialNumber || product.imeiNumber, 120);
+}
+
+function mergeRefurbishmentCaseIds(current: UsedProduct, nextCaseId: string): string[] {
+    const seen = new Set<string>();
+    const ids: string[] = [];
+    for (const candidate of [...(current.refurbishmentCaseIds ?? []), current.refurbishmentCaseId ?? "", nextCaseId]) {
+        const normalized = toText(candidate, 120);
+        if (!normalized || seen.has(normalized)) continue;
+        seen.add(normalized);
+        ids.push(normalized);
+        if (ids.length >= 50) break;
+    }
+    return ids;
 }
 
 export async function listUsedProducts(filters?: {
@@ -266,7 +304,7 @@ export async function createUsedProduct(
     const db = await getDb();
     if (!db) return product;
 
-    await db.collection(usedProductsCollectionPath(scope.companyId)).doc(product.id).set(product, { merge: false });
+    await db.collection(usedProductsCollectionPath(scope.companyId)).doc(product.id).set(toFirestoreData(product), { merge: false });
     return product;
 }
 
@@ -389,6 +427,7 @@ export async function createRefurbishmentCaseForUsedProduct(input: {
     repairTechnicianId?: string;
     repairTechnicianName?: string;
     note?: string;
+    refurbishmentStatus?: UsedProduct["refurbishmentStatus"];
 }): Promise<{ caseId: string; usedProduct: UsedProduct } | null> {
     const scope = await resolveScope();
     if (!scope) return null;
@@ -398,10 +437,15 @@ export async function createRefurbishmentCaseForUsedProduct(input: {
 
     const caseId = makeId("c");
     const createdAt = Date.now();
+    const serialOrImei = usedProductSerialOrImei(usedProduct);
+    const linkedUsedProductName = serialOrImei ? `${usedProduct.name} / IMEI ${serialOrImei}` : usedProduct.name;
+    const deviceModel = [usedProduct.model || usedProduct.type, serialOrImei ? `IMEI ${serialOrImei}` : ""].filter((value) => value.length > 0).join(" / ");
+    const repairReason = serialOrImei ? `二手商品翻新 / IMEI ${serialOrImei}` : "二手商品翻新";
+    const note = [toText(input.note, 1000), serialOrImei ? `關聯 IMEI：${serialOrImei}` : ""].filter((value) => value.length > 0).join("\n");
 
     const casePayload = {
         id: caseId,
-        title: `翻新 / ${usedProduct.name}`,
+        title: serialOrImei ? `翻新 / ${usedProduct.name} / ${serialOrImei}` : `翻新 / ${usedProduct.name}`,
         status: "new",
         quoteStatus: "inspection_estimate",
         customer: {
@@ -412,17 +456,17 @@ export async function createRefurbishmentCaseForUsedProduct(input: {
         },
         device: {
             name: usedProduct.brand || usedProduct.name,
-            model: usedProduct.model || usedProduct.type,
+            model: deviceModel,
         },
-        repairReason: "二手商品翻新",
+        repairReason,
         repairSuggestion: "",
-        note: toText(input.note, 1000),
+        note,
         repairAmount: 0,
         inspectionFee: 0,
         pendingFee: 0,
         companyId: scope.companyId,
         linkedUsedProductId: usedProduct.id,
-        linkedUsedProductName: usedProduct.name,
+        linkedUsedProductName,
         caseType: "refurbish",
         repairTechnicianId: toText(input.repairTechnicianId, 120) || undefined,
         repairTechnicianName: toText(input.repairTechnicianName, 120) || undefined,
@@ -439,6 +483,7 @@ export async function createRefurbishmentCaseForUsedProduct(input: {
         usedProductId: usedProduct.id,
         caseId,
         caseTitle: casePayload.title,
+        refurbishmentStatus: input.refurbishmentStatus,
     });
 
     if (!linked) return null;
@@ -453,13 +498,17 @@ export async function linkUsedProductToCase(input: {
     usedProductId: string;
     caseId: string;
     caseTitle?: string;
+    refurbishmentStatus?: UsedProduct["refurbishmentStatus"];
 }): Promise<UsedProduct | null> {
     const scope = await resolveScope();
     if (!scope) return null;
+    const currentUsedProduct = await getUsedProductById(input.usedProductId);
+    if (!currentUsedProduct) return null;
 
     const usedProduct = await patchUsedProduct(scope, input.usedProductId, {
         refurbishmentCaseId: toText(input.caseId, 120),
-        refurbishmentStatus: "refurbishing",
+        refurbishmentCaseIds: mergeRefurbishmentCaseIds(currentUsedProduct, toText(input.caseId, 120)),
+        refurbishmentStatus: input.refurbishmentStatus ?? "waiting_refurbishment",
         refurbishmentNote: input.caseTitle ? `已連結翻新案件：${toText(input.caseTitle, 240)}` : undefined,
     });
 
@@ -470,7 +519,10 @@ export async function linkUsedProductToCase(input: {
         await db.collection(`companies/${scope.companyId}/cases`).doc(toText(input.caseId, 120)).set(
             {
                 linkedUsedProductId: usedProduct.id,
-                linkedUsedProductName: usedProduct.name,
+                linkedUsedProductName: (() => {
+                    const serialOrImei = usedProductSerialOrImei(usedProduct);
+                    return serialOrImei ? `${usedProduct.name} / IMEI ${serialOrImei}` : usedProduct.name;
+                })(),
                 caseType: "refurbish",
                 updatedAt: Date.now(),
             },
@@ -488,6 +540,12 @@ export async function syncUsedProductRefurbishmentStatus(input: {
 }): Promise<UsedProduct | null> {
     const scope = await resolveScope();
     if (!scope) return null;
+    const currentUsedProduct = await getUsedProductById(input.usedProductId);
+    if (!currentUsedProduct) return null;
+    const targetCaseId = toText(input.caseId, 120);
+    if (targetCaseId && currentUsedProduct.refurbishmentCaseId && currentUsedProduct.refurbishmentCaseId !== targetCaseId) {
+        return currentUsedProduct;
+    }
 
     let caseStatus = toText(input.caseStatus, 80);
     if (!caseStatus && input.caseId) {
@@ -504,7 +562,7 @@ export async function syncUsedProductRefurbishmentStatus(input: {
 
     return patchUsedProduct(scope, input.usedProductId, {
         refurbishmentStatus: nextRefurbishmentStatus,
-        isRefurbished: nextRefurbishmentStatus === "refurbished",
+        isRefurbished: nextRefurbishmentStatus !== "no_need_refurbishment",
         saleStatus: nextRefurbishmentStatus === "refurbished" ? "available" : undefined,
     });
 }

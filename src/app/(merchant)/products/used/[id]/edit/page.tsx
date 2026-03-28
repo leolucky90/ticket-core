@@ -61,6 +61,17 @@ export default async function EditUsedProductPage({ params, searchParams }: Edit
             redirect(`/products/used/${encodeURIComponent(id)}/edit?flash=${encodeURIComponent("更新失敗")}`);
         }
 
+        if (payload.isRefurbished && !updated.refurbishmentCaseId) {
+            const caseCreated = await createRefurbishmentCaseForUsedProduct({
+                usedProductId: updated.id,
+                refurbishmentStatus: payload.refurbishmentStatus,
+            });
+            if (!caseCreated) {
+                redirect(`/products/used/${encodeURIComponent(id)}?flash=${encodeURIComponent("商品已更新，但自動建立翻新案件失敗")}&ts=${encodeURIComponent(updated.updatedAt)}`);
+            }
+            redirect(`/products/used/${encodeURIComponent(id)}?flash=${encodeURIComponent("商品已更新，並自動建立翻新案件")}&ts=${encodeURIComponent(updated.updatedAt)}`);
+        }
+
         redirect(`/products/used/${encodeURIComponent(id)}?flash=${encodeURIComponent("商品已更新")}`);
     }
 
@@ -70,22 +81,19 @@ export default async function EditUsedProductPage({ params, searchParams }: Edit
         const usedProductId = String(formData.get("usedProductId") ?? id);
         const latest = await getUsedProductById(usedProductId);
         if (!latest) {
-            redirect(`/products/used/${encodeURIComponent(id)}/edit?flash=${encodeURIComponent("找不到商品")}&ts=${Date.now()}`);
-        }
-
-        if (latest.refurbishmentCaseId) {
-            redirect(`/dashboard?tab=cases&caseQ=${encodeURIComponent(latest.refurbishmentCaseId)}&flash=${encodeURIComponent("已前往既有翻新案件")}&ts=${Date.now()}`);
+            redirect(`/products/used/${encodeURIComponent(id)}/edit?flash=${encodeURIComponent("找不到商品")}`);
         }
 
         const created = await createRefurbishmentCaseForUsedProduct({
             usedProductId,
+            refurbishmentStatus: latest.refurbishmentStatus,
         });
 
         if (!created) {
-            redirect(`/products/used/${encodeURIComponent(id)}/edit?flash=${encodeURIComponent("建立翻新案件失敗")}&ts=${Date.now()}`);
+            redirect(`/products/used/${encodeURIComponent(id)}/edit?flash=${encodeURIComponent("建立翻新案件失敗")}&ts=${encodeURIComponent(latest.updatedAt)}`);
         }
 
-        redirect(`/dashboard?tab=cases&caseQ=${encodeURIComponent(created.caseId)}&flash=${encodeURIComponent("翻新案件已建立")}&ts=${Date.now()}`);
+        redirect(`/dashboard?tab=cases&caseQ=${encodeURIComponent(created.caseId)}&flash=${encodeURIComponent("翻新案件已建立")}&ts=${encodeURIComponent(created.caseId)}`);
     }
 
     return (

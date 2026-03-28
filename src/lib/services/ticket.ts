@@ -74,6 +74,23 @@ function safeText(value: string, max: number): string {
     return value.replace(/[\u0000-\u001F\u007F]/g, "").slice(0, max).trim();
 }
 
+function toFirestoreData<T>(input: T): T {
+    const walk = (value: unknown): unknown => {
+        if (Array.isArray(value)) return value.map((item) => walk(item)).filter((item) => item !== undefined);
+        if (value && typeof value === "object") {
+            const out: Record<string, unknown> = {};
+            for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+                const next = walk(raw);
+                if (next !== undefined) out[key] = next;
+            }
+            return out;
+        }
+        if (value === undefined) return undefined;
+        return value;
+    };
+    return walk(input) as T;
+}
+
 function normalizeCompanyId(value: unknown): string | null {
     if (typeof value !== "string") return null;
     const trimmed = value.trim();
@@ -94,6 +111,24 @@ function composeTitle(customerName: string, deviceName: string): string {
 
 function normalizeStatusValue(value: unknown): string {
     return safeText(toStr(value), MAX_STATUS);
+}
+
+function normalizeCaseIdList(value: unknown): string[] {
+    const rows = Array.isArray(value)
+        ? value
+        : typeof value === "string"
+          ? value.split(/[\n,]/g)
+          : [];
+    const seen = new Set<string>();
+    const ids: string[] = [];
+    for (const row of rows) {
+        const id = safeText(toStr(row), MAX_ID);
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        ids.push(id);
+        if (ids.length >= 50) break;
+    }
+    return ids;
 }
 
 function parseQuoteStatus(value: unknown): QuoteStatus {
@@ -170,6 +205,10 @@ function normalizeTicket(input: Partial<Ticket> & { id: string }): Ticket {
     const repairTechnicianName = safeText(toStr(extra.repairTechnicianName), MAX_TEXT);
     const linkedUsedProductId = safeText(toStr(extra.linkedUsedProductId), MAX_ID);
     const linkedUsedProductName = safeText(toStr(extra.linkedUsedProductName), MAX_TEXT);
+    const parentCaseId = safeText(toStr(extra.parentCaseId), MAX_ID);
+    const parentCaseTitle = safeText(toStr(extra.parentCaseTitle), MAX_TEXT);
+    const relatedCaseIds = normalizeCaseIdList(extra.relatedCaseIds);
+    const historySummary = safeText(toStr(extra.historySummary), MAX_DETAIL);
     const caseType = safeText(toStr(extra.caseType), MAX_STATUS);
 
     return {
@@ -193,6 +232,10 @@ function normalizeTicket(input: Partial<Ticket> & { id: string }): Ticket {
         repairTechnicianName: repairTechnicianName || undefined,
         linkedUsedProductId: linkedUsedProductId || undefined,
         linkedUsedProductName: linkedUsedProductName || undefined,
+        parentCaseId: parentCaseId || undefined,
+        parentCaseTitle: parentCaseTitle || undefined,
+        relatedCaseIds: relatedCaseIds.length > 0 ? relatedCaseIds : undefined,
+        historySummary: historySummary || undefined,
         caseType: caseType || undefined,
         repairAmount,
         inspectionFee,
@@ -338,6 +381,119 @@ function companyCustomersRef(db: Awaited<ReturnType<typeof getFirestoreDb>>, com
     return db!.collection(`companies/${companyId}/customers`);
 }
 
+function caseTypeLabel(caseType?: string): string {
+    if (caseType === "refurbish") return "翻新";
+    if (caseType === "warranty") return "保固";
+    return "維修";
+}
+
+function summarizeCaseHistory(cases: Ticket[], limit = 5): string {
+    return cases
+        .slice(0, limit)
+        .map((ticket) => {
+            const date = ticket.updatedAt > 0 ? new Date(ticket.updatedAt).toISOString().slice(0, 10) : "";
+            const parts = [
+                [date, caseTypeLabel(ticket.caseType), ticket.id].filter((value) => value.length > 0).join(" "),
+                ticket.repairReason ? `原因：${ticket.repairReason}` : "",
+                ticket.repairSuggestion ? `處理：${ticket.repairSuggestion}` : "",
+                ticket.note ? `備註：${ticket.note}` : "",
+            ].filter((value) => value.length > 0);
+            return parts.join(" / ");
+        })
+        .filter((value) => value.length > 0)
+        .join("\n")
+        .slice(0, MAX_DETAIL);
+}
+
+async function listRelatedTickets(companyId: string, input: {
+    linkedUsedProductId?: string;
+    customerId?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+    customerName?: string;
+    deviceName?: string;
+    deviceModel?: string;
+}): Promise<Ticket[]> {
+    const normalizedUsedProductId = safeText(toStr(input.linkedUsedProductId), MAX_ID);
+    const normalizedCustomerId = safeText(toStr(input.customerId), MAX_ID);
+    const normalizedEmail = normalizeLowerEmail(input.customerEmail);
+    const normalizedPhone = safeText(toStr(input.customerPhone), MAX_TEXT);
+    const normalizedName = safeText(toStr(input.customerName), MAX_TEXT).toLowerCase();
+    const normalizedDeviceName = safeText(toStr(input.deviceName), MAX_TEXT).toLowerCase();
+    const normalizedDeviceModel = safeText(toStr(input.deviceModel), MAX_TEXT).toLowerCase();
+
+    let tickets: Ticket[] | null = null;
+    try {
+        tickets = await listFromFirebase(companyId);
+    } catch {
+        tickets = null;
+    }
+    if (!tickets) tickets = listFromMemory(companyId);
+
+    return tickets
+        .map((ticket) => normalizeTicket(ticket))
+        .filter((ticket) => {
+            if (normalizedUsedProductId && ticket.linkedUsedProductId === normalizedUsedProductId) return true;
+            if (normalizedCustomerId && ticket.customerId === normalizedCustomerId) return true;
+            if (normalizedEmail && ticket.customer.email === normalizedEmail) return true;
+            if (normalizedPhone && ticket.customer.phone === normalizedPhone) return true;
+            if (
+                normalizedName &&
+                normalizedDeviceName &&
+                ticket.customer.name.trim().toLowerCase() === normalizedName &&
+                ticket.device.name.trim().toLowerCase() === normalizedDeviceName &&
+                ticket.device.model.trim().toLowerCase() === normalizedDeviceModel
+            ) {
+                return true;
+            }
+            return false;
+        })
+        .sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+async function getTicketByIdInternal(companyId: string, ticketId: string): Promise<Ticket | null> {
+    const cleanedId = safeText(ticketId, MAX_ID);
+    if (!cleanedId) return null;
+
+    const db = await getFirestoreDb();
+    if (db) {
+        const snap = await companyCasesRef(db, companyId).doc(cleanedId).get();
+        if (snap.exists) return normalizeTicket({ id: snap.id, ...(snap.data() as Partial<Ticket>) });
+    }
+
+    const current = listFromMemory(companyId).find((ticket) => ticket.id === cleanedId);
+    return current ? normalizeTicket(current) : null;
+}
+
+async function deriveWarrantyHistory(companyId: string, sourceTicket: Ticket): Promise<{
+    parentCaseId?: string;
+    parentCaseTitle?: string;
+    relatedCaseIds?: string[];
+    historySummary?: string;
+}> {
+    const related = await listRelatedTickets(companyId, {
+        linkedUsedProductId: sourceTicket.linkedUsedProductId,
+        customerId: sourceTicket.customerId,
+        customerEmail: sourceTicket.customer.email,
+        customerPhone: sourceTicket.customer.phone,
+        customerName: sourceTicket.customer.name,
+        deviceName: sourceTicket.device.name,
+        deviceModel: sourceTicket.device.model,
+    });
+    const withoutSelf = related.filter((ticket) => ticket.id !== sourceTicket.id);
+    const sourceAndHistory = [sourceTicket, ...withoutSelf]
+        .filter((ticket, index, rows) => rows.findIndex((row) => row.id === ticket.id) === index)
+        .sort((a, b) => b.updatedAt - a.updatedAt);
+    const relatedCaseIds = sourceAndHistory.map((ticket) => ticket.id).filter((id) => id !== sourceTicket.id);
+
+    return {
+        parentCaseId: sourceTicket.id,
+        parentCaseTitle: sourceTicket.title,
+        relatedCaseIds: [sourceTicket.id, ...relatedCaseIds].slice(0, 50),
+        historySummary: summarizeCaseHistory(sourceAndHistory),
+    };
+}
+
 async function listFromFirebase(companyId: string): Promise<Ticket[] | null> {
     const db = await getFirestoreDb();
     if (!db) return null;
@@ -393,6 +549,13 @@ function matchesTicketPageQuery(ticket: Ticket, params: TicketPageQuery): boolea
         ticket.repairReason,
         ticket.repairSuggestion,
         ticket.note,
+        ticket.linkedUsedProductId ?? "",
+        ticket.linkedUsedProductName ?? "",
+        ticket.parentCaseId ?? "",
+        ticket.parentCaseTitle ?? "",
+        (ticket.relatedCaseIds ?? []).join(" "),
+        ticket.historySummary ?? "",
+        ticket.caseType ?? "",
     ]
         .join(" ")
         .toLowerCase();
@@ -411,23 +574,46 @@ async function findOrCreateCustomerId(
 ): Promise<string> {
     const customers = companyCustomersRef(db, companyId);
     const emailLower = normalizeLowerEmail(params.customerEmail);
+    const phone = safeText(params.customerPhone, MAX_TEXT);
+    const name = safeText(params.customerName, MAX_TEXT);
+
+    const mergeExistingCustomer = async (doc: FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>): Promise<string> => {
+        const current = (doc.data() ?? {}) as Partial<CompanyCustomerDoc>;
+        const update: Partial<CompanyCustomerDoc> = {
+            companyId,
+            name: name || current.name || "未命名客戶",
+            phone: phone || current.phone || "",
+            address: params.customerAddress || current.address || "",
+            email: emailLower || current.email || "",
+            emailLower: emailLower || current.emailLower || "",
+            updatedAt: now(),
+        };
+        await doc.ref.set(update, { merge: true });
+        return doc.id;
+    };
 
     if (emailLower) {
         const existingByEmail = await customers.where("emailLower", "==", emailLower).limit(1).get();
         if (!existingByEmail.empty) {
-            const doc = existingByEmail.docs[0];
+            return mergeExistingCustomer(existingByEmail.docs[0]);
+        }
+    }
+
+    if (phone) {
+        const existingByPhone = await customers.where("phone", "==", phone).limit(1).get();
+        if (!existingByPhone.empty) {
+            return mergeExistingCustomer(existingByPhone.docs[0]);
+        }
+    }
+
+    if (name) {
+        const existingByName = await customers.where("name", "==", name).limit(5).get();
+        const matchedByName = existingByName.docs.find((doc) => {
             const current = (doc.data() ?? {}) as Partial<CompanyCustomerDoc>;
-            const update: Partial<CompanyCustomerDoc> = {
-                companyId,
-                name: params.customerName || current.name || "未命名客戶",
-                phone: params.customerPhone || current.phone || "",
-                address: params.customerAddress || current.address || "",
-                email: emailLower,
-                emailLower,
-                updatedAt: now(),
-            };
-            await doc.ref.set(update, { merge: true });
-            return doc.id;
+            return !phone || safeText(current.phone ?? "", MAX_TEXT) === phone;
+        });
+        if (matchedByName) {
+            return mergeExistingCustomer(matchedByName);
         }
     }
 
@@ -465,6 +651,10 @@ async function createInMemory(
         repairTechnicianName?: string;
         linkedUsedProductId?: string;
         linkedUsedProductName?: string;
+        parentCaseId?: string;
+        parentCaseTitle?: string;
+        relatedCaseIds?: string[];
+        historySummary?: string;
         caseType?: string;
         repairAmount: number;
         inspectionFee: number;
@@ -494,6 +684,10 @@ async function createInMemory(
         repairTechnicianName: params.repairTechnicianName,
         linkedUsedProductId: params.linkedUsedProductId,
         linkedUsedProductName: params.linkedUsedProductName,
+        parentCaseId: params.parentCaseId,
+        parentCaseTitle: params.parentCaseTitle,
+        relatedCaseIds: params.relatedCaseIds,
+        historySummary: params.historySummary,
         caseType: params.caseType,
         repairAmount: params.repairAmount,
         inspectionFee: params.inspectionFee,
@@ -524,6 +718,10 @@ async function createInFirebase(
         repairTechnicianName?: string;
         linkedUsedProductId?: string;
         linkedUsedProductName?: string;
+        parentCaseId?: string;
+        parentCaseTitle?: string;
+        relatedCaseIds?: string[];
+        historySummary?: string;
         caseType?: string;
         repairAmount: number;
         inspectionFee: number;
@@ -564,6 +762,10 @@ async function createInFirebase(
         repairTechnicianName: params.repairTechnicianName,
         linkedUsedProductId: params.linkedUsedProductId,
         linkedUsedProductName: params.linkedUsedProductName,
+        parentCaseId: params.parentCaseId,
+        parentCaseTitle: params.parentCaseTitle,
+        relatedCaseIds: params.relatedCaseIds,
+        historySummary: params.historySummary,
         caseType: params.caseType,
         repairAmount: params.repairAmount,
         inspectionFee: params.inspectionFee,
@@ -578,7 +780,7 @@ async function createInFirebase(
     const batch = db.batch();
     const caseRef = companyCasesRef(db, companyId).doc(docId);
     const customerRef = companyCustomersRef(db, companyId).doc(customerId);
-    batch.set(caseRef, ticket, { merge: false });
+    batch.set(caseRef, toFirestoreData(ticket), { merge: false });
     batch.set(
         customerRef,
         {
@@ -615,6 +817,10 @@ async function updateInMemory(
         repairTechnicianName?: string;
         linkedUsedProductId?: string;
         linkedUsedProductName?: string;
+        parentCaseId?: string;
+        parentCaseTitle?: string;
+        relatedCaseIds?: string[];
+        historySummary?: string;
         caseType?: string;
         repairAmount?: number;
         inspectionFee?: number;
@@ -642,6 +848,10 @@ async function updateInMemory(
     if (params.repairTechnicianName !== undefined) target.repairTechnicianName = params.repairTechnicianName;
     if (params.linkedUsedProductId !== undefined) target.linkedUsedProductId = params.linkedUsedProductId;
     if (params.linkedUsedProductName !== undefined) target.linkedUsedProductName = params.linkedUsedProductName;
+    if (params.parentCaseId !== undefined) target.parentCaseId = params.parentCaseId;
+    if (params.parentCaseTitle !== undefined) target.parentCaseTitle = params.parentCaseTitle;
+    if (params.relatedCaseIds !== undefined) target.relatedCaseIds = params.relatedCaseIds;
+    if (params.historySummary !== undefined) target.historySummary = params.historySummary;
     if (params.caseType !== undefined) target.caseType = params.caseType;
     if (params.repairAmount !== undefined) target.repairAmount = params.repairAmount;
     if (params.inspectionFee !== undefined) target.inspectionFee = params.inspectionFee;
@@ -672,6 +882,10 @@ async function updateInFirebase(
         repairTechnicianName?: string;
         linkedUsedProductId?: string;
         linkedUsedProductName?: string;
+        parentCaseId?: string;
+        parentCaseTitle?: string;
+        relatedCaseIds?: string[];
+        historySummary?: string;
         caseType?: string;
         repairAmount?: number;
         inspectionFee?: number;
@@ -709,6 +923,10 @@ async function updateInFirebase(
         repairTechnicianName: params.repairTechnicianName !== undefined ? params.repairTechnicianName : current.repairTechnicianName,
         linkedUsedProductId: params.linkedUsedProductId !== undefined ? params.linkedUsedProductId : current.linkedUsedProductId,
         linkedUsedProductName: params.linkedUsedProductName !== undefined ? params.linkedUsedProductName : current.linkedUsedProductName,
+        parentCaseId: params.parentCaseId !== undefined ? params.parentCaseId : current.parentCaseId,
+        parentCaseTitle: params.parentCaseTitle !== undefined ? params.parentCaseTitle : current.parentCaseTitle,
+        relatedCaseIds: params.relatedCaseIds !== undefined ? params.relatedCaseIds : current.relatedCaseIds,
+        historySummary: params.historySummary !== undefined ? params.historySummary : current.historySummary,
         caseType: params.caseType !== undefined ? params.caseType : current.caseType,
         repairAmount: params.repairAmount !== undefined ? params.repairAmount : current.repairAmount,
         inspectionFee: params.inspectionFee !== undefined ? params.inspectionFee : current.inspectionFee,
@@ -721,7 +939,7 @@ async function updateInFirebase(
 
     next.title = composeTitle(next.customer.name, next.device.name);
     next.pendingFee = computePendingFee(next.repairAmount, next.inspectionFee);
-    await ref.set(next, { merge: true });
+    await ref.set(toFirestoreData(next), { merge: true });
     return next;
 }
 
@@ -871,6 +1089,74 @@ export async function setTicketStatusById(ticketId: string, status: TicketStatus
     return Boolean(updatedInMemory);
 }
 
+export async function createWarrantyCaseFromExistingCase(input: { sourceCaseId: string }): Promise<Ticket | null> {
+    const scope = await resolveSessionScope(true);
+    if (!scope) return null;
+
+    const sourceCaseId = safeText(input.sourceCaseId, MAX_ID);
+    if (!sourceCaseId) return null;
+
+    const source = await getTicketByIdInternal(scope.companyId, sourceCaseId);
+    if (!source) return null;
+
+    const history = await deriveWarrantyHistory(scope.companyId, source);
+    const createdAt = now();
+    const nextTicket: Ticket = normalizeTicket({
+        id: id(),
+        title: `保固 - ${source.device.name || source.title}`,
+        status: "new",
+        companyId: scope.companyId,
+        customerId: source.customerId,
+        customer: source.customer,
+        device: source.device,
+        repairReason: `保固申請 / 原案件 ${source.id}`,
+        repairSuggestion: source.repairSuggestion || "",
+        note: [`由原案件建立：${source.id}`, source.note || ""].filter((value) => value.length > 0).join("\n"),
+        repairTechnicianId: source.repairTechnicianId,
+        repairTechnicianName: source.repairTechnicianName,
+        linkedUsedProductId: source.linkedUsedProductId,
+        linkedUsedProductName: source.linkedUsedProductName,
+        parentCaseId: history.parentCaseId,
+        parentCaseTitle: history.parentCaseTitle,
+        relatedCaseIds: history.relatedCaseIds,
+        historySummary: history.historySummary,
+        caseType: "warranty",
+        repairAmount: 0,
+        inspectionFee: 0,
+        quoteStatus: "inspection_estimate",
+        createdAt,
+        updatedAt: createdAt,
+    });
+
+    const db = await getFirestoreDb();
+    if (db) {
+        const batch = db.batch();
+        batch.set(companyCasesRef(db, scope.companyId).doc(nextTicket.id), toFirestoreData(nextTicket), { merge: false });
+        if (source.customerId) {
+            batch.set(
+                companyCustomersRef(db, scope.companyId).doc(source.customerId),
+                {
+                    id: source.customerId,
+                    companyId: scope.companyId,
+                    name: source.customer.name,
+                    phone: source.customer.phone,
+                    address: source.customer.address,
+                    email: source.customer.email,
+                    emailLower: normalizeLowerEmail(source.customer.email),
+                    updatedAt: createdAt,
+                    lastCaseAt: createdAt,
+                },
+                { merge: true },
+            );
+        }
+        await batch.commit();
+        return nextTicket;
+    }
+
+    upsertMemoryTicket(scope.companyId, nextTicket);
+    return nextTicket;
+}
+
 export async function createTicket(formData: FormData): Promise<void> {
     "use server";
 
@@ -913,6 +1199,10 @@ export async function createTicket(formData: FormData): Promise<void> {
     const repairTechnicianName = safeText(toStr(formData.get("repairTechnicianName")), MAX_TEXT);
     const linkedUsedProductId = safeText(toStr(formData.get("linkedUsedProductId")), MAX_ID);
     const linkedUsedProductName = safeText(toStr(formData.get("linkedUsedProductName")), MAX_TEXT);
+    const parentCaseId = safeText(toStr(formData.get("parentCaseId")), MAX_ID);
+    const parentCaseTitle = safeText(toStr(formData.get("parentCaseTitle")), MAX_TEXT);
+    const relatedCaseIds = normalizeCaseIdList(formData.getAll("relatedCaseIds[]"));
+    const historySummary = safeText(toStr(formData.get("historySummary")), MAX_DETAIL);
     const caseType = safeText(toStr(formData.get("caseType")), MAX_STATUS);
     const payload = {
         ...ensuredValidated,
@@ -922,6 +1212,10 @@ export async function createTicket(formData: FormData): Promise<void> {
         repairTechnicianName: repairTechnicianName || undefined,
         linkedUsedProductId: linkedUsedProductId || undefined,
         linkedUsedProductName: linkedUsedProductName || undefined,
+        parentCaseId: parentCaseId || undefined,
+        parentCaseTitle: parentCaseTitle || undefined,
+        relatedCaseIds: relatedCaseIds.length > 0 ? relatedCaseIds : undefined,
+        historySummary: historySummary || undefined,
         caseType: caseType || undefined,
     };
 
@@ -933,7 +1227,7 @@ export async function createTicket(formData: FormData): Promise<void> {
         createdTicket = await createInMemory(ensuredScope.companyId, payload);
     }
 
-    if (createdTicket?.linkedUsedProductId) {
+    if (createdTicket?.linkedUsedProductId && createdTicket.caseType === "refurbish") {
         try {
             await linkUsedProductToCase({
                 usedProductId: createdTicket.linkedUsedProductId,
@@ -1011,6 +1305,10 @@ export async function updateTicket(formData: FormData): Promise<void> {
         repairTechnicianName: getOptional("repairTechnicianName", MAX_TEXT),
         linkedUsedProductId: getOptional("linkedUsedProductId", MAX_ID),
         linkedUsedProductName: getOptional("linkedUsedProductName", MAX_TEXT),
+        parentCaseId: getOptional("parentCaseId", MAX_ID),
+        parentCaseTitle: getOptional("parentCaseTitle", MAX_TEXT),
+        relatedCaseIds: formData.has("relatedCaseIds[]") ? normalizeCaseIdList(formData.getAll("relatedCaseIds[]")) : undefined,
+        historySummary: getOptional("historySummary", MAX_DETAIL),
         caseType: getOptional("caseType", MAX_STATUS),
         repairAmount: formData.has("repairAmount") ? parseMoney(formData.get("repairAmount")) : undefined,
         inspectionFee: formData.has("inspectionFee") ? parseMoney(formData.get("inspectionFee")) : undefined,
@@ -1033,7 +1331,7 @@ export async function updateTicket(formData: FormData): Promise<void> {
         updatedTicket = await updateInMemory(ensuredScope.companyId, payload);
     }
 
-    if (updatedTicket?.linkedUsedProductId) {
+    if (updatedTicket?.linkedUsedProductId && updatedTicket.caseType === "refurbish") {
         try {
             await syncUsedProductRefurbishmentStatus({
                 usedProductId: updatedTicket.linkedUsedProductId,

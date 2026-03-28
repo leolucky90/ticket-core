@@ -308,7 +308,7 @@ export default async function ShowcaseBuilderPage() {
     return (
         <MerchantPageShell
             title={labels.title}
-            subtitle="單頁 builder 已整合內容、樣式、storefront 與 schema 檢視。"
+            subtitle="以同一套作品頁 / 品牌頁設計語言編輯內容、樣式、storefront 與 schema。"
             width="builder"
         >
             <ShowcaseBuilder

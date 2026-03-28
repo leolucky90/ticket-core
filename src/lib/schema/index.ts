@@ -196,6 +196,7 @@ export {
 
 export type {
     UsedProductTypeSetting,
+    UsedProductTypeSpecificationInputType,
     UsedProductTypeSpecificationTemplate,
 } from "@/lib/schema/usedProductTypeSettings";
 

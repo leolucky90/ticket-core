@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import type { UsedProductSpecificationItem, UsedProductTypeSpecificationTemplate } from "@/lib/schema";
 
 type SpecificationEditorProps = {
@@ -27,6 +28,26 @@ function templateName(template: UsedProductTypeSpecificationTemplate): string {
 
 function templateKey(template: UsedProductTypeSpecificationTemplate): string {
     return (template.key || templateName(template)).trim();
+}
+
+function templateInputType(template: UsedProductTypeSpecificationTemplate): "text" | "select" {
+    return template.inputType === "select" && (template.options?.length ?? 0) > 0 ? "select" : "text";
+}
+
+function templateOptions(template: UsedProductTypeSpecificationTemplate): string[] {
+    const seen = new Set<string>();
+    const options: string[] = [];
+
+    for (const option of template.options ?? []) {
+        const value = option.trim();
+        if (!value) continue;
+        const normalized = value.toLowerCase();
+        if (seen.has(normalized)) continue;
+        seen.add(normalized);
+        options.push(value);
+    }
+
+    return options;
 }
 
 function seedRows(
@@ -93,6 +114,13 @@ export function SpecificationEditor({ templates, initialItems, hiddenName, lang 
                     const specLabel = matchedTemplate ? templateName(matchedTemplate) : row.key;
                     const specPlaceholder =
                         matchedTemplate?.placeholder || matchedTemplate?.placeholderZh || matchedTemplate?.placeholderEn || "";
+                    const isSelectField = matchedTemplate ? templateInputType(matchedTemplate) === "select" : false;
+                    const optionValues = matchedTemplate ? templateOptions(matchedTemplate) : [];
+                    const currentValue = row.value.trim();
+                    const selectOptions =
+                        currentValue && !optionValues.some((option) => option.toLowerCase() === currentValue.toLowerCase())
+                            ? [currentValue, ...optionValues]
+                            : optionValues;
 
                     return (
                         <div key={row.id} className="grid gap-2 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3 md:grid-cols-[minmax(0,240px)_1fr]">
@@ -120,14 +148,33 @@ export function SpecificationEditor({ templates, initialItems, hiddenName, lang 
                                     {lang === "en" ? "Value" : "規格內容"}
                                     {specPlaceholder ? ` · ${specPlaceholder}` : ""}
                                 </div>
-                                <Input
-                                    value={row.value}
-                                    placeholder={specPlaceholder || (lang === "en" ? "Enter specification value" : "請輸入規格內容")}
-                                    onChange={(event) => {
-                                        const value = event.currentTarget.value;
-                                        setRows((prev) => prev.map((item) => (item.id === row.id ? { ...item, value } : item)));
-                                    }}
-                                />
+                                {isSelectField ? (
+                                    <Select
+                                        value={row.value}
+                                        required={matchedTemplate?.isRequired === true}
+                                        onChange={(event) => {
+                                            const value = event.currentTarget.value;
+                                            setRows((prev) => prev.map((item) => (item.id === row.id ? { ...item, value } : item)));
+                                        }}
+                                    >
+                                        <option value="">{specPlaceholder || (lang === "en" ? "Select specification value" : "請選擇規格內容")}</option>
+                                        {selectOptions.map((option) => (
+                                            <option key={`${row.id}-${option}`} value={option}>
+                                                {option}
+                                            </option>
+                                        ))}
+                                    </Select>
+                                ) : (
+                                    <Input
+                                        value={row.value}
+                                        required={matchedTemplate?.isRequired === true}
+                                        placeholder={specPlaceholder || (lang === "en" ? "Enter specification value" : "請輸入規格內容")}
+                                        onChange={(event) => {
+                                            const value = event.currentTarget.value;
+                                            setRows((prev) => prev.map((item) => (item.id === row.id ? { ...item, value } : item)));
+                                        }}
+                                    />
+                                )}
                             </div>
                         </div>
                     );

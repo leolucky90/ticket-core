@@ -56,6 +56,12 @@ export function UsedProductForm({
     const [grade, setGrade] = useState<UsedProductGrade>(product?.grade ?? "GRADE_B");
     const [brandValue, setBrandValue] = useState(product?.brand ?? "");
     const [modelValue, setModelValue] = useState(product?.model ?? "");
+    const [needsRefurbishment, setNeedsRefurbishment] = useState(
+        product ? product.refurbishmentStatus !== "no_need_refurbishment" : false,
+    );
+    const [refurbishmentStatusValue, setRefurbishmentStatusValue] = useState<UsedProduct["refurbishmentStatus"]>(
+        product?.refurbishmentStatus ?? "waiting_refurbishment",
+    );
 
     const activeTypeSetting = useMemo(
         () => typeSettings.find((row) => row.name === typeValue) ?? null,
@@ -98,10 +104,17 @@ export function UsedProductForm({
         if (exists || !modelValue.trim()) return modelNameOptions;
         return [modelValue.trim(), ...modelNameOptions];
     }, [modelNameOptions, modelValue]);
+    const serialOrImeiValue = useMemo(() => product?.serialNumber || product?.imeiNumber || "", [product?.imeiNumber, product?.serialNumber]);
+    const derivedProductName = useMemo(() => {
+        const primaryName = [brandValue.trim(), typeValue.trim(), modelValue.trim()].filter((value) => value.length > 0).join(" ");
+        if (primaryName) return primaryName;
+        return [brandValue.trim(), typeValue.trim()].filter((value) => value.length > 0).join(" ");
+    }, [brandValue, modelValue, typeValue]);
 
     return (
         <form action={submitAction} className="grid gap-4">
             {product ? <input type="hidden" name="id" value={product.id} /> : null}
+            <input type="hidden" name="name" value={derivedProductName} />
 
             <Card className="grid gap-3">
                 <div className="text-sm font-semibold">基本資訊</div>
@@ -183,14 +196,8 @@ export function UsedProductForm({
                             ))}
                         </Select>
                     </FormField>
-                    <FormField label="商品名稱" required>
-                        <Input name="name" defaultValue={product?.name ?? ""} required />
-                    </FormField>
-                    <FormField label="序列號">
-                        <Input name="serialNumber" defaultValue={product?.serialNumber ?? ""} />
-                    </FormField>
-                    <FormField label="IMEI No">
-                        <Input name="imeiNumber" defaultValue={product?.imeiNumber ?? ""} />
+                    <FormField label="序列號/IMEI No">
+                        <Input name="serialOrImei" defaultValue={serialOrImeiValue} />
                     </FormField>
                     <div className="md:col-span-2 grid gap-1">
                         <div className="text-xs font-medium text-[rgb(var(--text))]">規格欄位</div>
@@ -245,17 +252,35 @@ export function UsedProductForm({
                         <input
                             type="checkbox"
                             name="isRefurbished"
-                            defaultChecked={product?.isRefurbished ?? false}
+                            checked={needsRefurbishment}
+                            onChange={(event) => {
+                                const nextChecked = event.currentTarget.checked;
+                                setNeedsRefurbishment(nextChecked);
+                                setRefurbishmentStatusValue((current) => {
+                                    if (!nextChecked) return "no_need_refurbishment";
+                                    return current === "no_need_refurbishment" ? "waiting_refurbishment" : current;
+                                });
+                            }}
                             className="h-4 w-4 accent-[rgb(var(--accent))]"
                         />
-                        是否翻新
+                        需翻新才能販賣
                     </label>
                     <FormField label="翻新狀態" required>
-                        <Select name="refurbishmentStatus" defaultValue={product?.refurbishmentStatus ?? "waiting_refurbishment"}>
-                            <option value="waiting_refurbishment">等待翻新</option>
-                            <option value="no_need_refurbishment">不須翻新</option>
-                            <option value="refurbished">已翻新</option>
-                            <option value="refurbishing">翻新中</option>
+                        <Select
+                            name="refurbishmentStatus"
+                            value={needsRefurbishment ? refurbishmentStatusValue : "no_need_refurbishment"}
+                            onChange={(event) => setRefurbishmentStatusValue(event.currentTarget.value as UsedProduct["refurbishmentStatus"])}
+                            disabled={!needsRefurbishment}
+                        >
+                            {needsRefurbishment ? (
+                                <>
+                                    <option value="waiting_refurbishment">等待翻新</option>
+                                    <option value="refurbishing">翻新中</option>
+                                    <option value="refurbished">已翻新</option>
+                                </>
+                            ) : (
+                                <option value="no_need_refurbishment">不須翻新</option>
+                            )}
                         </Select>
                     </FormField>
                     <FormField label="翻新說明" className="md:col-span-2">

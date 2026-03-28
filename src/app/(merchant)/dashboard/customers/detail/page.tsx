@@ -46,6 +46,12 @@ function ticketStatusText(status: string): string {
     return status;
 }
 
+function caseTypeText(caseType?: string): string {
+    if (caseType === "refurbish") return "翻新";
+    if (caseType === "warranty") return "保固";
+    return "維修";
+}
+
 function orderStatusText(status: string): string {
     if (status === "draft") return "草稿";
     if (status === "placed") return "已下單";
@@ -99,6 +105,7 @@ export default async function CustomerDetailPage({ searchParams }: { searchParam
     if (!customer) redirect("/dashboard?tab=customers");
 
     const repairRecords = listTicketsForCustomer(customer, tickets).sort((a, b) => b.updatedAt - a.updatedAt);
+    const warrantyRecords = repairRecords.filter((ticket) => ticket.caseType === "warranty");
     const purchaseRecords = purchases
         .filter((purchase) => isActivityPurchaseLinkedToCustomer(customer, purchase))
         .sort((a, b) => b.purchasedAt - a.purchasedAt);
@@ -137,21 +144,22 @@ export default async function CustomerDetailPage({ searchParams }: { searchParam
                     <div>地址：{customer.address || "-"}</div>
                     <div>建立時間：{formatTime(customer.createdAt)}</div>
                     <div>最後更新：{formatTime(customer.updatedAt)}</div>
-                    <div>維修案件總數：{repairRecords.length}</div>
+                    <div>案件總數：{repairRecords.length}</div>
                     <div>進行中案件：{activeRepairCount}</div>
                     <div>購買總金額：{formatMoney(totalPurchaseAmount)}</div>
                 </div>
             </Card>
 
             <Card className="rounded-xl p-3">
-                <div className="mb-2 text-sm font-semibold">維修紀錄（{repairRecords.length}）</div>
+                <div className="mb-2 text-sm font-semibold">案件紀錄（{repairRecords.length}）</div>
                 {repairRecords.length === 0 ? (
-                    <div className="text-sm text-[rgb(var(--muted))]">目前沒有維修紀錄。</div>
+                    <div className="text-sm text-[rgb(var(--muted))]">目前沒有案件紀錄。</div>
                 ) : (
                     <div className="grid gap-2">
                         {repairRecords.map((ticket) => (
                             <div key={ticket.id} className="rounded-lg border border-[rgb(var(--border))] p-3 text-sm">
                                 <div>案件編號：{ticket.id}</div>
+                                <div>案件類型：{caseTypeText(ticket.caseType)}</div>
                                 <div>設備：{ticket.device.name} {ticket.device.model}</div>
                                 <div>狀態：{ticketStatusText(ticket.status)}</div>
                                 <div>送修原因：{ticket.repairReason || "-"}</div>
@@ -170,12 +178,14 @@ export default async function CustomerDetailPage({ searchParams }: { searchParam
                     <div className="grid gap-2">
                         {customerSnapshot.orders.map((order) => {
                             const receipt = customerSnapshot.receipts.find((item) => item.orderId === order.id);
+                            const orderItems = customerSnapshot.orderItems.filter((item) => item.orderId === order.id);
                             return (
                                 <div key={order.id} className="rounded-lg border border-[rgb(var(--border))] p-3 text-sm">
                                     <div>訂單編號：{order.orderNo}</div>
                                     <div>狀態：{orderStatusText(order.status)}</div>
                                     <div>金額：{formatMoney(order.totalAmount)}</div>
                                     <div>收據：{receipt ? receipt.receiptNo : "-"}</div>
+                                    <div>品項：{orderItems.length > 0 ? orderItems.map((item) => item.productName).join("、") : "-"}</div>
                                     <div>更新：{formatTime(order.updatedAt)}</div>
                                 </div>
                             );
@@ -190,13 +200,20 @@ export default async function CustomerDetailPage({ searchParams }: { searchParam
                     <div className="text-sm text-[rgb(var(--muted))]">目前沒有保固或診斷資料。</div>
                 ) : (
                     <div className="grid gap-2">
-                        {customerSnapshot.warranties.map((warranty) => (
-                            <div key={warranty.id} className="rounded-lg border border-[rgb(var(--border))] p-3 text-sm">
-                                <div>保固項目：{warranty.productName}</div>
-                                <div>狀態：{warranty.status === "active" ? "有效" : warranty.status === "expired" ? "過期" : "失效"}</div>
-                                <div>到期日：{formatTime(warranty.expiresAt)}</div>
-                            </div>
-                        ))}
+                        {warrantyRecords.map((ticket) => {
+                            const warranty = customerSnapshot.warranties.find((item) => item.ticketId === ticket.id);
+                            return (
+                                <div key={ticket.id} className="rounded-lg border border-[rgb(var(--border))] p-3 text-sm">
+                                    <div>保固案件：{ticket.id}</div>
+                                    <div>保固項目：{warranty?.productName || `${ticket.device.name} ${ticket.device.model}`.trim() || "-"}</div>
+                                    <div>狀態：{warranty ? (warranty.status === "active" ? "有效" : warranty.status === "expired" ? "過期" : "失效") : ticketStatusText(ticket.status)}</div>
+                                    <div>保固原因：{ticket.repairReason || "-"}</div>
+                                    <div>來源案件：{ticket.parentCaseTitle || ticket.parentCaseId || "-"}</div>
+                                    <div>歷史摘要：{ticket.historySummary || "-"}</div>
+                                    <div>到期日：{warranty ? formatTime(warranty.expiresAt) : "-"}</div>
+                                </div>
+                            );
+                        })}
                         {customerSnapshot.diagnosticReports.map((report) => (
                             <div key={report.id} className="rounded-lg border border-[rgb(var(--border))] p-3 text-sm">
                                 <div>診斷單號：{report.reportNo}</div>

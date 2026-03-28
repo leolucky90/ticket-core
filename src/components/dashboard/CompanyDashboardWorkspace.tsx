@@ -11,7 +11,7 @@ import { MerchantStatGrid } from "@/components/merchant/shell";
 import { MerchantPredictiveSearchInput } from "@/components/merchant/search";
 import { TechnicianAutocomplete, UsedProductTypeSettingsCard } from "@/components/used-products";
 import type { MerchantStatItem } from "@/components/merchant/shell";
-import { ArrowLeft, ArrowRight, Pencil, Plus, Save, Search, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Pencil, Plus, Save, Search, ShieldCheck, Trash2, X } from "lucide-react";
 import type {
     Activity,
     CompanyCustomer,
@@ -78,6 +78,7 @@ type CompanyDashboardWorkspaceProps = {
     productKeyword: string;
     brandKeyword: string;
     createCaseAction: (formData: FormData) => Promise<void>;
+    createWarrantyCaseAction: (formData: FormData) => Promise<void>;
     updateCaseAction: (formData: FormData) => Promise<void>;
     createCustomerAction: (formData: FormData) => Promise<void>;
     updateCustomerAction: (formData: FormData) => Promise<void>;
@@ -287,6 +288,12 @@ function quoteStatusText(status: QuoteStatus): string {
     if (status === "rejected") return "拒絕";
     if (status === "accepted") return "接受報價";
     return status;
+}
+
+function caseTypeText(caseType?: string): string {
+    if (caseType === "refurbish") return "翻新";
+    if (caseType === "warranty") return "保固";
+    return "維修";
 }
 
 function activityStatusText(status: Activity["status"]) {
@@ -583,6 +590,7 @@ function CaseCardList({
     caseStatusOptions,
     quoteStatusOptions,
     repairTechnicians,
+    createWarrantyCaseAction,
     updateCaseAction,
 }: {
     tickets: Ticket[];
@@ -595,6 +603,7 @@ function CaseCardList({
         email: string;
         phone: string;
     }>;
+    createWarrantyCaseAction: (formData: FormData) => Promise<void>;
     updateCaseAction: (formData: FormData) => Promise<void>;
 }) {
     const [editingCaseId, setEditingCaseId] = useState<string | null>(null);
@@ -623,6 +632,7 @@ function CaseCardList({
                                 <>
                                     <div className="grid gap-1 text-sm">
                                         <div>案件編號：{ticket.id}</div>
+                                        <div>案件類型：{caseTypeText(ticket.caseType)}</div>
                                         <div>設備品牌：{ticket.device.name || "-"}</div>
                                         <div>設備型號：{ticket.device.model || "-"}</div>
                                         <div>送修原因：{ticket.repairReason || "-"}</div>
@@ -630,6 +640,8 @@ function CaseCardList({
                                         <div>備註：{ticket.note || "-"}</div>
                                         <div>維修人員：{ticket.repairTechnicianName || "-"}</div>
                                         <div>關聯二手商品：{ticket.linkedUsedProductName || ticket.linkedUsedProductId || "-"}</div>
+                                        <div>來源案件：{ticket.parentCaseTitle || ticket.parentCaseId || "-"}</div>
+                                        <div>歷史摘要：{ticket.historySummary || "-"}</div>
                                         <div>報價狀態：{quoteStatusText(ticket.quoteStatus)}</div>
                                         <div>維修金額：{formatMoney(ticket.repairAmount, lang)}</div>
                                         <div>檢修費用：{formatMoney(ticket.inspectionFee, lang)}</div>
@@ -662,6 +674,16 @@ function CaseCardList({
                                                 更新案件
                                             </span>
                                         </Button>
+                                        <form action={createWarrantyCaseAction}>
+                                            <input type="hidden" name="sourceCaseId" value={ticket.id} />
+                                            <Button type="submit" variant="ghost" aria-label="建立保固案件" className="group relative h-10 w-10 !p-0 flex items-center justify-center">
+                                                <ShieldCheck className="h-5 w-5 transition-transform group-hover:scale-110" aria-hidden="true" />
+                                                <span className="sr-only">建立保固案件</span>
+                                                <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                                                    建立保固
+                                                </span>
+                                            </Button>
+                                        </form>
                                     </div>
                                 </>
                             ) : (
@@ -686,6 +708,9 @@ function CaseCardList({
                                     </div>
                                     <Input name="linkedUsedProductId" defaultValue={ticket.linkedUsedProductId} placeholder="關聯二手商品 ID（可選）" />
                                     <Input name="linkedUsedProductName" defaultValue={ticket.linkedUsedProductName} placeholder="關聯二手商品名稱（可選）" />
+                                    <Input name="parentCaseId" defaultValue={ticket.parentCaseId} placeholder="來源案件 ID（可選）" />
+                                    <Input name="parentCaseTitle" defaultValue={ticket.parentCaseTitle} placeholder="來源案件標題（可選）" />
+                                    <Textarea name="historySummary" rows={3} defaultValue={ticket.historySummary} placeholder="歷史維修 / 保固摘要" className="md:col-span-2" />
                                     <Input type="number" min={0} name="repairAmount" defaultValue={ticket.repairAmount} placeholder="維修金額" />
                                     <Input type="number" min={0} name="inspectionFee" defaultValue={ticket.inspectionFee} placeholder="檢修費用" />
                                     <Select name="status" defaultValue={ticket.status}>
@@ -705,6 +730,7 @@ function CaseCardList({
                                     <Select name="caseType" defaultValue={ticket.caseType || "repair"}>
                                         <option value="repair">repair</option>
                                         <option value="refurbish">refurbish</option>
+                                        <option value="warranty">warranty</option>
                                     </Select>
                                     <div className="md:col-span-2 flex flex-wrap gap-2">
                                         <Button type="submit" variant="ghost" aria-label="儲存更新" className="group relative h-10 w-10 !p-0 flex items-center justify-center">
@@ -765,6 +791,7 @@ export function CompanyDashboardWorkspace({
     productKeyword,
     brandKeyword,
     createCaseAction,
+    createWarrantyCaseAction,
     updateCaseAction,
     createCustomerAction,
     updateCustomerAction,
@@ -1503,6 +1530,7 @@ export function CompanyDashboardWorkspace({
                                     <Select name="caseType" defaultValue="repair">
                                         <option value="repair">repair</option>
                                         <option value="refurbish">refurbish</option>
+                                        <option value="warranty">warranty</option>
                                     </Select>
                                     <Select name="quoteStatus" defaultValue={defaultQuoteStatus} className="md:col-span-2">
                                         {normalizedQuoteStatusOptions.map((status) => (
@@ -1583,6 +1611,7 @@ export function CompanyDashboardWorkspace({
                                     caseStatusOptions={normalizedCaseStatusOptions}
                                     quoteStatusOptions={normalizedQuoteStatusOptions}
                                     repairTechnicians={repairTechnicians}
+                                    createWarrantyCaseAction={createWarrantyCaseAction}
                                     updateCaseAction={updateCaseAction}
                                 />
                                 <div className="pt-2 flex flex-wrap justify-end gap-2">

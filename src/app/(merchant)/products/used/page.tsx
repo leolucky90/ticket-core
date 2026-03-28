@@ -20,7 +20,7 @@ type UsedProductsPageProps = {
 };
 
 function redirectWithFlash(flash: string): never {
-    redirect(`/products/used?flash=${encodeURIComponent(flash)}&ts=${Date.now()}`);
+    redirect(`/products/used?flash=${encodeURIComponent(flash)}`);
 }
 
 export default async function UsedProductsPage({ searchParams }: UsedProductsPageProps) {
@@ -60,14 +60,10 @@ export default async function UsedProductsPage({ searchParams }: UsedProductsPag
         const existing = await getUsedProductById(usedProductId);
         if (!existing) redirectWithFlash("找不到二手商品");
 
-        if (existing.refurbishmentCaseId) {
-            redirect(`/dashboard?tab=cases&caseQ=${encodeURIComponent(existing.refurbishmentCaseId)}&flash=${encodeURIComponent("已前往既有翻新案件")}&ts=${Date.now()}`);
-        }
-
         const created = await createRefurbishmentCaseForUsedProduct({ usedProductId });
         if (!created) redirectWithFlash("建立翻新案件失敗");
 
-        redirect(`/dashboard?tab=cases&caseQ=${encodeURIComponent(created.caseId)}&flash=${encodeURIComponent("翻新案件已建立")}&ts=${Date.now()}`);
+        redirect(`/dashboard?tab=cases&caseQ=${encodeURIComponent(created.caseId)}&flash=${encodeURIComponent("翻新案件已建立")}&ts=${encodeURIComponent(created.caseId)}`);
     }
 
     return (

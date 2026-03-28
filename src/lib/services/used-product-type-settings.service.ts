@@ -26,18 +26,46 @@ function makeId(prefix = "upt"): string {
     return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now()}`;
 }
 
+function toInputType(value: unknown): "text" | "select" {
+    return value === "select" ? "select" : "text";
+}
+
+function normalizeOptions(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    const seen = new Set<string>();
+    const options: string[] = [];
+
+    for (const row of value) {
+        const text = toText(row, 120);
+        if (!text) continue;
+        const normalized = text.toLowerCase();
+        if (seen.has(normalized)) continue;
+        seen.add(normalized);
+        options.push(text);
+        if (options.length >= 40) break;
+    }
+
+    return options;
+}
+
 function normalizeTemplates(value: UsedProductTypeSpecificationTemplate[]): UsedProductTypeSpecificationTemplate[] {
     return value
-        .map((row) => ({
-            key: toText(row.key, 120),
-            label: toText(row.label, 120),
-            labelZh: toText(row.labelZh, 120) || undefined,
-            labelEn: toText(row.labelEn, 120) || undefined,
-            placeholder: toText(row.placeholder, 240) || undefined,
-            placeholderZh: toText(row.placeholderZh, 240) || undefined,
-            placeholderEn: toText(row.placeholderEn, 240) || undefined,
-            isRequired: row.isRequired === true,
-        }))
+        .map((row) => {
+            const options = normalizeOptions(row.options);
+            const inputType = toInputType(row.inputType);
+            return {
+                key: toText(row.key, 120),
+                label: toText(row.label, 120),
+                labelZh: toText(row.labelZh, 120) || undefined,
+                labelEn: toText(row.labelEn, 120) || undefined,
+                placeholder: toText(row.placeholder, 240) || undefined,
+                placeholderZh: toText(row.placeholderZh, 240) || undefined,
+                placeholderEn: toText(row.placeholderEn, 240) || undefined,
+                inputType: (inputType === "select" && options.length > 0 ? "select" : "text") as UsedProductTypeSpecificationTemplate["inputType"],
+                options: inputType === "select" && options.length > 0 ? options : undefined,
+                isRequired: row.isRequired === true,
+            };
+        })
         .filter((row) => row.key || row.label)
         .map((row) => ({
             ...row,
