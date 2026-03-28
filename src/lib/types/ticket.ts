@@ -31,7 +31,11 @@ export type Ticket = { // Ticket 型別定義
     repairTechnicianName?: string;
     linkedUsedProductId?: string;
     linkedUsedProductName?: string;
-    caseType?: "refurbish" | "repair" | (string & {});
+    parentCaseId?: string;
+    parentCaseTitle?: string;
+    relatedCaseIds?: string[];
+    historySummary?: string;
+    caseType?: "refurbish" | "repair" | "warranty" | (string & {});
     repairAmount: number;
     inspectionFee: number;
     pendingFee: number;

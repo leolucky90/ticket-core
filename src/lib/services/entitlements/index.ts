@@ -1,5 +1,6 @@
 import "server-only";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
+import { normalizeCompanyId } from "@/lib/tenant-scope";
 import type {
     CreateCustomerEntitlementInput,
     CustomerEntitlement,
@@ -16,7 +17,7 @@ import {
     normalizeEntitlementRedemptionDocument,
 } from "@/lib/schema";
 import { adjustInventory, getInventoryByProductId } from "@/lib/services/inventory";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getUserCompanyId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 
 type SessionScope = {
     companyId: string;
@@ -68,13 +69,6 @@ function toNonNegativeInt(value: unknown, fallback = 0): number {
     return Math.max(0, Math.round(raw));
 }
 
-function normalizeCompanyId(value: unknown): string | null {
-    const cleaned = toText(value, 120);
-    if (!cleaned) return null;
-    if (/[/?#]/.test(cleaned)) return null;
-    return cleaned;
-}
-
 function toMs(value: string | null | undefined): number {
     if (!value) return 0;
     const parsed = Date.parse(value);
@@ -89,7 +83,7 @@ async function resolveSessionScope(): Promise<SessionScope | null> {
     if (!user) return null;
     if (toAccountType(user.role) !== "company") return null;
 
-    const companyId = normalizeCompanyId(getShowcaseTenantId(user, session.uid));
+    const companyId = normalizeCompanyId(getUserCompanyId(user, session.uid));
     if (!companyId) return null;
 
     return {

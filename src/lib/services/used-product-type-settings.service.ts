@@ -6,7 +6,8 @@ import {
     type UsedProductTypeSpecificationTemplate,
 } from "@/lib/schema";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { normalizeCompanyId } from "@/lib/tenant-scope";
+import { getUserCompanyId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 
 const memory: { settingsByCompany: Record<string, UsedProductTypeSetting[]> } = { settingsByCompany: {} };
 
@@ -15,29 +16,50 @@ function toText(value: unknown, max = 240): string {
     return value.replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, max);
 }
 
-function normalizeCompanyId(value: unknown): string | null {
-    const text = toText(value, 120);
-    if (!text) return null;
-    if (/[/?#]/.test(text)) return null;
-    return text;
-}
-
 function makeId(prefix = "upt"): string {
     return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now()}`;
 }
 
+function toInputType(value: unknown): "text" | "select" {
+    return value === "select" ? "select" : "text";
+}
+
+function normalizeOptions(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    const seen = new Set<string>();
+    const options: string[] = [];
+
+    for (const row of value) {
+        const text = toText(row, 120);
+        if (!text) continue;
+        const normalized = text.toLowerCase();
+        if (seen.has(normalized)) continue;
+        seen.add(normalized);
+        options.push(text);
+        if (options.length >= 40) break;
+    }
+
+    return options;
+}
+
 function normalizeTemplates(value: UsedProductTypeSpecificationTemplate[]): UsedProductTypeSpecificationTemplate[] {
     return value
-        .map((row) => ({
-            key: toText(row.key, 120),
-            label: toText(row.label, 120),
-            labelZh: toText(row.labelZh, 120) || undefined,
-            labelEn: toText(row.labelEn, 120) || undefined,
-            placeholder: toText(row.placeholder, 240) || undefined,
-            placeholderZh: toText(row.placeholderZh, 240) || undefined,
-            placeholderEn: toText(row.placeholderEn, 240) || undefined,
-            isRequired: row.isRequired === true,
-        }))
+        .map((row) => {
+            const options = normalizeOptions(row.options);
+            const inputType = toInputType(row.inputType);
+            return {
+                key: toText(row.key, 120),
+                label: toText(row.label, 120),
+                labelZh: toText(row.labelZh, 120) || undefined,
+                labelEn: toText(row.labelEn, 120) || undefined,
+                placeholder: toText(row.placeholder, 240) || undefined,
+                placeholderZh: toText(row.placeholderZh, 240) || undefined,
+                placeholderEn: toText(row.placeholderEn, 240) || undefined,
+                inputType: (inputType === "select" && options.length > 0 ? "select" : "text") as UsedProductTypeSpecificationTemplate["inputType"],
+                options: inputType === "select" && options.length > 0 ? options : undefined,
+                isRequired: row.isRequired === true,
+            };
+        })
         .filter((row) => row.key || row.label)
         .map((row) => ({
             ...row,
@@ -54,7 +76,7 @@ async function resolveScope(): Promise<{ companyId: string; uid: string } | null
     const user = await getUserDoc(session.uid);
     if (!user || toAccountType(user.role) !== "company") return null;
 
-    const companyId = normalizeCompanyId(getShowcaseTenantId(user, session.uid));
+    const companyId = normalizeCompanyId(getUserCompanyId(user, session.uid));
     if (!companyId) return null;
 
     return {

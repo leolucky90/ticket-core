@@ -1,5 +1,6 @@
 import "server-only";
 import { fbAdminDb } from "@/lib/firebase-server";
+import { normalizeTenantId } from "@/lib/tenant-scope";
 import {
     DEFAULT_THEME_CUSTOM_COLORS,
     DEFAULT_THEME_MODE,
@@ -14,12 +15,6 @@ export type DashboardPreferences = {
     updatedAt: number;
     updatedBy: string;
 };
-
-function normalizeTenantId(value: unknown): string | null {
-    if (typeof value !== "string") return null;
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : null;
-}
 
 function tenantDashboardDocPath(tenantId: string): string {
     return `companies/${tenantId}/app_config/dashboard`;

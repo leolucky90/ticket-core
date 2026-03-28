@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import { MerchantPageShell } from "@/components/merchant/shell";
 import { UsedProductForm } from "@/components/used-products";
 import type { UsedProductTypeSetting } from "@/lib/schema";
-import { listRepairBrands } from "@/lib/services/commerce";
-import { createUsedProduct } from "@/lib/services/used-products.service";
+import { listRepairBrands } from "@/lib/services/merchant/inventory-read-model.service";
+import { createRefurbishmentCaseForUsedProduct, createUsedProduct } from "@/lib/services/used-products.service";
 import { listUsedProductTypeSettings } from "@/lib/services/used-product-type-settings.service";
 import { parseUsedProductFormData } from "@/lib/used-product-form";
 
@@ -34,6 +34,17 @@ export default async function NewUsedProductPage() {
         const created = await createUsedProduct(payload);
         if (!created) {
             redirect(`/products/used/new?flash=${encodeURIComponent("建立失敗")}&ts=${Date.now()}`);
+        }
+
+        if (payload.isRefurbished && !created.refurbishmentCaseId) {
+            const caseCreated = await createRefurbishmentCaseForUsedProduct({
+                usedProductId: created.id,
+                refurbishmentStatus: payload.refurbishmentStatus,
+            });
+            if (!caseCreated) {
+                redirect(`/products/used/${encodeURIComponent(created.id)}?flash=${encodeURIComponent("二手商品已建立，但自動建立翻新案件失敗")}&ts=${Date.now()}`);
+            }
+            redirect(`/products/used/${encodeURIComponent(created.id)}?flash=${encodeURIComponent("二手商品已建立，並自動建立翻新案件")}&ts=${Date.now()}`);
         }
 
         redirect(`/products/used/${encodeURIComponent(created.id)}?flash=${encodeURIComponent("二手商品已建立")}&ts=${Date.now()}`);

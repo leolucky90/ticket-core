@@ -2,29 +2,12 @@ import Link from "next/link";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { ForgotPasswordForm } from "@/components/auth/ForgotPasswordForm";
 import { AuthPageShell } from "@/components/auth/ui/AuthPageShell";
+import { normalizeAuthTenantId, normalizeTenantId } from "@/lib/tenant-scope";
 
 type ForgotPasswordSearchParams = {
     tenant?: string | string[];
     authTenant?: string | string[];
 };
-
-function normalizeTenantId(value: string | string[] | undefined): string | null {
-    const raw = Array.isArray(value) ? value[0] : value;
-    if (typeof raw !== "string") return null;
-    const trimmed = raw.trim();
-    if (!trimmed) return null;
-    if (/[/?#]/.test(trimmed)) return null;
-    return trimmed;
-}
-
-function normalizeAuthTenantId(value: string | string[] | undefined): string | null {
-    const raw = Array.isArray(value) ? value[0] : value;
-    if (typeof raw !== "string") return null;
-    const trimmed = raw.trim();
-    if (!trimmed) return null;
-    if (!/^[a-zA-Z0-9-]+$/.test(trimmed)) return null;
-    return trimmed;
-}
 
 function withAuthContext(path: string, tenantId: string | null, authTenantId: string | null): string {
     const query = new URLSearchParams();

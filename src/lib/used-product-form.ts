@@ -17,6 +17,21 @@ function toBoolByCheckbox(formData: FormData, key: string): boolean {
     return formData.get(key) === "on";
 }
 
+function buildUsedProductName(brand: string, model: string, type: string): string {
+    const normalizedBrand = toText(brand, 120);
+    const normalizedModel = toText(model, 120);
+    const normalizedType = toText(type, 120);
+    const primaryName = [normalizedBrand, normalizedType, normalizedModel].filter((value) => value.length > 0).join(" ");
+    if (primaryName) return toText(primaryName, 240);
+    return toText([normalizedBrand, normalizedType].filter((value) => value.length > 0).join(" "), 240);
+}
+
+function resolveSerialOrImei(formData: FormData): string {
+    const unifiedValue = toText(formData.get("serialOrImei"), 120);
+    if (unifiedValue) return unifiedValue;
+    return toText(formData.get("serialNumber"), 120) || toText(formData.get("imeiNumber"), 120);
+}
+
 export function parseSpecificationItems(value: unknown): UsedProductSpecificationItem[] {
     const text = toText(value, 100000);
     if (!text) return [];
@@ -55,14 +70,26 @@ export function parseUsedProductFormData(
     formData: FormData,
 ): Partial<Omit<UsedProduct, "id" | "productCondition" | "createdAt" | "createdBy" | "updatedAt" | "updatedBy">> {
     const specificationItems = parseSpecificationItems(formData.get("specificationItemsJson"));
+    const brand = toText(formData.get("brand"), 120);
+    const model = toText(formData.get("model"), 120);
+    const type = toText(formData.get("type"), 120);
+    const explicitName = toText(formData.get("name"), 240);
+    const serialOrImei = resolveSerialOrImei(formData);
+    const needsRefurbishment = toBoolByCheckbox(formData, "isRefurbished");
+    const selectedRefurbishmentStatus = (toText(formData.get("refurbishmentStatus"), 80) as UsedProduct["refurbishmentStatus"]) || "waiting_refurbishment";
+    const normalizedRefurbishmentStatus = needsRefurbishment
+        ? selectedRefurbishmentStatus === "no_need_refurbishment"
+            ? "waiting_refurbishment"
+            : selectedRefurbishmentStatus
+        : "no_need_refurbishment";
 
     return {
-        name: toText(formData.get("name"), 240),
-        brand: toText(formData.get("brand"), 120),
-        model: toText(formData.get("model"), 120),
-        type: toText(formData.get("type"), 120),
-        serialNumber: toText(formData.get("serialNumber"), 120) || undefined,
-        imeiNumber: toText(formData.get("imeiNumber"), 120) || undefined,
+        name: explicitName || buildUsedProductName(brand, model, type),
+        brand,
+        model,
+        type,
+        serialNumber: serialOrImei || undefined,
+        imeiNumber: serialOrImei || undefined,
 
         grade: (toText(formData.get("grade"), 40) as UsedProduct["grade"]) || "GRADE_B",
         gradeLabel: toText(formData.get("gradeLabel"), 120) || undefined,
@@ -72,8 +99,8 @@ export function parseUsedProductFormData(
         specifications: buildSpecificationsSummary(specificationItems),
         specificationItems,
 
-        isRefurbished: toBoolByCheckbox(formData, "isRefurbished"),
-        refurbishmentStatus: (toText(formData.get("refurbishmentStatus"), 80) as UsedProduct["refurbishmentStatus"]) || "waiting_refurbishment",
+        isRefurbished: needsRefurbishment,
+        refurbishmentStatus: normalizedRefurbishmentStatus,
         refurbishmentNote: toText(formData.get("refurbishmentNote"), 2000) || undefined,
 
         purchaseDate: toText(formData.get("purchaseDate"), 60),

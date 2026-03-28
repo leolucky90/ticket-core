@@ -16,7 +16,7 @@ import { IconTextActionButton } from "@/components/ui/icon-text-action-button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import type { DimensionPickerBundle } from "@/lib/types/catalog";
-import type { Product } from "@/lib/types/commerce";
+import type { Product } from "@/lib/types/merchant-product";
 import { LIST_DISPLAY_OPTIONS } from "@/lib/ui/list-display";
 
 type ProductManagementWorkspaceProps = {

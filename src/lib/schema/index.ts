@@ -160,9 +160,11 @@ export {
 export type {
     CaseRecord,
     CaseType,
+    TicketCaseRecord,
+    TicketCaseType,
 } from "@/lib/schema/cases";
 
-export { normalizeCaseRecord } from "@/lib/schema/cases";
+export { normalizeCaseRecord, normalizeTicketCaseRecord } from "@/lib/schema/cases";
 
 export type {
     StaffMember,
@@ -196,6 +198,7 @@ export {
 
 export type {
     UsedProductTypeSetting,
+    UsedProductTypeSpecificationInputType,
     UsedProductTypeSpecificationTemplate,
 } from "@/lib/schema/usedProductTypeSettings";
 

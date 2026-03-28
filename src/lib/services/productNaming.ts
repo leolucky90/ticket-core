@@ -1,5 +1,17 @@
-import type { ProductDoc } from "@/lib/types/commerce";
 import type { ProductNamingMode } from "@/lib/types/catalog";
+
+type ProductSearchKeywordSource = {
+    name: string;
+    normalizedName: string;
+    aliases?: string[];
+    sku?: string | undefined;
+    categoryName?: string | undefined;
+    brandName?: string | undefined;
+    modelName?: string | undefined;
+    nameEntryName?: string | undefined;
+    customLabel?: string | undefined;
+    supplier?: string | undefined;
+};
 
 const SPLIT_ALIAS_RE = /[\n,;|、]+/;
 const MAX_ALIAS_COUNT = 24;
@@ -81,31 +93,21 @@ export function buildProductNameSuggestion(input: ProductNameSuggestionInput): s
     return customName || joinNameParts([categoryName, brandName, modelName]);
 }
 
-export function buildProductSearchKeywords(product: Pick<
-    ProductDoc,
-    | "name"
-    | "normalizedName"
-    | "aliases"
-    | "sku"
-    | "categoryName"
-    | "brandName"
-    | "modelName"
-    | "nameEntryName"
-    | "customLabel"
-    | "supplier"
->): string[] {
-    return dedupeText([
-        product.name,
-        product.normalizedName,
-        product.sku,
-        product.categoryName,
-        product.brandName,
-        product.modelName,
-        product.nameEntryName,
-        product.customLabel,
-        product.supplier,
-        ...(product.aliases ?? []),
-    ]);
+export function buildProductSearchKeywords(product: ProductSearchKeywordSource): string[] {
+    return dedupeText(
+        [
+            product.name,
+            product.normalizedName,
+            product.sku,
+            product.categoryName,
+            product.brandName,
+            product.modelName,
+            product.nameEntryName,
+            product.customLabel,
+            product.supplier,
+            ...(product.aliases ?? []),
+        ].filter((value): value is string => typeof value === "string" && value.length > 0),
+    );
 }
 
 export function buildProductNormalizedName(input: {

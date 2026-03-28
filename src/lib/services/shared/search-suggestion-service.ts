@@ -1,10 +1,11 @@
 import "server-only";
-import { listCompanyCustomers, listProducts } from "@/lib/services/commerce";
+import { listCompanyCustomers } from "@/lib/services/merchant/customer-read-model.service";
+import { listProducts } from "@/lib/services/merchant/inventory-read-model.service";
 import { buildProductSearchKeywords, normalizeSearchText } from "@/lib/services/productNaming";
 import { queryCheckoutSales } from "@/lib/services/sales";
 import { listTickets } from "@/lib/services/ticket";
 import type { SearchSuggestionEntity, SearchSuggestionItem } from "@/lib/types/search";
-import type { Product } from "@/lib/types/commerce";
+import type { Product } from "@/lib/types/merchant-product";
 import type { Ticket } from "@/lib/types/ticket";
 
 const DEFAULT_LIMIT = 20;

@@ -22,6 +22,10 @@ type BossAdminHomepageBuilderProps = {
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 type BuilderSectionId = "hero" | "closing" | "theme";
 type PreviewViewport = "desktop" | "mobile";
+type PreviewScale = 0.5 | 0.6 | 0.7 | 0.8 | 0.9 | 1 | 1.1 | 1.2;
+
+const PREVIEW_SCALE_STEPS: PreviewScale[] = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2];
+const DEFAULT_PREVIEW_SCALE: PreviewScale = 0.7;
 
 const sectionLabels: Record<BuilderSectionId, string> = {
     hero: "Hero",
@@ -48,8 +52,10 @@ export function BossAdminHomepageBuilder({
     const [locale, setLocale] = useState<BusinessHomepageLocale>("zh");
     const [activeSection, setActiveSection] = useState<BuilderSectionId>("hero");
     const [previewViewport, setPreviewViewport] = useState<PreviewViewport>("desktop");
+    const [previewScale, setPreviewScale] = useState<PreviewScale>(DEFAULT_PREVIEW_SCALE);
     const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
     const current = state.locale[locale];
+    const desktopPreviewWidth = Math.round(1180 * previewScale);
 
     const saveStatusText = useMemo(() => {
         if (saveStatus === "saving") return "儲存中...";
@@ -75,6 +81,13 @@ export function BossAdminHomepageBuilder({
         }));
     }
 
+    function updatePreviewScale(direction: -1 | 1) {
+        const currentIndex = PREVIEW_SCALE_STEPS.indexOf(previewScale);
+        if (currentIndex === -1) return;
+        const nextIndex = Math.min(PREVIEW_SCALE_STEPS.length - 1, Math.max(0, currentIndex + direction));
+        setPreviewScale(PREVIEW_SCALE_STEPS[nextIndex]);
+    }
+
     async function save() {
         setSaveStatus("saving");
         try {
@@ -91,25 +104,63 @@ export function BossAdminHomepageBuilder({
     }
 
     return (
-        <section className="grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)_360px] 2xl:grid-cols-[280px_minmax(0,1fr)_400px]">
-            <aside className="grid gap-4 rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-4 xl:sticky xl:top-4 xl:self-start">
+        <div className="relative overflow-hidden rounded-[2rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-4 md:p-5">
+            <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                <div className="biz-grid absolute inset-0 opacity-40" />
+                <div className="absolute -left-10 top-10 h-44 w-44 rounded-full bg-[rgb(var(--accent))]/10 blur-3xl" />
+                <div className="absolute right-0 top-16 h-56 w-56 rounded-full bg-white/4 blur-3xl" />
+            </div>
+
+            <div className="relative grid gap-4">
+                <section className="biz-fade-up grid gap-4 rounded-[1.8rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel))]/90 p-5 backdrop-blur-xl lg:grid-cols-[1.1fr_0.9fr]">
+                    <div className="grid gap-3">
+                        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-3 py-1 text-[11px] font-semibold tracking-[0.12em] text-[rgb(var(--muted))] uppercase">
+                            <span className="biz-pulse h-2 w-2 rounded-full bg-[rgb(var(--accent))]" />
+                            Official Homepage Studio
+                        </div>
+                        <div className="text-2xl font-semibold text-[rgb(var(--text))]">把官方首頁的前台敘事、主題與 CTA 放進同一個編輯介面</div>
+                        <div className="max-w-3xl text-sm leading-relaxed text-[rgb(var(--muted))]">
+                            這個 builder 現在直接對應 `http://localhost:3000/` 的視覺與文案邏輯。左側維持 section list，中間是 live canvas，右側是 inspector，
+                            讓官方首頁的展示感和後台編輯體驗保持同一套系統語言。
+                        </div>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-3">
+                        {[
+                            ["Hero", "首頁文案與第一印象"],
+                            ["Closing CTA", "頁尾提案與導流"],
+                            ["Theme", "品牌色與風格"],
+                        ].map(([title, note], index) => (
+                            <div
+                                key={title}
+                                className={`rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-4 ${index === 1 ? "biz-float" : index === 2 ? "biz-float biz-delay-1" : ""}`}
+                            >
+                                <div className="text-xs font-semibold tracking-[0.1em] text-[rgb(var(--muted))] uppercase">{title}</div>
+                                <div className="mt-2 text-sm text-[rgb(var(--text))]">{note}</div>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+
+                <section className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)_380px] 2xl:grid-cols-[300px_minmax(0,1fr)_420px]">
+            <aside className="grid gap-4 rounded-[1.8rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel))]/90 p-4 backdrop-blur-xl xl:sticky xl:top-4 xl:self-start">
                 <div className="grid gap-1">
                     <div className="text-base font-semibold">官方首頁 Builder</div>
                     <div className="text-xs text-[rgb(var(--muted))]">把 `http://localhost:3000/` 的內容編輯切成 section list / live canvas / inspector。</div>
                     <div className="text-xs text-[rgb(var(--muted))]">目前首頁維持固定區段順序，先對齊單頁 builder 體驗，再往 block schema 演進。</div>
                 </div>
 
-                <div className="inline-flex w-fit rounded-lg border border-[rgb(var(--border))] p-1">
+                <div className="inline-flex w-fit rounded-full border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-1">
                     <button
                         type="button"
-                        className={`rounded px-2 py-1 text-xs ${locale === "zh" ? "bg-[rgb(var(--accent))] text-[rgb(var(--bg))]" : "text-[rgb(var(--text))]"}`}
+                        className={`rounded-full px-3 py-1 text-xs ${locale === "zh" ? "bg-[rgb(var(--accent))] text-[rgb(var(--bg))]" : "text-[rgb(var(--text))]"}`}
                         onClick={() => setLocale("zh")}
                     >
                         中文
                     </button>
                     <button
                         type="button"
-                        className={`rounded px-2 py-1 text-xs ${locale === "en" ? "bg-[rgb(var(--accent))] text-[rgb(var(--bg))]" : "text-[rgb(var(--text))]"}`}
+                        className={`rounded-full px-3 py-1 text-xs ${locale === "en" ? "bg-[rgb(var(--accent))] text-[rgb(var(--bg))]" : "text-[rgb(var(--text))]"}`}
                         onClick={() => setLocale("en")}
                     >
                         English
@@ -122,7 +173,7 @@ export function BossAdminHomepageBuilder({
                             key={sectionId}
                             type="button"
                             onClick={() => setActiveSection(sectionId)}
-                            className={`grid gap-2 rounded-xl border px-3 py-3 text-left ${activeSection === sectionId ? "border-[rgb(var(--accent))] bg-[rgb(var(--panel2))]" : "border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"}`}
+                            className={`grid gap-2 rounded-[1.2rem] border px-3 py-3 text-left transition ${activeSection === sectionId ? "border-[rgb(var(--accent))] bg-[rgb(var(--panel2))]" : "border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"}`}
                         >
                             <div className="text-xs uppercase tracking-[0.08em] text-[rgb(var(--muted))]">{index + 1}</div>
                             <div className="text-sm font-semibold">{sectionLabels[sectionId]}</div>
@@ -137,7 +188,7 @@ export function BossAdminHomepageBuilder({
                     ))}
                 </div>
 
-                <div className="grid gap-2 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                <div className="grid gap-2 rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
                     <div className="text-sm font-semibold">Inserter</div>
                     <div className="text-xs text-[rgb(var(--muted))]">首頁目前是固定段落模板。這裡先保留與 showcase builder 一致的 UI 架構。</div>
                     <div className="grid gap-2">
@@ -151,7 +202,7 @@ export function BossAdminHomepageBuilder({
                 </div>
             </aside>
 
-            <section className="grid gap-4 rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-4">
+            <section className="grid gap-4 rounded-[1.8rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel))]/90 p-4 backdrop-blur-xl">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="grid gap-1">
                         <div className="text-base font-semibold">官方首頁 Preview Canvas</div>
@@ -164,7 +215,7 @@ export function BossAdminHomepageBuilder({
                     ) : null}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-4 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-3">
+                <div className="flex flex-wrap items-center gap-4 rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-3">
                     <div className="grid gap-1">
                         <div className="text-[11px] uppercase tracking-[0.08em] text-[rgb(var(--muted))]">Viewport</div>
                         <div className="inline-flex rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-1">
@@ -183,10 +234,51 @@ export function BossAdminHomepageBuilder({
                             ))}
                         </div>
                     </div>
+
+                    {previewViewport === "desktop" ? (
+                        <div className="grid gap-1">
+                            <div className="text-[11px] uppercase tracking-[0.08em] text-[rgb(var(--muted))]">縮放比例</div>
+                            <div className="inline-flex items-center gap-1 rounded-[1.1rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-1.5 shadow-sm">
+                                <div className="min-w-[4.4rem] rounded-[0.9rem] px-3 py-1.5 text-center text-sm font-medium text-[rgb(var(--text))]">
+                                    {Math.round(previewScale * 100)}%
+                                </div>
+                                <button
+                                    type="button"
+                                    className="grid h-9 w-9 place-items-center rounded-[0.85rem] text-lg text-[rgb(var(--text))] transition hover:bg-[rgb(var(--panel2))] disabled:cursor-not-allowed disabled:opacity-40"
+                                    onClick={() => updatePreviewScale(-1)}
+                                    disabled={previewScale === PREVIEW_SCALE_STEPS[0]}
+                                    aria-label="縮小預覽"
+                                >
+                                    -
+                                </button>
+                                <button
+                                    type="button"
+                                    className="grid h-9 w-9 place-items-center rounded-[0.85rem] text-xl text-[rgb(var(--text))] transition hover:bg-[rgb(var(--panel2))] disabled:cursor-not-allowed disabled:opacity-40"
+                                    onClick={() => updatePreviewScale(1)}
+                                    disabled={previewScale === PREVIEW_SCALE_STEPS[PREVIEW_SCALE_STEPS.length - 1]}
+                                    aria-label="放大預覽"
+                                >
+                                    +
+                                </button>
+                                <button
+                                    type="button"
+                                    className="rounded-full border border-[rgb(var(--accent))] px-4 py-1.5 text-sm font-medium text-[rgb(var(--text))] transition hover:bg-[rgb(var(--panel2))]"
+                                    onClick={() => setPreviewScale(DEFAULT_PREVIEW_SCALE)}
+                                >
+                                    重設
+                                </button>
+                            </div>
+                        </div>
+                    ) : null}
                 </div>
 
-                <div className="min-h-[680px] overflow-auto rounded-[28px] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                    <div className={previewViewport === "mobile" ? "mx-auto w-full max-w-[390px] overflow-hidden rounded-[24px] border border-[rgb(var(--border))] bg-white shadow-sm" : "overflow-hidden rounded-[24px] border border-[rgb(var(--border))] bg-white shadow-sm"}>
+                <div className="min-h-[760px] overflow-auto rounded-[28px] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3 shadow-[0_30px_80px_-58px_rgb(var(--accent))]">
+                    <div
+                        className={previewViewport === "mobile"
+                            ? "mx-auto w-full max-w-[390px] overflow-hidden rounded-[24px] border border-[rgb(var(--border))] bg-white shadow-sm"
+                            : "overflow-hidden rounded-[24px] border border-[rgb(var(--border))] bg-white shadow-sm"}
+                        style={previewViewport === "desktop" ? { width: `${desktopPreviewWidth}px` } : undefined}
+                    >
                         <BusinessLandingPage
                             lang={locale}
                             isAuthenticated={false}
@@ -197,13 +289,13 @@ export function BossAdminHomepageBuilder({
                 </div>
             </section>
 
-            <section className="grid gap-4 rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-4 xl:sticky xl:top-4 xl:max-h-[calc(100dvh-2rem)] xl:self-start xl:overflow-auto">
+            <section className="grid gap-4 rounded-[1.8rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel))]/90 p-4 backdrop-blur-xl xl:sticky xl:top-4 xl:max-h-[calc(100dvh-2rem)] xl:self-start xl:overflow-auto">
                 <div className="grid gap-1">
                     <div className="text-base font-semibold">Inspector</div>
                     <div className="text-xs text-[rgb(var(--muted))]">{sectionLabels[activeSection]}</div>
                 </div>
 
-                <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-3">
+                <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-3">
                     <Button type="button" onClick={save} disabled={saveStatus === "saving"}>
                         儲存首頁內容
                     </Button>
@@ -222,7 +314,7 @@ export function BossAdminHomepageBuilder({
                 </div>
 
                 {activeSection === "hero" ? (
-                    <div className="grid gap-3 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                    <div className="grid gap-3 rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
                         <div className="text-sm font-medium">Hero Content</div>
                         <label className="grid gap-1">
                             <span className="text-xs text-[rgb(var(--muted))]">Kicker / 前綴文字</span>
@@ -250,7 +342,7 @@ export function BossAdminHomepageBuilder({
                 ) : null}
 
                 {activeSection === "closing" ? (
-                    <div className="grid gap-3 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                    <div className="grid gap-3 rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
                         <div className="text-sm font-medium">Closing CTA</div>
                         <label className="grid gap-1">
                             <span className="text-xs text-[rgb(var(--muted))]">頁尾 CTA 標題</span>
@@ -268,7 +360,7 @@ export function BossAdminHomepageBuilder({
                 ) : null}
 
                 {activeSection === "theme" ? (
-                    <div className="grid gap-3 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                    <div className="grid gap-3 rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
                         <div className="text-sm font-medium">Theme Preset</div>
                         <label className="grid gap-1 md:max-w-xs">
                             <span className="text-xs text-[rgb(var(--muted))]">整體配色風格</span>
@@ -313,7 +405,7 @@ export function BossAdminHomepageBuilder({
                     </div>
                 ) : null}
 
-                <details className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                <details className="rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
                     <summary className="cursor-pointer list-none text-sm font-medium">JSON Snapshot</summary>
                     <div className="mt-3 grid gap-2">
                         <div className="text-xs text-[rgb(var(--muted))]">唯讀檢視目前首頁可編輯內容，方便後續往 block schema 遷移。</div>
@@ -321,6 +413,8 @@ export function BossAdminHomepageBuilder({
                     </div>
                 </details>
             </section>
-        </section>
+                </section>
+            </div>
+        </div>
     );
 }

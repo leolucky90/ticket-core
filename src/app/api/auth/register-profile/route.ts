@@ -3,6 +3,7 @@ import { fbAdminAuth } from "@/lib/firebase-server";
 import { fbAdminDb } from "@/lib/firebase-server";
 import { ensureUserDoc } from "@/lib/services/user.service";
 import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { normalizeTenantId } from "@/lib/tenant-scope";
 
 type RegisterProfileBody = {
     idToken?: string;
@@ -101,14 +102,6 @@ async function upsertCompanyCustomer(params: {
     };
     await ref.set(doc, { merge: true });
     return customerId;
-}
-
-function normalizeTenantId(value: unknown): string | null {
-    if (typeof value !== "string") return null;
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    if (/[/?#]/.test(trimmed)) return null;
-    return trimmed;
 }
 
 export async function POST(req: Request) {

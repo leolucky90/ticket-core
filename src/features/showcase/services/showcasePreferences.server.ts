@@ -1,5 +1,6 @@
 import "server-only";
 import { fbAdminDb } from "@/lib/firebase-server";
+import { normalizeTenantId } from "@/lib/tenant-scope";
 import {
     DEFAULT_SHOW_THEME_COLORS,
     DEFAULT_STOREFRONT_SETTINGS,
@@ -26,14 +27,6 @@ export type ShowcasePreferences = {
 
 function cloneDefaultContent(): ShowContentState {
     return JSON.parse(JSON.stringify(DEFAULT_SHOW_CONTENT_STATE)) as ShowContentState;
-}
-
-function normalizeTenantId(value: unknown): string | null {
-    if (typeof value !== "string") return null;
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    if (/[/?#]/.test(trimmed)) return null;
-    return trimmed;
 }
 
 function tenantCompanyDocRef(tenantId: string) {

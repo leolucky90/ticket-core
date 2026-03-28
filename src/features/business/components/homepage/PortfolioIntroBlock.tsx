@@ -16,7 +16,7 @@ export function PortfolioIntroBlock({ title, description, highlights, stack, cla
                 className,
             )}
         >
-            <h3 className="text-2xl [font-family:'Fraunces','Noto_Serif_TC',serif] text-[var(--biz-heading)]">{title}</h3>
+            <h3 className="text-2xl [font-family:var(--font-display)] text-[var(--biz-heading)]">{title}</h3>
             <p className="mt-3 text-sm leading-relaxed text-[var(--biz-body)]">{description}</p>
 
             <div className="mt-5 grid gap-2 text-sm text-[var(--biz-body)]">

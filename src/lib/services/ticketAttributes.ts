@@ -1,5 +1,6 @@
 import "server-only";
 import { fbAdminDb } from "@/lib/firebase-server";
+import { normalizeTenantId } from "@/lib/tenant-scope";
 import type { KnownQuoteStatus, KnownTicketStatus } from "@/lib/types/ticket";
 import type { TicketAttributePreferences } from "@/lib/types/ticketAttributes";
 
@@ -7,14 +8,6 @@ export const DEFAULT_CASE_STATUSES: KnownTicketStatus[] = ["new", "in_progress",
 export const DEFAULT_QUOTE_STATUSES: KnownQuoteStatus[] = ["inspection_estimate", "quoted", "rejected", "accepted"];
 const MAX_ITEM_COUNT = 20;
 const MAX_ITEM_LENGTH = 40;
-
-function normalizeTenantId(value: unknown): string | null {
-    if (typeof value !== "string") return null;
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    if (/[/?#]/.test(trimmed)) return null;
-    return trimmed;
-}
 
 function docPath(tenantId: string): string {
     return `companies/${tenantId}/app_config/ticket_attributes`;

@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import { TenantShopPage } from "@/features/showcase/components/TenantShopPage";
 import { getShowcasePreferences } from "@/features/showcase/services/showcasePreferences.server";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
+import { listPublicProductsByTenant } from "@/lib/services/merchant/inventory-read-model.service";
 import { getCurrentSessionAccountContext } from "@/lib/services/staff.service";
-import { listPublicProductsByTenant } from "@/lib/services/commerce";
 
 export default async function CompanyHomeShopPage() {
     const sessionUser = await getSessionUser();

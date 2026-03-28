@@ -33,10 +33,12 @@ export type AuditFields = {
 export type Company = AuditFields & {
     id: EntityId;
     name: string;
-    tenantId: string;
-    ownerUid: string;
-    contactPhone: string;
-    address: string;
+    slug: string;
+    subdomain: string;
+    ownerUid?: string;
+    ownerEmail?: string;
+    contactPhone?: string;
+    address?: string;
 };
 
 export type Subscription = AuditFields & {

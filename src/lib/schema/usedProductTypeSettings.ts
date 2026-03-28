@@ -1,3 +1,5 @@
+export type UsedProductTypeSpecificationInputType = "text" | "select";
+
 export type UsedProductTypeSpecificationTemplate = {
     key: string;
     label: string;
@@ -6,6 +8,8 @@ export type UsedProductTypeSpecificationTemplate = {
     placeholder?: string;
     placeholderZh?: string;
     placeholderEn?: string;
+    inputType?: UsedProductTypeSpecificationInputType;
+    options?: string[];
     isRequired?: boolean;
 };
 
@@ -27,6 +31,28 @@ function toText(value: unknown, max = 240): string {
 function toBool(value: unknown, fallback: boolean): boolean {
     if (typeof value === "boolean") return value;
     return fallback;
+}
+
+function toInputType(value: unknown): UsedProductTypeSpecificationInputType {
+    return value === "select" ? "select" : "text";
+}
+
+function normalizeOptions(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    const seen = new Set<string>();
+    const options: string[] = [];
+
+    for (const row of value) {
+        const text = toText(row, 120);
+        if (!text) continue;
+        const normalized = text.toLowerCase();
+        if (seen.has(normalized)) continue;
+        seen.add(normalized);
+        options.push(text);
+        if (options.length >= 40) break;
+    }
+
+    return options;
 }
 
 function toIso(value: unknown, fallback: string): string {
@@ -51,11 +77,14 @@ function normalizeTemplates(value: unknown): UsedProductTypeSpecificationTemplat
         const labelEn = toText(source.labelEn, 120);
         const legacyLabel = toText(source.label, 120);
         const label = legacyLabel || labelZh || labelEn;
+        const inputType = toInputType(source.inputType);
+        const options = normalizeOptions(source.options);
         if (!key && !label) continue;
 
         const template: UsedProductTypeSpecificationTemplate = {
             key: key || label,
             label: label || key,
+            inputType: inputType === "select" && options.length > 0 ? "select" : "text",
             isRequired: toBool(source.isRequired, false),
         };
         if (labelZh) template.labelZh = labelZh;
@@ -67,6 +96,7 @@ function normalizeTemplates(value: unknown): UsedProductTypeSpecificationTemplat
         if (placeholder) template.placeholder = placeholder;
         if (placeholderZh) template.placeholderZh = placeholderZh;
         if (placeholderEn) template.placeholderEn = placeholderEn;
+        if (template.inputType === "select") template.options = options;
         templates.push(template);
     }
     return templates.slice(0, 40);

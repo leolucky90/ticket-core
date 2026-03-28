@@ -1,6 +1,7 @@
 import "server-only";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
 import type { InventoryDocument, InventoryMovementEventType, InventoryMovementLog, InventoryRecord } from "@/lib/schema";
+import { normalizeCompanyId } from "@/lib/tenant-scope";
 import {
     inventoryCollectionPath,
     inventoryMovementsCollectionPath,
@@ -8,7 +9,7 @@ import {
     normalizeInventoryMovementDocument,
     recomputeAvailableQty,
 } from "@/lib/schema";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getUserCompanyId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 
 type SessionScope = {
     companyId: string;
@@ -89,13 +90,6 @@ function toIsoString(value: unknown, fallbackMs = Date.now()): string {
     return new Date(fallbackMs).toISOString();
 }
 
-function normalizeCompanyId(value: unknown): string | null {
-    const cleaned = toText(value, 120);
-    if (!cleaned) return null;
-    if (/[/?#]/.test(cleaned)) return null;
-    return cleaned;
-}
-
 function buildMovementId(): string {
     return `inv_move_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
@@ -126,7 +120,7 @@ async function resolveSessionScope(): Promise<SessionScope | null> {
     if (!user) return null;
     if (toAccountType(user.role) !== "company") return null;
 
-    const companyId = normalizeCompanyId(getShowcaseTenantId(user, session.uid));
+    const companyId = normalizeCompanyId(getUserCompanyId(user, session.uid));
     if (!companyId) return null;
 
     return {

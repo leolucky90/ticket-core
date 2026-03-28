@@ -1,9 +1,9 @@
 import "server-only";
-import { listProducts } from "@/lib/services/commerce";
+import { listProducts } from "@/lib/services/merchant/inventory-read-model.service";
 import { buildProductNameSuggestion, buildProductNormalizedName, normalizeAliasList, parseProductNamingMode } from "@/lib/services/productNaming";
 import type { DimensionPickerBundle, ProductNamingMode, StockDeductionMode } from "@/lib/types/catalog";
+import type { Product } from "@/lib/types/merchant-product";
 import type { ProductDoc } from "@/lib/types/product";
-import type { Product } from "@/lib/types/commerce";
 
 type ProductNameSuggestionInput = {
     namingMode?: unknown;

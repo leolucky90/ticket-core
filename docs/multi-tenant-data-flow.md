@@ -1,5 +1,10 @@
 # Multi-tenant Data Flow
 
+For canonical naming, role-boundary, architecture, and refactor glossary, see:
+
+- `docs/project-rules.md`
+- `docs/project-summary.md`
+
 ## Firestore hierarchy
 
 - `companies/{companyId}`

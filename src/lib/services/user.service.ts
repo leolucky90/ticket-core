@@ -1,5 +1,6 @@
 import "server-only";
 import { fbAdminDb } from "@/lib/firebase-server";
+import { normalizeCompanyId } from "@/lib/tenant-scope";
 
 export type UserDoc = {
     uid: string;
@@ -43,12 +44,6 @@ function parseCompanyRoleHintEmailSet(): ReadonlySet<string> {
 }
 
 const COMPANY_ROLE_HINT_EMAIL_SET = parseCompanyRoleHintEmailSet();
-
-function normalizeCompanyId(value: unknown): string | null {
-    if (typeof value !== "string") return null;
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : null;
-}
 
 function resolveCompanyId(role: UserDoc["role"], candidate: unknown, uidFallback: string): string | null {
     const normalized = normalizeCompanyId(candidate);
@@ -106,11 +101,19 @@ export function toAccountType(role: UserDoc["role"] | null | undefined): Account
     return "company";
 }
 
-export function getShowcaseTenantId(userDoc: Pick<UserDoc, "uid" | "role" | "companyId"> | null | undefined, uidFallback?: string): string | null {
+export function getUserCompanyId(
+    userDoc: Pick<UserDoc, "uid" | "role" | "companyId"> | null | undefined,
+    uidFallback?: string,
+): string | null {
     if (!userDoc) return null;
     const companyId = normalizeCompanyId(userDoc.companyId);
     if (toAccountType(userDoc.role) === "company") return companyId ?? userDoc.uid ?? uidFallback ?? null;
     return companyId ?? userDoc.uid ?? uidFallback ?? null;
+}
+
+// `tenantId` remains the public route/domain alias for a company's scope key.
+export function getShowcaseTenantId(userDoc: Pick<UserDoc, "uid" | "role" | "companyId"> | null | undefined, uidFallback?: string): string | null {
+    return getUserCompanyId(userDoc, uidFallback);
 }
 
 export async function ensureUserDoc(params: {

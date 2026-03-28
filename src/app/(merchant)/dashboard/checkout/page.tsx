@@ -1,7 +1,9 @@
 import { CheckoutWorkspace } from "@/components/dashboard/CheckoutWorkspace";
 import { MerchantPageShell } from "@/components/merchant/shell";
+import { listActivities } from "@/lib/services/merchant/activity-read-model.service";
+import { listCompanyCustomers } from "@/lib/services/merchant/customer-read-model.service";
+import { listProducts } from "@/lib/services/merchant/inventory-read-model.service";
 import { createCheckoutSale } from "@/lib/services/sales";
-import { listActivities, listCompanyCustomers, listProducts } from "@/lib/services/commerce";
 import { listTickets } from "@/lib/services/ticket";
 import { listUsedProducts } from "@/lib/services/used-products.service";
 import { getCompanyProfile } from "@/lib/services/company-profile.service";

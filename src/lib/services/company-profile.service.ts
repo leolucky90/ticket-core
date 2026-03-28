@@ -1,21 +1,10 @@
 import "server-only";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
 import { companyProfileDocPath, normalizeCompanyProfile, type CompanyProfile } from "@/lib/schema";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { normalizeCompanyId } from "@/lib/tenant-scope";
+import { getUserCompanyId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 
 const memory: Record<string, CompanyProfile> = {};
-
-function toText(value: unknown, max = 240): string {
-    if (typeof value !== "string") return "";
-    return value.replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, max);
-}
-
-function normalizeCompanyId(value: unknown): string | null {
-    const text = toText(value, 120);
-    if (!text) return null;
-    if (/[/?#]/.test(text)) return null;
-    return text;
-}
 
 async function resolveCompanyScope(): Promise<{ companyId: string; uid: string } | null> {
     const session = await getSessionUser();
@@ -24,7 +13,7 @@ async function resolveCompanyScope(): Promise<{ companyId: string; uid: string }
     const user = await getUserDoc(session.uid);
     if (!user || toAccountType(user.role) !== "company") return null;
 
-    const companyId = normalizeCompanyId(getShowcaseTenantId(user, session.uid));
+    const companyId = normalizeCompanyId(getUserCompanyId(user, session.uid));
     if (!companyId) return null;
 
     return {

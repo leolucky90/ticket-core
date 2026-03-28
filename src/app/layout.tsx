@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 import { cookies } from "next/headers";
+import { Fraunces, Manrope } from "next/font/google";
 import { getThemeInitScript } from "@/lib/services/themePreferences";
 import "@/styles/globals.css";
 import "@/styles/auth.css";
 
 export const metadata = {
-  title: "Ticket Core",
-  description: "Next.js 16 + TS strict + Tailwind v4 + CSS Variables",
+  title: "Ticket Core | SaaS + AI Commerce Platform",
+  description: "Multi-tenant ERP, repair workflow, POS, commerce, and AI-ready showcase platform built with Next.js 16.",
 };
 
 type RootLayoutProps = {
@@ -14,6 +15,16 @@ type RootLayoutProps = {
 };
 
 const themeInitScript = getThemeInitScript();
+const manrope = Manrope({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap",
+});
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-display",
+  display: "swap",
+});
 
 export default async function RootLayout({ children }: RootLayoutProps) {
   const cookieStore = await cookies();
@@ -21,7 +32,7 @@ export default async function RootLayout({ children }: RootLayoutProps) {
   const htmlLang = langCookie === "en" ? "en" : "zh-Hant";
 
   return (
-    <html lang={htmlLang} suppressHydrationWarning>
+    <html lang={htmlLang} suppressHydrationWarning className={`${manrope.variable} ${fraunces.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
