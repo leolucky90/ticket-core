@@ -1,10 +1,12 @@
-import { COMPANY_HOME_DEFAULT_BLOCKS } from "@/features/showcase/default-template/companyHomeDefaultTemplate";
 import type { BlockCtaConfig, BlockCtaVariant, BuilderTextAlign, ImageAsset, ImageAssetSourceType } from "@/features/showcase/types/builder";
+import { createShowcaseBlock, getShowcaseDefaultBlocks } from "@/features/showcase/services/showBlockRegistry";
 import type {
     PersistedShowContentBlock,
     PersistedShowContentState,
     ShowContentBlock,
     ShowContentBlockId,
+    ShowContentBlockType,
+    ShowContentBlockVariant,
     ShowContentBodyScale,
     ShowContentFontFamily,
     ShowContentLocale,
@@ -17,7 +19,7 @@ import type {
     ShowServiceRows,
 } from "@/features/showcase/types/showContent";
 
-const BLOCK_IDS: ShowContentBlockId[] = ["hero", "about", "services", "contact", "ad"];
+const BLOCK_TYPES: ShowContentBlockType[] = ["hero", "about", "services", "contact", "ad", "cta", "promo"];
 const FONT_FAMILIES: ShowContentFontFamily[] = ["default", "serif", "mono"];
 const TITLE_SCALES: ShowContentTitleScale[] = ["md", "lg", "xl"];
 const BODY_SCALES: ShowContentBodyScale[] = ["sm", "md", "lg"];
@@ -28,6 +30,7 @@ const SERVICE_ROWS: ShowServiceRows[] = [1, 2, 3];
 const CTA_VARIANTS: BlockCtaVariant[] = ["solid", "outline", "ghost"];
 const TEXT_ALIGNMENTS: BuilderTextAlign[] = ["left", "center", "right"];
 const IMAGE_SOURCE_TYPES: ImageAssetSourceType[] = ["external_url", "storage_file"];
+const BLOCK_VARIANTS: ShowContentBlockVariant[] = ["default", "left-copy", "center-copy", "split-screen", "single-banner", "slider", "card-rail"];
 
 function clone<T>(value: T): T {
     return JSON.parse(JSON.stringify(value)) as T;
@@ -37,25 +40,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function inferBlockType(value: unknown): ShowContentBlockType | null {
+    if (typeof value !== "string") return null;
+    if (BLOCK_TYPES.includes(value as ShowContentBlockType)) return value as ShowContentBlockType;
+    return BLOCK_TYPES.find((type) => value === type || value.startsWith(`${type}-`)) ?? null;
+}
+
 function createDefaultLocaleMap(locale: ShowContentLocale): ShowContentLocaleMap {
-    const blocks = clone(COMPANY_HOME_DEFAULT_BLOCKS[locale]);
-    const next = {} as ShowContentLocaleMap;
-
-    for (const blockId of BLOCK_IDS) {
-        const block = blocks.find((item) => item.type === blockId);
-        if (!block) throw new Error(`Missing default block for ${locale}:${blockId}`);
-        if (blockId === "hero") next.hero = block as ShowContentLocaleMap["hero"];
-        if (blockId === "about") next.about = block as ShowContentLocaleMap["about"];
-        if (blockId === "services") next.services = block as ShowContentLocaleMap["services"];
-        if (blockId === "contact") next.contact = block as ShowContentLocaleMap["contact"];
-        if (blockId === "ad") next.ad = block as ShowContentLocaleMap["ad"];
+    const next: ShowContentLocaleMap = {};
+    for (const block of getShowcaseDefaultBlocks(locale)) {
+        next[block.id] = block;
     }
-
     return next;
 }
 
 export const DEFAULT_SHOW_CONTENT_STATE: ShowContentState = {
-    order: [...BLOCK_IDS],
+    order: getShowcaseDefaultBlocks("zh").map((block) => block.id),
     locale: {
         zh: createDefaultLocaleMap("zh"),
         en: createDefaultLocaleMap("en"),
@@ -147,9 +147,14 @@ function sanitizeOrderValue(value: unknown, fallback: number): number {
     return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+function sanitizeVariant(value: unknown, fallback: ShowContentBlockVariant): ShowContentBlockVariant {
+    return typeof value === "string" && BLOCK_VARIANTS.includes(value as ShowContentBlockVariant)
+        ? (value as ShowContentBlockVariant)
+        : fallback;
+}
+
 function sanitizeThemeTokenOverrides(value: unknown, fallback: Record<string, string>): Record<string, string> {
     if (!isRecord(value)) return { ...fallback };
-
     const next: Record<string, string> = {};
     for (const [token, candidate] of Object.entries(value)) {
         if (typeof candidate !== "string") continue;
@@ -158,15 +163,12 @@ function sanitizeThemeTokenOverrides(value: unknown, fallback: Record<string, st
         if (!resolvedToken || !resolvedValue) continue;
         next[resolvedToken] = resolvedValue;
     }
-
     return Object.keys(next).length > 0 ? next : { ...fallback };
 }
 
 function sanitizeImageAsset(value: unknown, fallback: ImageAsset): ImageAsset {
     const source = isRecord(value) ? value : {};
-    const legacyUrl = source.url;
-    const resolvedUrl = sanitizeOptionalText(legacyUrl, fallback.url);
-
+    const resolvedUrl = sanitizeOptionalText(source.url, fallback.url);
     return {
         sourceType: sanitizeImageSourceType(source.sourceType, fallback.sourceType),
         url: resolvedUrl,
@@ -188,10 +190,7 @@ function normalizeServiceCards(value: unknown, fallback: ShowServiceCard[], lega
             id: `service-card-${index + 1}`,
             title: legacy[index] ?? "",
             body: "",
-            image: {
-                sourceType: "external_url" as const,
-                url: "",
-            },
+            image: { sourceType: "external_url" as const, url: "" },
             imageUrl: "",
             imageStyle: "square" as const,
             imagePosition: "top" as const,
@@ -228,7 +227,6 @@ function normalizeServiceCards(value: unknown, fallback: ShowServiceCard[], lega
 
 function normalizeCtas(value: unknown, fallback: BlockCtaConfig[]): BlockCtaConfig[] {
     if (!Array.isArray(value)) return clone(fallback);
-
     const next: BlockCtaConfig[] = [];
     for (const [index, item] of value.entries()) {
         if (!isRecord(item)) continue;
@@ -248,7 +246,6 @@ function normalizeCtas(value: unknown, fallback: BlockCtaConfig[]): BlockCtaConf
             openInNewTab: sanitizeBoolean(item.openInNewTab, fallbackItem.openInNewTab ?? false),
         });
     }
-
     return next.length > 0 ? next : clone(fallback);
 }
 
@@ -269,11 +266,7 @@ function normalizeStyles(value: unknown, fallback: ShowContentBlock["styles"]): 
     };
 }
 
-function normalizeTypography(
-    value: unknown,
-    fallback: ShowContentBlock["typography"],
-    legacySource?: Record<string, unknown>,
-): ShowContentBlock["typography"] {
+function normalizeTypography(value: unknown, fallback: ShowContentBlock["typography"], legacySource?: Record<string, unknown>): ShowContentBlock["typography"] {
     const source = isRecord(value) ? value : {};
     return {
         fontFamily: sanitizeFontFamily(source.fontFamily ?? legacySource?.fontFamily, fallback.fontFamily),
@@ -295,33 +288,32 @@ function normalizeSharedContent(value: unknown, fallback: ShowContentBlock["cont
     };
 }
 
-function normalizeBlock(
-    blockId: ShowContentBlockId,
-    candidate: unknown,
-    fallback: ShowContentBlock,
-): ShowContentBlock {
+function normalizeBlock(id: string, candidate: unknown, fallback: ShowContentBlock): ShowContentBlock {
     const source = isRecord(candidate) ? candidate : {};
     const contentSource = isRecord(source.content) ? source.content : source;
     const sharedContent = normalizeSharedContent(contentSource, fallback.content);
     const rawPoints = sharedContent.points.length > 0 ? sharedContent.points : fallback.content.points;
     const normalizedStyles = normalizeStyles(source.styles, fallback.styles);
     const normalizedTypography = normalizeTypography(source.typography, fallback.typography, source);
+    const resolvedType = inferBlockType(source.type) ?? fallback.type;
 
-    if (blockId === "hero") {
-        const heroFallback = fallback as ShowContentLocaleMap["hero"];
+    if (resolvedType === "hero") {
         return {
-            ...heroFallback,
-            enabled: sanitizeBoolean(source.enabled, heroFallback.enabled),
-            order: sanitizeOrderValue(source.order, heroFallback.order),
-            anchor: sanitizeText(source.anchor, heroFallback.anchor),
+            ...fallback,
+            id,
+            type: "hero",
+            enabled: sanitizeBoolean(source.enabled, fallback.enabled),
+            order: sanitizeOrderValue(source.order, fallback.order),
+            anchor: sanitizeText(source.anchor, fallback.anchor),
+            variant: sanitizeVariant(source.variant, fallback.variant),
             content: {
                 ...sharedContent,
                 points: rawPoints,
-                summaryTitle: sanitizeText(contentSource.summaryTitle, heroFallback.content.summaryTitle),
+                summaryTitle: sanitizeText(contentSource.summaryTitle, (fallback.content as ShowContentBlock<"hero">["content"]).summaryTitle),
             },
             styles: normalizedStyles,
-            assets: clone(heroFallback.assets),
-            ctas: normalizeCtas(source.ctas, heroFallback.ctas),
+            assets: clone(fallback.assets),
+            ctas: normalizeCtas(source.ctas, fallback.ctas),
             typography: normalizedTypography,
             kicker: sharedContent.kicker,
             title: sharedContent.title,
@@ -332,74 +324,75 @@ function normalizeBlock(
             fontFamily: normalizedTypography.fontFamily,
             titleScale: normalizedTypography.titleScale,
             bodyScale: normalizedTypography.bodyScale,
-            dataSource: isRecord(source.dataSource) ? source.dataSource : clone(heroFallback.dataSource ?? {}),
-            themeTokenOverrides: sanitizeThemeTokenOverrides(source.themeTokenOverrides, heroFallback.themeTokenOverrides ?? {}),
+            dataSource: isRecord(source.dataSource) ? source.dataSource : clone(fallback.dataSource ?? {}),
+            themeTokenOverrides: sanitizeThemeTokenOverrides(source.themeTokenOverrides, fallback.themeTokenOverrides ?? {}),
         };
     }
 
-    if (blockId === "services") {
-        const servicesFallback = fallback as ShowContentLocaleMap["services"];
-        const serviceRows = sanitizeServiceRows(contentSource.serviceRows ?? source.serviceRows, servicesFallback.content.serviceRows);
+    if (resolvedType === "services") {
+        const serviceRows = sanitizeServiceRows(contentSource.serviceRows ?? source.serviceRows, (fallback.content as ShowContentBlock<"services">["content"]).serviceRows);
         const serviceCards = normalizeServiceCards(
             contentSource.serviceCards ?? source.serviceCards,
-            servicesFallback.content.serviceCards,
-            rawPoints.length > 0 ? rawPoints : servicesFallback.content.points,
+            (fallback.content as ShowContentBlock<"services">["content"]).serviceCards,
+            rawPoints.length > 0 ? rawPoints : fallback.content.points,
         );
         const visibleCardCount = serviceRows * 3;
+        const derivedPoints = serviceCards
+            .slice(0, visibleCardCount)
+            .map((card) => card.title.trim())
+            .filter((title) => title.length > 0)
+            .slice(0, 12);
 
         return {
-            ...servicesFallback,
-            enabled: sanitizeBoolean(source.enabled, servicesFallback.enabled),
-            order: sanitizeOrderValue(source.order, servicesFallback.order),
-            anchor: sanitizeText(source.anchor, servicesFallback.anchor),
+            ...fallback,
+            id,
+            type: "services",
+            enabled: sanitizeBoolean(source.enabled, fallback.enabled),
+            order: sanitizeOrderValue(source.order, fallback.order),
+            anchor: sanitizeText(source.anchor, fallback.anchor),
+            variant: sanitizeVariant(source.variant, fallback.variant),
             content: {
                 ...sharedContent,
-                points: serviceCards
-                    .slice(0, visibleCardCount)
-                    .map((card) => card.title.trim())
-                    .filter((title) => title.length > 0)
-                    .slice(0, 12),
+                points: derivedPoints,
                 serviceRows,
                 serviceCards,
             },
             styles: normalizedStyles,
-            assets: clone(servicesFallback.assets),
-            ctas: normalizeCtas(source.ctas, servicesFallback.ctas),
+            assets: clone(fallback.assets),
+            ctas: normalizeCtas(source.ctas, fallback.ctas),
             typography: normalizedTypography,
             kicker: sharedContent.kicker,
             title: sharedContent.title,
             body: sharedContent.body,
-            points: serviceCards
-                .slice(0, visibleCardCount)
-                .map((card) => card.title.trim())
-                .filter((title) => title.length > 0)
-                .slice(0, 12),
+            points: derivedPoints,
             serviceCards,
             serviceRows,
             fontFamily: normalizedTypography.fontFamily,
             titleScale: normalizedTypography.titleScale,
             bodyScale: normalizedTypography.bodyScale,
-            dataSource: isRecord(source.dataSource) ? source.dataSource : clone(servicesFallback.dataSource ?? {}),
-            themeTokenOverrides: sanitizeThemeTokenOverrides(source.themeTokenOverrides, servicesFallback.themeTokenOverrides ?? {}),
+            dataSource: isRecord(source.dataSource) ? source.dataSource : clone(fallback.dataSource ?? {}),
+            themeTokenOverrides: sanitizeThemeTokenOverrides(source.themeTokenOverrides, fallback.themeTokenOverrides ?? {}),
         };
     }
 
-    if (blockId === "contact") {
-        const contactFallback = fallback as ShowContentLocaleMap["contact"];
+    if (resolvedType === "contact") {
         return {
-            ...contactFallback,
-            enabled: sanitizeBoolean(source.enabled, contactFallback.enabled),
-            order: sanitizeOrderValue(source.order, contactFallback.order),
-            anchor: sanitizeText(source.anchor, contactFallback.anchor),
+            ...fallback,
+            id,
+            type: "contact",
+            enabled: sanitizeBoolean(source.enabled, fallback.enabled),
+            order: sanitizeOrderValue(source.order, fallback.order),
+            anchor: sanitizeText(source.anchor, fallback.anchor),
+            variant: sanitizeVariant(source.variant, fallback.variant),
             content: {
                 ...sharedContent,
                 points: rawPoints,
-                cardTitle: sanitizeText(contentSource.cardTitle, contactFallback.content.cardTitle),
-                cardBody: sanitizeText(contentSource.cardBody, contactFallback.content.cardBody),
+                cardTitle: sanitizeText(contentSource.cardTitle, (fallback.content as ShowContentBlock<"contact">["content"]).cardTitle),
+                cardBody: sanitizeText(contentSource.cardBody, (fallback.content as ShowContentBlock<"contact">["content"]).cardBody),
             },
             styles: normalizedStyles,
-            assets: clone(contactFallback.assets),
-            ctas: normalizeCtas(source.ctas, contactFallback.ctas),
+            assets: clone(fallback.assets),
+            ctas: normalizeCtas(source.ctas, fallback.ctas),
             typography: normalizedTypography,
             kicker: sharedContent.kicker,
             title: sharedContent.title,
@@ -410,16 +403,19 @@ function normalizeBlock(
             fontFamily: normalizedTypography.fontFamily,
             titleScale: normalizedTypography.titleScale,
             bodyScale: normalizedTypography.bodyScale,
-            dataSource: isRecord(source.dataSource) ? source.dataSource : clone(contactFallback.dataSource ?? {}),
-            themeTokenOverrides: sanitizeThemeTokenOverrides(source.themeTokenOverrides, contactFallback.themeTokenOverrides ?? {}),
+            dataSource: isRecord(source.dataSource) ? source.dataSource : clone(fallback.dataSource ?? {}),
+            themeTokenOverrides: sanitizeThemeTokenOverrides(source.themeTokenOverrides, fallback.themeTokenOverrides ?? {}),
         };
     }
 
     return {
         ...fallback,
+        id,
+        type: resolvedType,
         enabled: sanitizeBoolean(source.enabled, fallback.enabled),
         order: sanitizeOrderValue(source.order, fallback.order),
         anchor: sanitizeText(source.anchor, fallback.anchor),
+        variant: sanitizeVariant(source.variant, fallback.variant),
         content: {
             ...sharedContent,
             points: rawPoints,
@@ -442,82 +438,96 @@ function normalizeBlock(
     };
 }
 
-function normalizeLocaleMap(
-    candidate: Partial<Record<ShowContentBlockId, unknown>> | null | undefined,
-    fallback: ShowContentLocaleMap,
-): ShowContentLocaleMap {
+function normalizeLocaleMap(candidate: unknown, locale: ShowContentLocale): ShowContentLocaleMap {
     const source = isRecord(candidate) ? candidate : {};
-    return {
-        hero: normalizeBlock("hero", source.hero, fallback.hero) as ShowContentLocaleMap["hero"],
-        about: normalizeBlock("about", source.about, fallback.about) as ShowContentLocaleMap["about"],
-        services: normalizeBlock("services", source.services, fallback.services) as ShowContentLocaleMap["services"],
-        contact: normalizeBlock("contact", source.contact, fallback.contact) as ShowContentLocaleMap["contact"],
-        ad: normalizeBlock("ad", source.ad, fallback.ad) as ShowContentLocaleMap["ad"],
-    };
-}
+    const defaults = createDefaultLocaleMap(locale);
+    const next: ShowContentLocaleMap = {};
 
-function deriveOrderFromLocaleMap(candidate: unknown): ShowContentBlockId[] {
-    if (!isRecord(candidate)) return [...BLOCK_IDS];
-
-    const ordered = BLOCK_IDS.map((blockId) => {
-        const block = isRecord(candidate[blockId]) ? candidate[blockId] : null;
-        const order = block && typeof block.order === "number" ? block.order : Number.MAX_SAFE_INTEGER;
-        return { blockId, order };
-    }).sort((left, right) => left.order - right.order);
-
-    return ordered.map((item) => item.blockId);
-}
-
-function normalizeOrder(candidate: unknown, localeCandidate?: unknown): ShowContentBlockId[] {
-    const source = Array.isArray(candidate) ? candidate : deriveOrderFromLocaleMap(localeCandidate);
-    const next: ShowContentBlockId[] = [];
-
-    for (const value of source) {
-        if (typeof value !== "string") continue;
-        if (!BLOCK_IDS.includes(value as ShowContentBlockId)) continue;
-        if (next.includes(value as ShowContentBlockId)) continue;
-        next.push(value as ShowContentBlockId);
+    for (const [id, value] of Object.entries(source)) {
+        if (!isRecord(value)) continue;
+        const resolvedType = inferBlockType(value.type ?? id);
+        if (!resolvedType) continue;
+        const fallback = defaults[id] ?? createShowcaseBlock(locale, resolvedType, id, Number.MAX_SAFE_INTEGER);
+        next[id] = normalizeBlock(id, value, fallback);
     }
 
-    for (const blockId of BLOCK_IDS) {
-        if (!next.includes(blockId)) next.push(blockId);
+    for (const [id, fallback] of Object.entries(defaults)) {
+        if (!next[id]) {
+            next[id] = clone(fallback);
+        }
     }
 
     return next;
 }
 
-function syncOrderToLocaleMap(localeMap: ShowContentLocaleMap, order: ShowContentBlockId[]): ShowContentLocaleMap {
-    return {
-        hero: { ...localeMap.hero, order: order.indexOf("hero") },
-        about: { ...localeMap.about, order: order.indexOf("about") },
-        services: { ...localeMap.services, order: order.indexOf("services") },
-        contact: { ...localeMap.contact, order: order.indexOf("contact") },
-        ad: { ...localeMap.ad, order: order.indexOf("ad") },
-    };
+function deriveOrderFromLocaleMap(candidate: unknown): ShowContentBlockId[] {
+    if (!isRecord(candidate)) return [...DEFAULT_SHOW_CONTENT_STATE.order];
+    return Object.entries(candidate)
+        .filter(([, value]) => isRecord(value))
+        .map(([id, value]) => {
+            const block = value as Record<string, unknown>;
+            return {
+            id,
+            order: typeof block.order === "number" ? block.order : Number.MAX_SAFE_INTEGER,
+        };
+        })
+        .sort((left, right) => left.order - right.order)
+        .map((item) => item.id);
+}
+
+function normalizeOrder(candidate: unknown, availableIds: ShowContentBlockId[], localeCandidates: unknown[]): ShowContentBlockId[] {
+    const derived = localeCandidates.flatMap((localeCandidate) => deriveOrderFromLocaleMap(localeCandidate));
+    const source = Array.isArray(candidate) ? candidate : derived;
+    const next: ShowContentBlockId[] = [];
+
+    for (const value of source) {
+        if (typeof value !== "string") continue;
+        if (!availableIds.includes(value)) continue;
+        if (next.includes(value)) continue;
+        next.push(value);
+    }
+
+    for (const id of availableIds) {
+        if (!next.includes(id)) next.push(id);
+    }
+
+    return next;
+}
+
+function ensureLocaleOrder(localeMap: ShowContentLocaleMap, order: ShowContentBlockId[], locale: ShowContentLocale, peer?: ShowContentLocaleMap): ShowContentLocaleMap {
+    const next: ShowContentLocaleMap = {};
+    for (const [index, id] of order.entries()) {
+        const current = localeMap[id];
+        const peerType = peer?.[id]?.type;
+        const resolved = current ?? createShowcaseBlock(locale, peerType ?? inferBlockType(id) ?? "promo", id, index);
+        next[id] = { ...resolved, order: index };
+    }
+    return next;
 }
 
 export function normalizeShowContentState(candidate: unknown): ShowContentState {
     const source = (candidate ?? {}) as Partial<ShowContentState>;
-    const order = normalizeOrder(source.order, source.locale?.zh ?? source.locale?.en);
-    const zh = syncOrderToLocaleMap(normalizeLocaleMap(source.locale?.zh, DEFAULT_SHOW_CONTENT_STATE.locale.zh), order);
-    const en = syncOrderToLocaleMap(normalizeLocaleMap(source.locale?.en, DEFAULT_SHOW_CONTENT_STATE.locale.en), order);
+    const zhBase = normalizeLocaleMap(source.locale?.zh, "zh");
+    const enBase = normalizeLocaleMap(source.locale?.en, "en");
+    const availableIds = Array.from(new Set([...Object.keys(zhBase), ...Object.keys(enBase), ...DEFAULT_SHOW_CONTENT_STATE.order]));
+    const order = normalizeOrder(source.order, availableIds, [source.locale?.zh, source.locale?.en]);
+    const zh = ensureLocaleOrder(zhBase, order, "zh", enBase);
+    const en = ensureLocaleOrder(enBase, order, "en", zhBase);
 
     return {
         order,
-        locale: {
-            zh,
-            en,
-        },
+        locale: { zh, en },
     };
 }
 
-function compactBlock<TType extends ShowContentBlockId>(block: ShowContentBlock<TType>): PersistedShowContentBlock<TType> {
+function compactBlock<TType extends ShowContentBlockType>(block: ShowContentBlock<TType>): PersistedShowContentBlock<TType> {
     return {
         id: block.id,
         type: block.type,
         enabled: block.enabled,
         order: block.order,
         anchor: block.anchor,
+        variant: block.variant,
         content: clone(block.content),
         styles: clone(block.styles),
         assets: clone(block.assets ?? {}),
@@ -530,23 +540,14 @@ function compactBlock<TType extends ShowContentBlockId>(block: ShowContentBlock<
 
 export function serializeShowContentState(candidate: unknown): PersistedShowContentState {
     const normalized = normalizeShowContentState(candidate);
+    const compactLocaleMap = (localeMap: ShowContentLocaleMap) =>
+        Object.fromEntries(Object.entries(localeMap).map(([id, block]) => [id, compactBlock(block)]));
+
     return {
         order: [...normalized.order],
         locale: {
-            zh: {
-                hero: compactBlock(normalized.locale.zh.hero),
-                about: compactBlock(normalized.locale.zh.about),
-                services: compactBlock(normalized.locale.zh.services),
-                contact: compactBlock(normalized.locale.zh.contact),
-                ad: compactBlock(normalized.locale.zh.ad),
-            },
-            en: {
-                hero: compactBlock(normalized.locale.en.hero),
-                about: compactBlock(normalized.locale.en.about),
-                services: compactBlock(normalized.locale.en.services),
-                contact: compactBlock(normalized.locale.en.contact),
-                ad: compactBlock(normalized.locale.en.ad),
-            },
+            zh: compactLocaleMap(normalized.locale.zh),
+            en: compactLocaleMap(normalized.locale.en),
         },
     };
 }

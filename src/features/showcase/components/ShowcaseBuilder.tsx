@@ -4,9 +4,11 @@ import Image from "next/image";
 import { type DragEvent, type KeyboardEvent, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ProcessingIndicator } from "@/components/ui/processing-indicator";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ShowHomePage } from "@/features/showcase/components/ShowHomePage";
+import { createShowBlockId, createShowcaseBlock } from "@/features/showcase/services/showBlockRegistry";
 import { DEFAULT_SHOW_CONTENT_STATE, normalizeShowContentState } from "@/features/showcase/services/showContentPreferences";
 import {
     DEFAULT_SHOW_THEME_COLORS,
@@ -19,6 +21,8 @@ import type {
     ShowContactBlockContent,
     ShowContentBlock,
     ShowContentBlockId,
+    ShowContentBlockType,
+    ShowContentBlockVariant,
     ShowContentBodyScale,
     ShowContentFontFamily,
     ShowContentLocale,
@@ -67,6 +71,8 @@ type ShowcaseBuilderLabels = {
     libraryHint: string;
     libraryInUse: string;
     libraryFixed: string;
+    libraryInsert: string;
+    fieldVariant: string;
     fieldAnchor: string;
     fieldKicker: string;
     fieldTitle: string;
@@ -176,6 +182,24 @@ type ShowcaseBuilderLabels = {
     blockServices: string;
     blockContact: string;
     blockAd: string;
+    blockCta: string;
+    blockPromo: string;
+    removeBlock: string;
+    templateHeroLeftCopy: string;
+    templateHeroCenterCopy: string;
+    templateHeroSplitScreen: string;
+    templateCta: string;
+    templatePromo: string;
+    templateAdBanner: string;
+    templateAdSlider: string;
+    templateAdRail: string;
+    variantDefault: string;
+    variantHeroLeftCopy: string;
+    variantHeroCenterCopy: string;
+    variantHeroSplitScreen: string;
+    variantAdSingleBanner: string;
+    variantAdSlider: string;
+    variantAdCardRail: string;
 };
 
 type ShowcaseBuilderProps = {
@@ -196,10 +220,19 @@ type UploadImageResponse = {
     error?: string;
 };
 
-const BLOCK_IDS: ShowContentBlockId[] = ["hero", "about", "services", "contact", "ad"];
 const SERVICE_CARD_COUNT = 9;
 const PREVIEW_SCALE_STEPS: PreviewScale[] = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2];
 const DEFAULT_PREVIEW_SCALE: PreviewScale = 0.7;
+const INSERTABLE_TEMPLATES: Array<{ type: ShowContentBlockType; variant?: ShowContentBlockVariant; labelKey: keyof ShowcaseBuilderLabels }> = [
+    { type: "hero", variant: "left-copy", labelKey: "templateHeroLeftCopy" },
+    { type: "hero", variant: "center-copy", labelKey: "templateHeroCenterCopy" },
+    { type: "hero", variant: "split-screen", labelKey: "templateHeroSplitScreen" },
+    { type: "cta", variant: "default", labelKey: "templateCta" },
+    { type: "promo", variant: "default", labelKey: "templatePromo" },
+    { type: "ad", variant: "single-banner", labelKey: "templateAdBanner" },
+    { type: "ad", variant: "slider", labelKey: "templateAdSlider" },
+    { type: "ad", variant: "card-rail", labelKey: "templateAdRail" },
+];
 const THEME_ROLES: ShowThemeColorRole[] = [
     "page",
     "header",
@@ -218,10 +251,6 @@ const THEME_ROLES: ShowThemeColorRole[] = [
 
 function clone<T>(value: T): T {
     return JSON.parse(JSON.stringify(value)) as T;
-}
-
-function isBlockId(value: string): value is ShowContentBlockId {
-    return BLOCK_IDS.includes(value as ShowContentBlockId);
 }
 
 function toPoints(value: string): string[] {
@@ -323,20 +352,41 @@ export function ShowcaseBuilder({
     const previewFrameRef = useRef<HTMLDivElement | null>(null);
     const serviceImageInputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
-    const currentBlock = contentState.locale[locale][activeBlockId];
+    const resolvedActiveBlockId = contentState.order.includes(activeBlockId) ? activeBlockId : (contentState.order[0] ?? "hero");
+    const currentBlock = contentState.locale[locale][resolvedActiveBlockId];
     const currentSharedContent = currentBlock.content;
-    const currentHeroContent = activeBlockId === "hero" ? (currentBlock.content as ShowHeroBlockContent) : null;
-    const currentContactContent = activeBlockId === "contact" ? (currentBlock.content as ShowContactBlockContent) : null;
-    const currentServicesContent = activeBlockId === "services" ? (currentBlock.content as ShowServicesBlockContent) : null;
+    const currentHeroContent = currentBlock.type === "hero" ? (currentBlock.content as ShowHeroBlockContent) : null;
+    const currentContactContent = currentBlock.type === "contact" ? (currentBlock.content as ShowContactBlockContent) : null;
+    const currentServicesContent = currentBlock.type === "services" ? (currentBlock.content as ShowServicesBlockContent) : null;
     const desktopPreviewWidth = Math.round(1100 * previewScale);
 
-    const blockNameMap: Record<ShowContentBlockId, string> = {
-        hero: labels.blockHero,
-        about: labels.blockAbout,
-        services: labels.blockServices,
-        contact: labels.blockContact,
-        ad: labels.blockAd,
-    };
+    function getBlockName(block: ShowContentBlock): string {
+        if (block.type === "hero") return labels.blockHero;
+        if (block.type === "about") return labels.blockAbout;
+        if (block.type === "services") return labels.blockServices;
+        if (block.type === "contact") return labels.blockContact;
+        if (block.type === "cta") return labels.blockCta;
+        if (block.type === "promo") return labels.blockPromo;
+        return labels.blockAd;
+    }
+
+    const variantOptions = (() => {
+        if (currentBlock.type === "hero") {
+            return [
+                { value: "left-copy", label: labels.variantHeroLeftCopy },
+                { value: "center-copy", label: labels.variantHeroCenterCopy },
+                { value: "split-screen", label: labels.variantHeroSplitScreen },
+            ] satisfies Array<{ value: ShowContentBlockVariant; label: string }>;
+        }
+        if (currentBlock.type === "ad") {
+            return [
+                { value: "single-banner", label: labels.variantAdSingleBanner },
+                { value: "slider", label: labels.variantAdSlider },
+                { value: "card-rail", label: labels.variantAdCardRail },
+            ] satisfies Array<{ value: ShowContentBlockVariant; label: string }>;
+        }
+        return [{ value: "default", label: labels.variantDefault }] satisfies Array<{ value: ShowContentBlockVariant; label: string }>;
+    })();
 
     const roleLabels: Record<ShowThemeColorRole, string> = {
         page: labels.rolePage,
@@ -409,7 +459,7 @@ export function ShowcaseBuilder({
     }, [labels.saveFailed, labels.saveFailedWithReason, labels.saved, labels.saving, saveErrorDetail, saveStatus]);
 
     const visibleServiceCards =
-        activeBlockId === "services" && currentServicesContent
+        currentBlock.type === "services" && currentServicesContent
             ? ensureServiceCards(currentServicesContent.serviceCards).slice(0, currentServicesContent.serviceRows * 3)
             : [];
 
@@ -426,8 +476,8 @@ export function ShowcaseBuilder({
                 ...prev.locale,
                 [locale]: {
                     ...prev.locale[locale],
-                    [activeBlockId]: {
-                        ...prev.locale[locale][activeBlockId],
+                    [resolvedActiveBlockId]: {
+                        ...prev.locale[locale][resolvedActiveBlockId],
                         ...patch,
                     },
                 },
@@ -438,14 +488,14 @@ export function ShowcaseBuilder({
     function updateCurrentBlockContent(patch: Partial<typeof currentBlock.content>) {
         resetSaveState();
         setContentState((prev) => {
-            const block = prev.locale[locale][activeBlockId];
+            const block = prev.locale[locale][resolvedActiveBlockId];
             return {
                 ...prev,
                 locale: {
                     ...prev.locale,
                     [locale]: {
                         ...prev.locale[locale],
-                        [activeBlockId]: {
+                        [resolvedActiveBlockId]: {
                             ...block,
                             content: {
                                 ...block.content,
@@ -479,7 +529,7 @@ export function ShowcaseBuilder({
     function updateCurrentBlockCta(index: number, patch: Partial<(typeof currentBlock.ctas)[number]>) {
         resetSaveState();
         setContentState((prev) => {
-            const block = prev.locale[locale][activeBlockId];
+            const block = prev.locale[locale][resolvedActiveBlockId];
             const nextCtas = (block.ctas ?? []).map((cta, ctaIndex) => (ctaIndex === index ? { ...cta, ...patch } : cta));
             return {
                 ...prev,
@@ -487,7 +537,7 @@ export function ShowcaseBuilder({
                     ...prev.locale,
                     [locale]: {
                         ...prev.locale[locale],
-                        [activeBlockId]: {
+                        [resolvedActiveBlockId]: {
                             ...block,
                             ctas: nextCtas,
                         },
@@ -504,7 +554,7 @@ export function ShowcaseBuilder({
     }
 
     function updateServiceRows(nextRows: ShowServiceRows) {
-        if (activeBlockId !== "services" || !currentServicesContent) return;
+        if (currentBlock.type !== "services" || !currentServicesContent) return;
         const cards = ensureServiceCards(currentServicesContent.serviceCards);
         updateCurrentBlockContent({
             ...currentServicesContent,
@@ -514,14 +564,14 @@ export function ShowcaseBuilder({
     }
 
     function updateServiceCard(index: number, patch: Partial<ShowServiceCard>) {
-        if (activeBlockId !== "services" || !currentServicesContent) return;
+        if (currentBlock.type !== "services" || !currentServicesContent) return;
         if (index < 0 || index >= SERVICE_CARD_COUNT) return;
 
         resetSaveState();
         setUploadErrorByCard((prev) => ({ ...prev, [index]: "" }));
 
         setContentState((prev) => {
-            const block = prev.locale[locale].services;
+            const block = prev.locale[locale][resolvedActiveBlockId] as ShowContentBlock<"services">;
             const cards = ensureServiceCards(block.content.serviceCards);
             const currentCard = cards[index];
             const nextCard: ShowServiceCard = {
@@ -550,7 +600,7 @@ export function ShowcaseBuilder({
                     ...prev.locale,
                     [locale]: {
                         ...prev.locale[locale],
-                        services: {
+                        [resolvedActiveBlockId]: {
                             ...block,
                             content: {
                                 ...block.content,
@@ -564,7 +614,7 @@ export function ShowcaseBuilder({
     }
 
     async function uploadServiceImage(index: number, file: File) {
-        if (activeBlockId !== "services") return;
+        if (currentBlock.type !== "services") return;
         if (!file.type.startsWith("image/")) {
             setUploadErrorByCard((prev) => ({ ...prev, [index]: labels.imageUploadFailed }));
             setUploadSuccessByCard((prev) => ({ ...prev, [index]: "" }));
@@ -646,6 +696,55 @@ export function ShowcaseBuilder({
         });
     }
 
+    function insertBlock(type: ShowContentBlockType, variant?: ShowContentBlockVariant) {
+        resetSaveState();
+        const nextId = createShowBlockId(type, contentState.order);
+        setContentState((prev) => {
+            const nextOrder = [...prev.order, nextId];
+            return {
+                ...prev,
+                order: nextOrder,
+                locale: {
+                    zh: {
+                        ...prev.locale.zh,
+                        [nextId]: createShowcaseBlock("zh", type, nextId, nextOrder.length - 1, variant),
+                    },
+                    en: {
+                        ...prev.locale.en,
+                        [nextId]: createShowcaseBlock("en", type, nextId, nextOrder.length - 1, variant),
+                    },
+                },
+            };
+        });
+        setActiveBlockId(nextId);
+    }
+
+    function removeCurrentBlock() {
+        if (contentState.order.length <= 1) return;
+        resetSaveState();
+        const nextActiveId = contentState.order.find((id) => id !== resolvedActiveBlockId) ?? "hero";
+        setContentState((prev) => {
+            const nextOrder = prev.order.filter((id) => id !== resolvedActiveBlockId);
+            const nextZh = { ...prev.locale.zh };
+            const nextEn = { ...prev.locale.en };
+            delete nextZh[resolvedActiveBlockId];
+            delete nextEn[resolvedActiveBlockId];
+            for (const [index, id] of nextOrder.entries()) {
+                if (nextZh[id]) nextZh[id] = { ...nextZh[id], order: index };
+                if (nextEn[id]) nextEn[id] = { ...nextEn[id], order: index };
+            }
+            return {
+                ...prev,
+                order: nextOrder,
+                locale: {
+                    zh: nextZh,
+                    en: nextEn,
+                },
+            };
+        });
+        setActiveBlockId(nextActiveId);
+    }
+
     function handleDragStart(id: ShowContentBlockId) {
         return (event: DragEvent<HTMLDivElement>) => {
             setDragging(id);
@@ -667,7 +766,7 @@ export function ShowcaseBuilder({
         return (event: DragEvent<HTMLDivElement>) => {
             event.preventDefault();
             const sourceText = event.dataTransfer.getData("text/plain");
-            const source = isBlockId(sourceText) ? sourceText : dragging;
+            const source = contentState.order.includes(sourceText) ? sourceText : dragging;
             if (source && source !== id) {
                 resetSaveState();
                 setContentState((prev) => {
@@ -707,16 +806,16 @@ export function ShowcaseBuilder({
     function resetCurrentBlock() {
         resetSaveState();
         setContentState((prev) => {
-            const defaultBlock = clone(DEFAULT_SHOW_CONTENT_STATE.locale[locale][activeBlockId]);
+            const defaultBlock = createShowcaseBlock(locale, currentBlock.type, resolvedActiveBlockId, prev.order.indexOf(resolvedActiveBlockId), currentBlock.variant);
             return {
                 ...prev,
                 locale: {
                     ...prev.locale,
                     [locale]: {
                         ...prev.locale[locale],
-                        [activeBlockId]: {
+                        [resolvedActiveBlockId]: {
                             ...defaultBlock,
-                            order: prev.order.indexOf(activeBlockId),
+                            order: prev.order.indexOf(resolvedActiveBlockId),
                         },
                     },
                 },
@@ -831,7 +930,7 @@ export function ShowcaseBuilder({
                 <div className="grid gap-1.5">
                     {contentState.order.map((blockId, index) => {
                         const block = contentState.locale[locale][blockId];
-                        const isActive = activeBlockId === blockId;
+                        const isActive = resolvedActiveBlockId === blockId;
                         const isDropTarget = dragOver === blockId && dragging !== null && dragging !== blockId;
                         return (
                             <div
@@ -855,7 +954,7 @@ export function ShowcaseBuilder({
                                 <div className="flex items-start justify-between gap-2">
                                     <div>
                                         <div className="text-xs uppercase tracking-[0.08em] text-[rgb(var(--muted))]">{index + 1}</div>
-                                        <div className="text-sm font-semibold">{blockNameMap[blockId]}</div>
+                                        <div className="text-sm font-semibold">{getBlockName(block)}</div>
                                     </div>
                                     <span className="rounded-md border border-[rgb(var(--border))] px-2 py-0.5 text-[11px] text-[rgb(var(--muted))]">
                                         {block.enabled ? labels.enabled : labels.hidden}
@@ -895,12 +994,19 @@ export function ShowcaseBuilder({
                     <div className="text-sm font-semibold">{labels.libraryTitle}</div>
                     <div className="text-xs text-[rgb(var(--muted))]">{labels.libraryHint}</div>
                     <div className="grid gap-2">
-                        {BLOCK_IDS.map((blockId) => (
-                            <div key={`library-${blockId}`} className="flex items-center justify-between rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-3 py-2">
-                                <span className="text-sm">{blockNameMap[blockId]}</span>
-                                <span className="text-[11px] text-[rgb(var(--muted))]">
-                                    {contentState.order.includes(blockId) ? labels.libraryInUse : labels.libraryFixed}
-                                </span>
+                        {INSERTABLE_TEMPLATES.map((template, index) => (
+                            <div key={`library-${template.type}-${template.variant ?? "default"}-${index}`} className="flex items-center justify-between gap-2 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-3 py-2">
+                                <div className="grid gap-0.5">
+                                    <span className="text-sm">{labels[template.labelKey]}</span>
+                                    <span className="text-[11px] text-[rgb(var(--muted))]">{labels.libraryFixed}</span>
+                                </div>
+                                <button
+                                    type="button"
+                                    className="rounded border border-[rgb(var(--border))] px-2 py-1 text-xs hover:bg-[rgb(var(--panel2))]"
+                                    onClick={() => insertBlock(template.type, template.variant)}
+                                >
+                                    {labels.libraryInsert}
+                                </button>
                             </div>
                         ))}
                     </div>
@@ -1005,7 +1111,7 @@ export function ShowcaseBuilder({
                 <div className="flex items-start justify-between gap-3">
                     <div className="grid gap-1">
                         <div className="auth-title">{labels.inspectorTitle}</div>
-                        <div className="text-xs text-[rgb(var(--muted))]">{blockNameMap[activeBlockId]}</div>
+                        <div className="text-xs text-[rgb(var(--muted))]">{getBlockName(currentBlock)}</div>
                     </div>
                     <span className="rounded-md border border-[rgb(var(--border))] px-2 py-1 text-xs text-[rgb(var(--muted))]">
                         {currentBlock.enabled ? labels.enabled : labels.hidden}
@@ -1013,7 +1119,13 @@ export function ShowcaseBuilder({
                 </div>
 
                 <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-3">
-                    <Button type="button" onClick={saveToFirebase} disabled={saveStatus === "saving"}>
+                    <Button
+                        type="button"
+                        onClick={saveToFirebase}
+                        disabled={saveStatus === "saving"}
+                        loading={saveStatus === "saving"}
+                        loadingLabel={labels.saving}
+                    >
                         {labels.save}
                     </Button>
                     <Button type="button" variant="ghost" onClick={resetCurrentBlock}>
@@ -1025,7 +1137,11 @@ export function ShowcaseBuilder({
                     <Button type="button" variant="ghost" onClick={resetAll}>
                         {labels.resetAll}
                     </Button>
-                    {saveStatusText ? (
+                    <Button type="button" variant="ghost" onClick={removeCurrentBlock} disabled={contentState.order.length <= 1}>
+                        {labels.removeBlock}
+                    </Button>
+                    {saveStatus === "saving" ? <ProcessingIndicator label={labels.saving} size="sm" /> : null}
+                    {saveStatus !== "saving" && saveStatusText ? (
                         <span className="text-xs text-[rgb(var(--muted))]" aria-live="polite">
                             {saveStatusText}
                         </span>
@@ -1049,6 +1165,17 @@ export function ShowcaseBuilder({
                         <label className="grid gap-1">
                             <span className="text-xs text-[rgb(var(--muted))]">{labels.fieldAnchor}</span>
                             <Input value={currentBlock.anchor} onChange={(event) => updateCurrentBlock({ anchor: event.target.value })} />
+                        </label>
+
+                        <label className="grid gap-1 md:max-w-xs">
+                            <span className="text-xs text-[rgb(var(--muted))]">{labels.fieldVariant}</span>
+                            <Select value={currentBlock.variant} onChange={(event) => updateCurrentBlock({ variant: event.target.value as ShowContentBlockVariant })}>
+                                {variantOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                        {option.label}
+                                    </option>
+                                ))}
+                            </Select>
                         </label>
 
                         <label className="grid gap-1">
@@ -1245,6 +1372,8 @@ export function ShowcaseBuilder({
                                                             variant="ghost"
                                                             onClick={() => void confirmUploadServiceImage(index)}
                                                             disabled={!selectedFile || uploadingCardIndex === index}
+                                                            loading={uploadingCardIndex === index}
+                                                            loadingLabel={labels.uploadingImage}
                                                         >
                                                             {labels.confirmUploadImage}
                                                         </Button>
@@ -1270,9 +1399,7 @@ export function ShowcaseBuilder({
                                                         >
                                                             {labels.clearImage}
                                                         </Button>
-                                                        {uploadingCardIndex === index ? (
-                                                            <span className="text-xs text-[rgb(var(--muted))]">{labels.uploadingImage}</span>
-                                                        ) : null}
+                                                        {uploadingCardIndex === index ? <ProcessingIndicator label={labels.uploadingImage} size="sm" /> : null}
                                                     </div>
 
                                                     {selectedFile ? (

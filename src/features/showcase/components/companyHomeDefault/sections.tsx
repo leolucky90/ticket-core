@@ -9,6 +9,7 @@ import type {
     ShowAdBlockContent,
     ShowContactBlockContent,
     ShowContentBlockStyles,
+    ShowContentBlockVariant,
     ShowContentFontFamily,
     ShowContentTypography,
     ShowHeroBlockContent,
@@ -37,8 +38,10 @@ type HeaderProps = {
 };
 
 type BaseSectionProps = {
+    anchorId: string;
     styles: ShowContentBlockStyles;
     typography: ShowContentTypography;
+    variant?: ShowContentBlockVariant;
     themeTokenOverrides?: Record<string, string>;
 };
 
@@ -53,6 +56,7 @@ type AboutProps = BaseSectionProps & { content: ShowSharedBlockContent };
 type ServicesProps = BaseSectionProps & { content: ShowServicesBlockContent };
 type ContactProps = BaseSectionProps & { content: ShowContactBlockContent; ctas: BlockCtaConfig[] };
 type AdProps = BaseSectionProps & { content: ShowAdBlockContent };
+type CtaProps = BaseSectionProps & { content: ShowSharedBlockContent; ctas: BlockCtaConfig[] };
 type FooterProps = { copy: CompanyHomeTemplateCopy; currentYear: number };
 
 const fontClass = (fontFamily: ShowContentFontFamily) => (fontFamily === "serif" ? "[font-family:'Noto_Serif_TC','Times_New_Roman',serif]" : fontFamily === "mono" ? "font-mono" : "");
@@ -141,14 +145,41 @@ export function CompanyHomeHeader({ copy, navAccountType, storefrontSettings, na
         </header>
     );
 }
-export function CompanyHomeHeroSection({ content, styles, typography, ctas, defaultPrimaryCta, defaultSecondaryCta, themeTokenOverrides }: HeroProps) {
+export function CompanyHomeHeroSection({ anchorId, content, styles, typography, variant = "split-screen", ctas, defaultPrimaryCta, defaultSecondaryCta, themeTokenOverrides }: HeroProps) {
     const primary = ctas.find((item) => item.id === "primary" || item.variant === "solid") ?? { id: "primary", label: defaultPrimaryCta.label, href: defaultPrimaryCta.href, enabled: true, variant: "solid" as const };
     const secondary = ctas.find((item) => item.id === "secondary" || item.variant === "outline") ?? { id: "secondary", label: defaultSecondaryCta.label, href: defaultSecondaryCta.href, enabled: true, variant: "outline" as const };
     const sectionStyle = styleVars(styles, typography, themeTokenOverrides);
     const headingClass = titleClass(typography.titleScale);
     const copyClass = bodyClass(typography.bodyScale);
+    if (variant === "center-copy") {
+        return (
+            <section id={anchorId} className="bg-[rgb(var(--showcase-hero-bg))]" style={sectionStyle}>
+                <div className="mx-auto grid w-full max-w-4xl gap-6 px-4 py-12 text-center md:px-6 md:py-16">
+                    <div className={`space-y-5 ${fontClass(typography.fontFamily)}`}>
+                        {content.kicker ? <p className="mx-auto inline-flex rounded-full border border-[rgb(var(--showcase-border))] bg-[rgb(var(--showcase-surface))] px-3 py-1 text-xs font-semibold tracking-[0.12em] text-[rgb(var(--showcase-muted))]" style={{ color: typography.kickerColor }}>{content.kicker}</p> : null}
+                        <h1 className={`${headingClass} font-semibold leading-tight text-[rgb(var(--showcase-text))] md:text-5xl`} style={{ color: typography.titleColor }}>{content.title}</h1>
+                        <p className={`${copyClass} mx-auto max-w-2xl leading-relaxed text-[rgb(var(--showcase-muted))]`} style={{ color: typography.bodyColor }}>{content.body}</p>
+                        <div className="flex flex-wrap justify-center gap-3">
+                            {renderAction({ ...primary, label: primary.label || defaultPrimaryCta.label, href: primary.href || defaultPrimaryCta.href }, "rounded-full bg-[rgb(var(--showcase-accent))] px-6 py-2 text-sm font-semibold text-[rgb(var(--showcase-accent-contrast))] hover:opacity-90", styles)}
+                            {renderAction({ ...secondary, label: secondary.label || defaultSecondaryCta.label, href: secondary.href || defaultSecondaryCta.href }, "rounded-full border border-[rgb(var(--showcase-border))] bg-[rgb(var(--showcase-surface))] px-6 py-2 text-sm font-semibold text-[rgb(var(--showcase-text))] hover:bg-[rgb(var(--showcase-accent-soft))]", styles)}
+                        </div>
+                    </div>
+                    {content.points.length > 0 ? (
+                        <div className="grid gap-2 sm:grid-cols-3">
+                            {content.points.map((line, index) => (
+                                <p key={`${line}-${index}`} className={`rounded-xl border border-[rgb(var(--showcase-border))] bg-[rgb(var(--showcase-accent-soft))] px-3 py-3 ${copyClass}`} style={{ backgroundColor: styles.summaryBackgroundColor, borderColor: styles.borderColor, color: typography.titleColor }}>
+                                    {line}
+                                </p>
+                            ))}
+                        </div>
+                    ) : null}
+                </div>
+            </section>
+        );
+    }
+
     return (
-        <section id="hero" className="bg-[rgb(var(--showcase-hero-bg))]" style={sectionStyle}>
+        <section id={anchorId} className="bg-[rgb(var(--showcase-hero-bg))]" style={sectionStyle}>
             <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-12 md:grid-cols-2 md:px-6 md:py-16">
                 <div className={`space-y-5 ${fontClass(typography.fontFamily)} ${alignClass(styles.align)}`}>
                     {content.kicker ? <p className="inline-flex rounded-full border border-[rgb(var(--showcase-border))] bg-[rgb(var(--showcase-surface))] px-3 py-1 text-xs font-semibold tracking-[0.12em] text-[rgb(var(--showcase-muted))]" style={{ color: typography.kickerColor }}>{content.kicker}</p> : null}
@@ -170,11 +201,11 @@ export function CompanyHomeHeroSection({ content, styles, typography, ctas, defa
     );
 }
 
-export function CompanyHomeAboutSection({ content, styles, typography, themeTokenOverrides }: AboutProps) {
+export function CompanyHomeAboutSection({ anchorId, content, styles, typography, themeTokenOverrides }: AboutProps) {
     const headingClass = titleClass(typography.titleScale);
     const copyClass = bodyClass(typography.bodyScale);
     return (
-        <section id="about" className="mx-auto w-full max-w-6xl px-4 py-12 md:px-6 md:py-16" style={styleVars(styles, typography, themeTokenOverrides)}>
+        <section id={anchorId} className="mx-auto w-full max-w-6xl px-4 py-12 md:px-6 md:py-16" style={styleVars(styles, typography, themeTokenOverrides)}>
             <article className={`grid gap-6 rounded-3xl border border-[rgb(var(--showcase-border))] bg-[rgb(var(--showcase-about-bg))] p-6 md:grid-cols-2 md:p-10 ${alignClass(styles.align)}`} style={{ backgroundColor: styles.backgroundColor, borderColor: styles.borderColor, borderRadius: styles.borderRadius }}>
                 <div className={fontClass(typography.fontFamily)}>
                     {content.kicker ? <p className="text-xs font-semibold tracking-[0.12em] text-[rgb(var(--showcase-muted))]" style={{ color: typography.kickerColor }}>{content.kicker}</p> : null}
@@ -201,13 +232,13 @@ function serviceLayoutClass(position: ShowServiceImagePosition) {
     return "flex-col";
 }
 
-export function CompanyHomeServicesSection({ content, styles, typography, themeTokenOverrides }: ServicesProps) {
+export function CompanyHomeServicesSection({ anchorId, content, styles, typography, themeTokenOverrides }: ServicesProps) {
     const headingClass = titleClass(typography.titleScale);
     const copyClass = bodyClass(typography.bodyScale);
     const visibleCount = (content.serviceRows || 2) * 3;
     const cards: ShowServiceCard[] = content.serviceCards.length > 0 ? content.serviceCards : content.points.slice(0, 9).map((title, index) => ({ id: `service-card-${index + 1}`, title, body: "", image: { sourceType: "external_url", url: "" }, imageUrl: "", imageStyle: "square", imagePosition: "top", showImage: true, showTitle: true, showBody: true }));
     return (
-        <section id="services" className="bg-[rgb(var(--showcase-services-bg))] py-12 md:py-16" style={styleVars(styles, typography, themeTokenOverrides)}>
+        <section id={anchorId} className="bg-[rgb(var(--showcase-services-bg))] py-12 md:py-16" style={styleVars(styles, typography, themeTokenOverrides)}>
             <div className="mx-auto w-full max-w-6xl px-4 md:px-6">
                 <div className={`${fontClass(typography.fontFamily)} ${alignClass(styles.align)}`}>
                     {content.kicker ? <p className="text-xs font-semibold tracking-[0.12em] text-[rgb(var(--showcase-muted))]" style={{ color: typography.kickerColor }}>{content.kicker}</p> : null}
@@ -232,11 +263,11 @@ export function CompanyHomeServicesSection({ content, styles, typography, themeT
         </section>
     );
 }
-export function CompanyHomeContactSection({ content, styles, typography, ctas, themeTokenOverrides }: ContactProps) {
+export function CompanyHomeContactSection({ anchorId, content, styles, typography, ctas, themeTokenOverrides }: ContactProps) {
     const headingClass = titleClass(typography.titleScale);
     const copyClass = bodyClass(typography.bodyScale);
     return (
-        <section id="contact" className="mx-auto w-full max-w-6xl bg-[rgb(var(--showcase-contact-bg))] px-4 py-12 md:px-6 md:py-16" style={styleVars(styles, typography, themeTokenOverrides)}>
+        <section id={anchorId} className="mx-auto w-full max-w-6xl bg-[rgb(var(--showcase-contact-bg))] px-4 py-12 md:px-6 md:py-16" style={styleVars(styles, typography, themeTokenOverrides)}>
             <div className="grid gap-4 md:grid-cols-2">
                 <article className="rounded-2xl border border-[rgb(var(--showcase-border))] bg-[rgb(var(--showcase-surface))] p-6" style={{ backgroundColor: styles.surfaceColor, borderColor: styles.borderColor, borderRadius: styles.borderRadius }}>
                     <div className={fontClass(typography.fontFamily)}>
@@ -256,11 +287,33 @@ export function CompanyHomeContactSection({ content, styles, typography, ctas, t
     );
 }
 
-export function CompanyHomeAdSection({ content, styles, typography, themeTokenOverrides }: AdProps) {
+export function CompanyHomeAdSection({ anchorId, content, styles, typography, variant = "single-banner", themeTokenOverrides }: AdProps) {
     const headingClass = titleClass(typography.titleScale);
     const copyClass = bodyClass(typography.bodyScale);
+    if (variant === "slider" || variant === "card-rail") {
+        const containerClass = variant === "slider" ? "grid gap-3 md:grid-cols-3" : "flex gap-3 overflow-x-auto pb-2";
+        const itemClass = variant === "slider" ? "rounded-2xl border p-5" : "min-w-[240px] rounded-2xl border p-5";
+        return (
+            <section id={anchorId} className="bg-[rgb(var(--showcase-ad-bg))] py-10 md:py-12" style={styleVars(styles, typography, themeTokenOverrides)}>
+                <div className="mx-auto w-full max-w-6xl px-4 md:px-6">
+                    <div className={`mb-5 ${fontClass(typography.fontFamily)} ${alignClass(styles.align)}`}>
+                        {content.kicker ? <p className="text-xs font-semibold tracking-[0.12em] text-[rgb(var(--showcase-muted))]" style={{ color: typography.kickerColor }}>{content.kicker}</p> : null}
+                        <p className={`mt-2 font-semibold text-[rgb(var(--showcase-text))] ${headingClass}`} style={{ color: typography.titleColor }}>{content.title}</p>
+                        <p className={`mt-2 text-[rgb(var(--showcase-muted))] ${copyClass}`} style={{ color: typography.bodyColor }}>{content.body}</p>
+                    </div>
+                    <div className={containerClass}>
+                        {(content.points.length > 0 ? content.points : [content.body]).map((point, index) => (
+                            <article key={`${point}-${index}`} className={`${itemClass} border-[rgb(var(--showcase-border))] bg-[rgb(var(--showcase-surface))] ${fontClass(typography.fontFamily)}`} style={{ backgroundColor: styles.surfaceColor, borderColor: styles.borderColor, borderRadius: styles.borderRadius }}>
+                                <p className="text-sm font-semibold text-[rgb(var(--showcase-text))]" style={{ color: typography.titleColor }}>{point}</p>
+                            </article>
+                        ))}
+                    </div>
+                </div>
+            </section>
+        );
+    }
     return (
-        <section id="ad" className="bg-[rgb(var(--showcase-ad-bg))] py-10 md:py-12" style={styleVars(styles, typography, themeTokenOverrides)}>
+        <section id={anchorId} className="bg-[rgb(var(--showcase-ad-bg))] py-10 md:py-12" style={styleVars(styles, typography, themeTokenOverrides)}>
             <div className="mx-auto w-full max-w-6xl px-4 md:px-6">
                 <article className={`rounded-2xl border border-dashed border-[rgb(var(--showcase-border))] bg-[rgb(var(--showcase-surface))] p-6 text-center ${fontClass(typography.fontFamily)}`} style={{ backgroundColor: styles.surfaceColor, borderColor: styles.borderColor, borderRadius: styles.borderRadius }}>
                     {content.kicker ? <p className="text-xs font-semibold tracking-[0.12em] text-[rgb(var(--showcase-muted))]" style={{ color: typography.kickerColor }}>{content.kicker}</p> : null}
@@ -269,6 +322,48 @@ export function CompanyHomeAdSection({ content, styles, typography, themeTokenOv
                     {content.points.length > 0 ? <div className={`mx-auto mt-4 grid max-w-2xl gap-2 text-left text-[rgb(var(--showcase-text))] ${copyClass}`} style={{ color: typography.titleColor }}>{content.points.map((point, index) => <p key={`${point}-${index}`}>- {point}</p>)}</div> : null}
                 </article>
             </div>
+        </section>
+    );
+}
+
+export function CompanyHomeCtaSection({ anchorId, content, styles, typography, ctas, themeTokenOverrides }: CtaProps) {
+    const headingClass = titleClass(typography.titleScale);
+    const copyClass = bodyClass(typography.bodyScale);
+    const visibleCtas = ctas.filter((cta) => cta.enabled).slice(0, 2);
+    return (
+        <section id={anchorId} className="mx-auto w-full max-w-6xl px-4 py-10 md:px-6 md:py-12" style={styleVars(styles, typography, themeTokenOverrides)}>
+            <article className={`rounded-[2rem] border border-[rgb(var(--showcase-border))] bg-[rgb(var(--showcase-surface))] px-6 py-8 ${alignClass(styles.align)} ${fontClass(typography.fontFamily)}`} style={{ backgroundColor: styles.summaryBackgroundColor ?? styles.surfaceColor, borderColor: styles.borderColor, borderRadius: styles.borderRadius }}>
+                {content.kicker ? <p className="text-xs font-semibold tracking-[0.12em] text-[rgb(var(--showcase-muted))]" style={{ color: typography.kickerColor }}>{content.kicker}</p> : null}
+                <h2 className={`mt-3 font-semibold text-[rgb(var(--showcase-text))] ${headingClass}`} style={{ color: typography.titleColor }}>{content.title}</h2>
+                <p className={`mx-auto mt-3 max-w-2xl text-[rgb(var(--showcase-muted))] ${copyClass}`} style={{ color: typography.bodyColor }}>{content.body}</p>
+                {content.points.length > 0 ? <div className="mt-4 flex flex-wrap justify-center gap-2">{content.points.map((point, index) => <span key={`${point}-${index}`} className="rounded-full border border-[rgb(var(--showcase-border))] px-3 py-1 text-xs text-[rgb(var(--showcase-text))]">{point}</span>)}</div> : null}
+                {visibleCtas.length > 0 ? <div className="mt-5 flex flex-wrap justify-center gap-3">{visibleCtas.map((cta, index) => renderAction(cta, cta.variant === "solid" ? "rounded-full bg-[rgb(var(--showcase-accent))] px-5 py-2 text-sm font-semibold text-[rgb(var(--showcase-accent-contrast))] hover:opacity-90" : "rounded-full border border-[rgb(var(--showcase-border))] bg-[rgb(var(--showcase-surface))] px-5 py-2 text-sm font-semibold text-[rgb(var(--showcase-text))] hover:bg-[rgb(var(--showcase-accent-soft))]", styles, cta.id || `${cta.href}-${index}`))}</div> : null}
+            </article>
+        </section>
+    );
+}
+
+export function CompanyHomePromoSection({ anchorId, content, styles, typography, themeTokenOverrides }: AboutProps) {
+    const headingClass = titleClass(typography.titleScale);
+    const copyClass = bodyClass(typography.bodyScale);
+    return (
+        <section id={anchorId} className="mx-auto w-full max-w-6xl px-4 py-8 md:px-6 md:py-10" style={styleVars(styles, typography, themeTokenOverrides)}>
+            <article className={`rounded-[2rem] border border-[rgb(var(--showcase-border))] bg-[rgb(var(--showcase-accent-soft))] p-6 ${fontClass(typography.fontFamily)}`} style={{ backgroundColor: styles.summaryBackgroundColor ?? styles.cardBackgroundColor ?? styles.surfaceColor, borderColor: styles.borderColor, borderRadius: styles.borderRadius }}>
+                {content.kicker ? <p className="text-xs font-semibold tracking-[0.12em] text-[rgb(var(--showcase-muted))]" style={{ color: typography.kickerColor }}>{content.kicker}</p> : null}
+                <div className="mt-3 grid gap-4 md:grid-cols-[1.4fr_0.6fr] md:items-center">
+                    <div>
+                        <h2 className={`font-semibold text-[rgb(var(--showcase-text))] ${headingClass}`} style={{ color: typography.titleColor }}>{content.title}</h2>
+                        <p className={`mt-2 text-[rgb(var(--showcase-muted))] ${copyClass}`} style={{ color: typography.bodyColor }}>{content.body}</p>
+                    </div>
+                    <div className="grid gap-2">
+                        {content.points.map((point, index) => (
+                            <div key={`${point}-${index}`} className="rounded-xl border border-[rgb(var(--showcase-border))] bg-[rgb(var(--showcase-surface))] px-3 py-2 text-sm text-[rgb(var(--showcase-text))]">
+                                {point}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </article>
         </section>
     );
 }

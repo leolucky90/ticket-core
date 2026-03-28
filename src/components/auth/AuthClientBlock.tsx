@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { EmailAuthForm } from "@/components/auth/EmailAuthForm";
 import { GoogleAuthButton } from "@/components/auth/GoogleAuthButton";
+import { startNavigationProgress } from "@/components/layout/navigation-progress";
 import { firebaseClientConfigError, firebaseClientReady } from "@/lib/firebase-client/client";
 import { normalizeAuthTenantId, normalizeTenantId } from "@/lib/tenant-scope";
 
@@ -103,6 +104,7 @@ export function AuthClientBlock({
             fallbackPath = "/account/security?forcePasswordReset=1";
         }
 
+        startNavigationProgress();
         router.replace(next || fallbackPath);
         router.refresh();
     }

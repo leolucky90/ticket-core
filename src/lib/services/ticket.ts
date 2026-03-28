@@ -15,6 +15,8 @@ import {
 import type { CursorPageResult } from "@/lib/types/pagination";
 
 const memory: { ticketsByCompany: Record<string, Ticket[]> } = { ticketsByCompany: {} };
+const READ_CACHE_TTL_MS = 30_000;
+const readCacheTouchedAt: Record<string, number> = {};
 
 const MAX_TEXT = 120;
 const MAX_ADDRESS = 300;
@@ -361,9 +363,19 @@ function listFromMemory(companyId: string): Ticket[] {
     return [...(memory.ticketsByCompany[companyId] ?? [])].sort((a, b) => b.createdAt - a.createdAt);
 }
 
+function hasFreshReadCache(companyId: string): boolean {
+    const touchedAt = readCacheTouchedAt[companyId] ?? 0;
+    return touchedAt > 0 && Date.now() - touchedAt <= READ_CACHE_TTL_MS;
+}
+
+function touchReadCache(companyId: string): void {
+    readCacheTouchedAt[companyId] = Date.now();
+}
+
 function upsertMemoryTicket(companyId: string, ticket: Ticket): void {
     const list = memory.ticketsByCompany[companyId] ?? [];
     memory.ticketsByCompany[companyId] = [ticket, ...list.filter((item) => item.id !== ticket.id)];
+    touchReadCache(companyId);
 }
 
 function companyCasesRef(db: Awaited<ReturnType<typeof getFirestoreDb>>, companyId: string) {
@@ -492,12 +504,15 @@ async function listFromFirebase(companyId: string): Promise<Ticket[] | null> {
     if (!db) return null;
 
     const snap = await companyCasesRef(db, companyId).orderBy("createdAt", "desc").limit(200).get();
-    return snap.docs.map((doc) =>
+    const rows = snap.docs.map((doc) =>
         normalizeTicket({
             id: doc.id,
             ...(doc.data() as Partial<Ticket>),
         }),
     );
+    memory.ticketsByCompany[companyId] = rows;
+    touchReadCache(companyId);
+    return rows;
 }
 
 function normalizePageSize(input: number | undefined, fallback = 10): number {
@@ -939,6 +954,10 @@ async function updateInFirebase(
 export async function listTickets(): Promise<Ticket[]> {
     const scope = await resolveSessionScope(true);
     if (!scope) return [];
+
+    if (hasFreshReadCache(scope.companyId)) {
+        return listFromMemory(scope.companyId);
+    }
 
     try {
         const firebaseTickets = await listFromFirebase(scope.companyId);

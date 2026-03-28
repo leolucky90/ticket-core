@@ -1,6 +1,6 @@
 import { ArrowLeft, ArrowRight, Filter, ReceiptText, RotateCcw, Search } from "lucide-react";
 import { MerchantPredictiveSearchInput } from "@/components/merchant/search";
-import { MerchantListShell, MerchantSectionCard, MerchantStatGrid, MerchantToolbar } from "@/components/merchant/shell";
+import { MerchantListPagination, MerchantListShell, MerchantSectionCard, MerchantStatGrid, MerchantToolbar } from "@/components/merchant/shell";
 import type { MerchantStatItem } from "@/components/merchant/shell";
 import { IconActionButton } from "@/components/ui/icon-action-button";
 import { IconTextActionButton } from "@/components/ui/icon-text-action-button";
@@ -123,9 +123,9 @@ export function ReceiptWorkspace({
         >
             {receipts.length === 0 ? null : (
                 <div className="space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[rgb(var(--muted))]">
-                        <span>本頁顯示 {receipts.length} 筆，採用固定高度與 server 分頁。</span>
-                        <div className="flex flex-wrap items-center gap-2">
+                    <MerchantListPagination
+                        summary={<span>本頁顯示 {receipts.length} 筆，採用固定高度與 server 分頁。</span>}
+                        previousAction={
                             <form action="/dashboard/receipts" method="get">
                                 {keyword ? <input type="hidden" name="q" value={keyword} /> : null}
                                 <input type="hidden" name="pageSize" value={pageSize} />
@@ -142,6 +142,8 @@ export function ReceiptWorkspace({
                                     上一頁
                                 </IconTextActionButton>
                             </form>
+                        }
+                        nextAction={
                             <form action="/dashboard/receipts" method="get">
                                 {keyword ? <input type="hidden" name="q" value={keyword} /> : null}
                                 <input type="hidden" name="pageSize" value={pageSize} />
@@ -158,8 +160,8 @@ export function ReceiptWorkspace({
                                     下一頁
                                 </IconTextActionButton>
                             </form>
-                        </div>
-                    </div>
+                        }
+                    />
                     <div className="grid h-[720px] gap-2 overflow-y-auto pr-1">
                         {receipts.map((receipt) => (
                         <details key={receipt.id} className="rounded-lg border border-[rgb(var(--border))]">

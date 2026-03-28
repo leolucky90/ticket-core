@@ -5,43 +5,21 @@ import { MerchantPageShell } from "@/components/merchant/shell";
 import {
     cancelActivity,
     createActivity,
-    createCompanyCustomer,
-    createProductCategory,
-    createProduct,
-    createProductSupplier,
-    createRepairBrand,
-    createRepairModel,
-    createStockIn,
-    createStockOut,
     deleteActivity,
-    deleteProduct,
-    deleteProductCategory,
-    deleteProductSupplier,
-    deleteRepairBrand,
-    deleteRepairBrandType,
-    deleteRepairModel,
     updateActivity,
-    updateCompanyCustomer,
-    updateProduct,
-    updateProductCategory,
-    updateProductSupplier,
-    updateRepairBrand,
-    renameRepairBrandType,
-    updateRepairModel,
-} from "@/lib/services/commerce";
-import { queryActivitiesPage } from "@/lib/services/merchant/activity-read-model.service";
-import { getCatalogDimensionBundle, listCatalogSuppliers } from "@/lib/services/merchant/catalog-service";
-import { getDashboardBundle } from "@/lib/services/merchant/dashboard-read-model.service";
-import { queryCompanyCustomersPage } from "@/lib/services/merchant/customer-read-model.service";
+} from "@/lib/services/merchant/activity-write.service";
 import { decodeCursorStack, encodeCursorStack, parseListPageSize } from "@/lib/pagination/query-controls";
-import { getTicketAttributePreferences } from "@/lib/services/ticketAttributes";
-import { createTicket, createWarrantyCaseFromExistingCase, queryTicketsPage, updateTicket } from "@/lib/services/ticket";
-import { listRepairTechnicians } from "@/lib/services/repair-technician.service";
+import { createProductCategory, createProductSupplier, deleteProductCategory, deleteProductSupplier, updateProductCategory, updateProductSupplier } from "@/lib/services/merchant/catalog-write.service";
+import { createCompanyCustomer, updateCompanyCustomer } from "@/lib/services/merchant/customer-write.service";
+import { getMerchantDashboardRouteData } from "@/lib/services/merchant/dashboard-read-model.service";
+import { createStockIn, createStockOut } from "@/lib/services/merchant/inventory-write.service";
+import { createRepairBrand, createRepairModel, deleteRepairBrand, deleteRepairBrandType, deleteRepairModel, renameRepairBrandType, updateRepairBrand, updateRepairModel } from "@/lib/services/merchant/marketing-write.service";
+import { createProduct, deleteProduct, updateProduct } from "@/lib/services/merchant/product-write.service";
+import { createTicket, createWarrantyCaseFromExistingCase, updateTicket } from "@/lib/services/ticket";
 import {
     listUsedProductTypeSettings,
     updateUsedProductTypeSetting,
 } from "@/lib/services/used-product-type-settings.service";
-import type { DimensionPickerBundle } from "@/lib/types/catalog";
 
 type DashboardSearchParams = {
     tab?: string;
@@ -119,14 +97,6 @@ function toActivityOrder(value: string | undefined): "updated_latest" | "updated
     return "updated_latest";
 }
 
-function emptyDimensionBundle(): DimensionPickerBundle {
-    return {
-        categories: [],
-        brands: [],
-        models: [],
-    };
-}
-
 function toSpecTemplateKey(name: string): string {
     const normalized = name
         .trim()
@@ -193,59 +163,38 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     const activityCursorStack = decodeCursorStack((sp.activityCursorStack ?? "").trim());
     const actionTs = (sp.ts ?? "").trim();
     const needsCaseSupport = tab === "cases";
-    const needsInventorySupport = tab === "inventory" || tab === "marketing";
-    const needsMarketingSupport = tab === "marketing";
     const needsCustomerSupport = tab === "customers";
     const needsActivitySupport = tab === "activities";
-
-    const bundle = await getDashboardBundle({
+    const {
+        bundle,
+        customerPage,
+        casePage,
+        activityPage,
+        repairTechnicians,
+        usedProductTypeSettings,
+        dimensionBundle,
+        supplierRecords,
+        ticketAttributePreferences,
+    } = await getMerchantDashboardRouteData({
+        tab,
         customerKeyword: (sp.customerQ ?? "").trim(),
         caseKeyword: (sp.caseQ ?? "").trim(),
         caseStatus,
         caseOrder,
         activityKeyword: (sp.activityQ ?? "").trim(),
+        activityStatusFilter,
+        activityOrder,
         productKeyword: (sp.productQ ?? "").trim(),
         brandKeyword: (sp.brandQ ?? "").trim(),
-        scope: tab === "dashboard" ? "full" : tab === "marketing" ? "marketing" : tab === "inventory" ? "inventory" : "basic",
+        customerCaseFilter,
+        customerOrder,
+        customerPageSize,
+        customerCursor: customerCursor || undefined,
+        casePageSize,
+        caseCursor: caseCursor || undefined,
+        activityPageSize,
+        activityCursor: activityCursor || undefined,
     });
-    const customerPage = needsCustomerSupport
-        ? await queryCompanyCustomersPage({
-              keyword: (sp.customerQ ?? "").trim(),
-              caseState: customerCaseFilter,
-              order: customerOrder,
-              pageSize: customerPageSize,
-              cursor: customerCursor || undefined,
-          })
-        : { items: [], pageSize: customerPageSize, nextCursor: "", hasNextPage: false };
-    const casePage = needsCaseSupport
-        ? await queryTicketsPage({
-              keyword: (sp.caseQ ?? "").trim(),
-              status: caseStatus,
-              order: caseOrder,
-              pageSize: casePageSize,
-              cursor: caseCursor || undefined,
-          })
-        : { items: [], pageSize: casePageSize, nextCursor: "", hasNextPage: false };
-    const activityPage = needsActivitySupport
-        ? await queryActivitiesPage({
-              keyword: (sp.activityQ ?? "").trim(),
-              status: activityStatusFilter,
-              order: activityOrder,
-              pageSize: activityPageSize,
-              cursor: activityCursor || undefined,
-          })
-        : { items: [], pageSize: activityPageSize, nextCursor: "", hasNextPage: false };
-    const repairTechnicians = needsCaseSupport ? await listRepairTechnicians() : [];
-    const usedProductTypeSettings = needsMarketingSupport ? await listUsedProductTypeSettings() : [];
-    const companyId = typeof bundle.companyId === "string" ? bundle.companyId.trim() : "";
-    let dimensionBundle = emptyDimensionBundle();
-    let supplierRecords: Awaited<ReturnType<typeof listCatalogSuppliers>> = [];
-    if (companyId && needsInventorySupport) {
-        [dimensionBundle, supplierRecords] = await Promise.all([
-            getCatalogDimensionBundle(companyId),
-            listCatalogSuppliers("", companyId),
-        ]);
-    }
     const parsedActionTs = Number.parseInt(actionTs, 10);
     const derivedSnapshotTs = [
         ...(needsCaseSupport ? casePage.items : bundle.tickets).map((ticket) => ticket.updatedAt),
@@ -258,9 +207,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         ...bundle.stockLogs.map((log) => log.createdAt),
     ].reduce((max, value) => (value > max ? value : max), 0);
     const snapshotTs = Number.isFinite(parsedActionTs) && parsedActionTs > 0 ? parsedActionTs : derivedSnapshotTs;
-    const ticketAttributePreferences = needsCaseSupport
-        ? await getTicketAttributePreferences({ tenantId: bundle.companyId })
-        : { caseStatuses: [], quoteStatuses: [] };
     const tabLabels: Record<ReturnType<typeof toTab>, { title: string; subtitle: string }> = {
         dashboard: { title: "儀表板", subtitle: "營運概覽、關鍵指標與近期動態。" },
         customers: { title: "客戶", subtitle: "固定結構的客戶名單與關聯資訊，不使用自由排序卡片。" },

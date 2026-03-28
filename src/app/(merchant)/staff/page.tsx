@@ -23,6 +23,8 @@ export default async function StaffPage({ searchParams }: StaffPageProps) {
     const sp = await searchParams;
     const keyword = (sp.keyword ?? "").trim();
     const items = await listStaffMembers({ keyword });
+    const title = lang === "zh" ? "員工管理" : "Staff Management";
+    const subtitle = lang === "zh" ? "員工管理、權限與帳號安全操作。" : "Manage staff records, permissions, and account security operations.";
 
     async function deactivateAction(formData: FormData): Promise<void> {
         "use server";
@@ -63,7 +65,7 @@ export default async function StaffPage({ searchParams }: StaffPageProps) {
     }
 
     return (
-        <MerchantPageShell title="Staff Management" subtitle="員工管理、權限與帳號安全操作" width="index">
+        <MerchantPageShell title={title} subtitle={subtitle} width="index">
             <StaffManagementPanel
                 items={items}
                 keyword={keyword}

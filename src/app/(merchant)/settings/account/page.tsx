@@ -1,11 +1,12 @@
+import { cookies } from "next/headers";
 import { Shield, SlidersHorizontal } from "lucide-react";
 import { redirect } from "next/navigation";
-import { Card } from "@/components/ui/card";
+import { MerchantPageShell, MerchantSectionCard } from "@/components/merchant/shell";
 import { IconTextActionButton } from "@/components/ui/icon-text-action-button";
-import { Section } from "@/components/ui/section";
 import { ChangePasswordForm } from "@/components/settings/ChangePasswordForm";
 import { CompanyProfileSettingsForm } from "@/components/account/company-profile-settings-form";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
+import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
 import { getCurrentSessionAccountContext } from "@/lib/services/staff.service";
 import { getCompanyProfile, updateCompanyProfile } from "@/lib/services/company-profile.service";
 
@@ -20,10 +21,15 @@ export default async function AccountInfoPage({ searchParams }: AccountInfoPageP
     }
 
     const sp = await searchParams;
+    const cookieStore = await cookies();
+    const lang = getUiLanguage(cookieStore.get("lang")?.value);
+    const ui = getUiText(lang);
     const accountContext = await getCurrentSessionAccountContext();
     const accountType = accountContext?.accountType ?? "customer";
-    const accountTypeText = accountType === "company" ? "公司帳號" : "客戶帳號";
+    const accountTypeText = accountType === "company" ? ui.accountInfo.companyAccount : ui.accountInfo.customerAccount;
     const companyProfile = accountType === "company" ? await getCompanyProfile() : null;
+    const title = ui.accountInfo.pageTitle;
+    const subtitle = ui.accountInfo.pageSubtitle;
 
     async function saveCompanyProfileAction(formData: FormData): Promise<void> {
         "use server";
@@ -46,54 +52,57 @@ export default async function AccountInfoPage({ searchParams }: AccountInfoPageP
         });
 
         if (!updated) {
-            redirect(`/settings/account?flash=${encodeURIComponent("公司資料更新失敗")}&ts=${Date.now()}`);
+            redirect(`/settings/account?flash=${encodeURIComponent(ui.accountInfo.saveFailed)}&ts=${Date.now()}`);
         }
 
-        redirect(`/settings/account?flash=${encodeURIComponent("公司資料已更新")}&ts=${Date.now()}`);
+        redirect(`/settings/account?flash=${encodeURIComponent(ui.accountInfo.saved)}&ts=${Date.now()}`);
     }
 
     return (
-        <Section title="帳戶資訊">
+        <MerchantPageShell title={title} subtitle={subtitle} width="index">
             <div className="grid max-w-5xl gap-4">
                 {sp.flash ? <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2 text-sm">{sp.flash}</div> : null}
 
-                <Card>
+                <MerchantSectionCard title={ui.accountInfo.summaryTitle} description={ui.accountInfo.summaryDescription}>
                     <div className="grid gap-3">
                         <div className="text-sm">
-                            <span className="text-[rgb(var(--muted))]">帳號類型：</span>
+                            <span className="text-[rgb(var(--muted))]">{ui.accountInfo.accountType}：</span>
                             <span>{accountTypeText}</span>
                         </div>
                         <div className="text-sm">
-                            <span className="text-[rgb(var(--muted))]">Email：</span>
+                            <span className="text-[rgb(var(--muted))]">{ui.accountInfo.email}：</span>
                             <span>{session.email}</span>
                         </div>
                         <div className="text-sm">
-                            <span className="text-[rgb(var(--muted))]">UID：</span>
+                            <span className="text-[rgb(var(--muted))]">{ui.accountInfo.uid}：</span>
                             <span className="break-all">{session.uid}</span>
                         </div>
                     </div>
-                </Card>
+                </MerchantSectionCard>
 
                 {accountType === "company" ? <CompanyProfileSettingsForm profile={companyProfile} saveAction={saveCompanyProfileAction} /> : null}
 
                 {accountType === "company" ? (
-                    <Card>
+                    <MerchantSectionCard title={ui.accountInfo.relatedSettingsTitle} description={ui.accountInfo.relatedSettingsDescription}>
                         <div className="flex flex-wrap items-center gap-2">
                             <IconTextActionButton
                                 href="/settings/account/attributes"
                                 icon={SlidersHorizontal}
-                                label="屬性設置"
-                                tooltip="前往屬性設置"
+                                label={ui.accountInfo.attributeSettingsAction}
+                                tooltip={ui.accountInfo.attributeSettingsTooltip}
                             />
-                            <IconTextActionButton href="/account/security" icon={Shield} label="帳號安全" tooltip="前往帳號安全中心" />
+                            <IconTextActionButton
+                                href="/account/security"
+                                icon={Shield}
+                                label={ui.accountInfo.accountSecurityAction}
+                                tooltip={ui.accountInfo.accountSecurityTooltip}
+                            />
                         </div>
-                    </Card>
+                    </MerchantSectionCard>
                 ) : null}
 
-                <Card>
-                    <ChangePasswordForm email={session.email} />
-                </Card>
+                <ChangePasswordForm email={session.email} labels={ui.changePassword} />
             </div>
-        </Section>
+        </MerchantPageShell>
     );
 }

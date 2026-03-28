@@ -3,8 +3,10 @@ import type { CompanyHomeTemplateCopy } from "@/features/showcase/default-templa
 import {
     CompanyHomeAboutSection,
     CompanyHomeAdSection,
+    CompanyHomeCtaSection,
     CompanyHomeContactSection,
     CompanyHomeHeroSection,
+    CompanyHomePromoSection,
     CompanyHomeServicesSection,
     type CompanyHomeCta,
 } from "@/features/showcase/components/companyHomeDefault/sections";
@@ -23,9 +25,11 @@ export function renderCompanyHomeBlock(block: ShowContentBlock, context: Company
             return (
                 <CompanyHomeHeroSection
                     key={heroBlock.id}
+                    anchorId={heroBlock.anchor || heroBlock.id}
                     content={heroBlock.content}
                     styles={heroBlock.styles}
                     typography={heroBlock.typography}
+                    variant={heroBlock.variant}
                     ctas={heroBlock.ctas}
                     themeTokenOverrides={heroBlock.themeTokenOverrides}
                     defaultPrimaryCta={context.heroPrimaryCta}
@@ -38,6 +42,7 @@ export function renderCompanyHomeBlock(block: ShowContentBlock, context: Company
             return (
                 <CompanyHomeAboutSection
                     key={aboutBlock.id}
+                    anchorId={aboutBlock.anchor || aboutBlock.id}
                     content={aboutBlock.content}
                     styles={aboutBlock.styles}
                     typography={aboutBlock.typography}
@@ -50,6 +55,7 @@ export function renderCompanyHomeBlock(block: ShowContentBlock, context: Company
             return (
                 <CompanyHomeServicesSection
                     key={servicesBlock.id}
+                    anchorId={servicesBlock.anchor || servicesBlock.id}
                     content={servicesBlock.content}
                     styles={servicesBlock.styles}
                     typography={servicesBlock.typography}
@@ -62,6 +68,7 @@ export function renderCompanyHomeBlock(block: ShowContentBlock, context: Company
             return (
                 <CompanyHomeContactSection
                     key={contactBlock.id}
+                    anchorId={contactBlock.anchor || contactBlock.id}
                     content={contactBlock.content}
                     styles={contactBlock.styles}
                     typography={contactBlock.typography}
@@ -75,10 +82,39 @@ export function renderCompanyHomeBlock(block: ShowContentBlock, context: Company
             return (
                 <CompanyHomeAdSection
                     key={adBlock.id}
+                    anchorId={adBlock.anchor || adBlock.id}
                     content={adBlock.content}
                     styles={adBlock.styles}
                     typography={adBlock.typography}
+                    variant={adBlock.variant}
                     themeTokenOverrides={adBlock.themeTokenOverrides}
+                />
+            );
+        }
+        case "cta": {
+            const ctaBlock = block as ShowContentBlock<"cta">;
+            return (
+                <CompanyHomeCtaSection
+                    key={ctaBlock.id}
+                    anchorId={ctaBlock.anchor || ctaBlock.id}
+                    content={ctaBlock.content}
+                    styles={ctaBlock.styles}
+                    typography={ctaBlock.typography}
+                    ctas={ctaBlock.ctas}
+                    themeTokenOverrides={ctaBlock.themeTokenOverrides}
+                />
+            );
+        }
+        case "promo": {
+            const promoBlock = block as ShowContentBlock<"promo">;
+            return (
+                <CompanyHomePromoSection
+                    key={promoBlock.id}
+                    anchorId={promoBlock.anchor || promoBlock.id}
+                    content={promoBlock.content}
+                    styles={promoBlock.styles}
+                    typography={promoBlock.typography}
+                    themeTokenOverrides={promoBlock.themeTokenOverrides}
                 />
             );
         }

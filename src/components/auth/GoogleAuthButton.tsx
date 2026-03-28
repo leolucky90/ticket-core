@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
 import { signInWithPopup } from "firebase/auth";
 import {
     getFirebaseClientAuth,
@@ -29,6 +28,8 @@ export function GoogleAuthButton({
             <AuthButton
                 type="button"
                 disabled={disabled || submitting}
+                loading={submitting}
+                loadingLabel="登入中..."
                 onClick={async () => {
                     if (disabled) {
                         setMessage(getFirebaseClientErrorMessage(null));
@@ -54,14 +55,7 @@ export function GoogleAuthButton({
                     }
                 }}
             >
-                {submitting ? (
-                    <span className="inline-flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                        <span>登入中...</span>
-                    </span>
-                ) : (
-                    label
-                )}
+                {label}
             </AuthButton>
             {message ? <div className="auth-error">{message}</div> : null}
         </>

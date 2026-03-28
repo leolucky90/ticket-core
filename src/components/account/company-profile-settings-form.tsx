@@ -2,7 +2,7 @@
 
 import { Copy, Pencil, Save, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Card } from "@/components/ui/card";
+import { MerchantSectionCard } from "@/components/merchant/shell";
 import { FormField } from "@/components/ui/form-field";
 import { IconActionButton } from "@/components/ui/icon-action-button";
 import { IconTextActionButton } from "@/components/ui/icon-text-action-button";
@@ -38,49 +38,48 @@ function buildCopyText(profile: CompanyProfile | null): string {
 export function CompanyProfileSettingsForm({ profile, saveAction }: CompanyProfileSettingsFormProps) {
     const [editing, setEditing] = useState(false);
     const copyText = useMemo(() => buildCopyText(profile), [profile]);
+    const actions = (
+        <div className="flex flex-wrap items-center gap-2">
+            <IconActionButton
+                icon={Copy}
+                label="複製資訊"
+                tooltip="複製公司帳戶資訊"
+                onClick={async () => {
+                    if (!copyText) return;
+                    try {
+                        await navigator.clipboard.writeText(copyText);
+                    } catch {
+                        // ignore clipboard errors
+                    }
+                }}
+            />
+            {!editing ? (
+                <IconTextActionButton icon={Pencil} label="編輯" tooltip="編輯公司帳戶資訊" onClick={() => setEditing(true)} />
+            ) : (
+                <>
+                    <IconTextActionButton icon={Save} type="submit" label="儲存" tooltip="儲存公司帳戶資訊" />
+                    <IconTextActionButton
+                        icon={X}
+                        type="button"
+                        label="取消"
+                        tooltip="取消編輯"
+                        onClick={() => {
+                            setEditing(false);
+                            window.location.reload();
+                        }}
+                    />
+                </>
+            )}
+        </div>
+    );
 
     return (
         <form action={saveAction} className="grid gap-4">
-            <Card className="grid gap-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                        <div className="text-sm font-semibold">公司帳戶資訊</div>
-                        <div className="text-xs text-[rgb(var(--muted))]">收據、報價、客戶預設帶入資料來源（可擴充地區欄位）。</div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <IconActionButton
-                            icon={Copy}
-                            label="複製資訊"
-                            tooltip="複製公司帳戶資訊"
-                            onClick={async () => {
-                                if (!copyText) return;
-                                try {
-                                    await navigator.clipboard.writeText(copyText);
-                                } catch {
-                                    // ignore clipboard errors
-                                }
-                            }}
-                        />
-                        {!editing ? (
-                            <IconTextActionButton icon={Pencil} label="編輯" tooltip="編輯公司帳戶資訊" onClick={() => setEditing(true)} />
-                        ) : (
-                            <>
-                                <IconTextActionButton icon={Save} type="submit" label="儲存" tooltip="儲存公司帳戶資訊" />
-                                <IconTextActionButton
-                                    icon={X}
-                                    type="button"
-                                    label="取消"
-                                    tooltip="取消編輯"
-                                    onClick={() => {
-                                        setEditing(false);
-                                        window.location.reload();
-                                    }}
-                                />
-                            </>
-                        )}
-                    </div>
-                </div>
-
+            <MerchantSectionCard
+                title="公司帳戶資訊"
+                description="收據、報價、客戶預設帶入資料來源（可擴充地區欄位）。"
+                actions={actions}
+            >
                 <div className="grid gap-3 md:grid-cols-2">
                     <FormField label="companyName" required>
                         <Input name="companyName" defaultValue={profile?.companyName ?? ""} disabled={!editing} required={editing} />
@@ -125,7 +124,7 @@ export function CompanyProfileSettingsForm({ profile, saveAction }: CompanyProfi
                         <Textarea name="receiptNote" rows={2} defaultValue={profile?.receiptNote ?? ""} disabled={!editing} />
                     </FormField>
                 </div>
-            </Card>
+            </MerchantSectionCard>
         </form>
     );
 }

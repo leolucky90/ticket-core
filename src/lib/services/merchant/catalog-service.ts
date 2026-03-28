@@ -7,6 +7,7 @@ import { getUserCompanyId, getUserDoc, toAccountType } from "@/lib/services/user
 const MAX_TEXT = 160;
 const MAX_LONG = 800;
 const MAX_LIST_SIZE = 400;
+const READ_CACHE_TTL_MS = 30_000;
 
 type SessionScope = {
     companyId: string;
@@ -20,6 +21,20 @@ const memory: {
     modelsByCompany: Record<string, ModelDoc[]>;
     nameEntriesByCompany: Record<string, ProductNameEntryDoc[]>;
     suppliersByCompany: Record<string, SupplierDoc[]>;
+} = {
+    categoriesByCompany: {},
+    brandsByCompany: {},
+    modelsByCompany: {},
+    nameEntriesByCompany: {},
+    suppliersByCompany: {},
+};
+
+const readCacheTouchedAt: {
+    categoriesByCompany: Record<string, number>;
+    brandsByCompany: Record<string, number>;
+    modelsByCompany: Record<string, number>;
+    nameEntriesByCompany: Record<string, number>;
+    suppliersByCompany: Record<string, number>;
 } = {
     categoriesByCompany: {},
     brandsByCompany: {},
@@ -156,6 +171,15 @@ function upsertMemory<T extends { id: string }>(store: Record<string, T[]>, comp
 function removeFromMemory<T extends { id: string }>(store: Record<string, T[]>, companyId: string, itemId: string) {
     const current = store[companyId] ?? [];
     store[companyId] = current.filter((item) => item.id !== itemId);
+}
+
+function hasFreshReadCache(store: Record<string, number>, companyId: string): boolean {
+    const touchedAt = store[companyId] ?? 0;
+    return touchedAt > 0 && Date.now() - touchedAt <= READ_CACHE_TTL_MS;
+}
+
+function touchReadCache(store: Record<string, number>, companyId: string) {
+    store[companyId] = Date.now();
 }
 
 function queryByKeyword<T>(list: T[], keyword: string, resolver: (item: T) => string[]): T[] {
@@ -372,24 +396,30 @@ export async function listCatalogCategories(keyword = "", companyIdOverride?: st
     const path = catalogCollectionPath(companyId, "categories");
     debugCatalogLog("list_categories:start", { companyId, path, keyword });
     let list: CategoryDoc[] = [];
-    try {
-        const fsList = await listCategoriesFromFirestore(companyId);
-        if (fsList) {
-            list = fsList;
-            replaceMemoryList(memory.categoriesByCompany, companyId, fsList);
-            debugCatalogLog("list_categories:firestore", { companyId, path, fetchedCount: fsList.length });
-        } else {
-            list = listFromMemory(memory.categoriesByCompany, companyId);
-            debugCatalogLog("list_categories:memory_no_firestore", { companyId, path, fetchedCount: list.length });
-        }
-    } catch (error) {
+    if (hasFreshReadCache(readCacheTouchedAt.categoriesByCompany, companyId)) {
         list = listFromMemory(memory.categoriesByCompany, companyId);
-        debugCatalogLog("list_categories:fallback", {
-            companyId,
-            path,
-            fetchedCount: list.length,
-            error: toErrorMessage(error),
-        });
+        debugCatalogLog("list_categories:warm_cache", { companyId, path, fetchedCount: list.length });
+    } else {
+        try {
+            const fsList = await listCategoriesFromFirestore(companyId);
+            if (fsList) {
+                list = fsList;
+                replaceMemoryList(memory.categoriesByCompany, companyId, fsList);
+                touchReadCache(readCacheTouchedAt.categoriesByCompany, companyId);
+                debugCatalogLog("list_categories:firestore", { companyId, path, fetchedCount: fsList.length });
+            } else {
+                list = listFromMemory(memory.categoriesByCompany, companyId);
+                debugCatalogLog("list_categories:memory_no_firestore", { companyId, path, fetchedCount: list.length });
+            }
+        } catch (error) {
+            list = listFromMemory(memory.categoriesByCompany, companyId);
+            debugCatalogLog("list_categories:fallback", {
+                companyId,
+                path,
+                fetchedCount: list.length,
+                error: toErrorMessage(error),
+            });
+        }
     }
     return queryByKeyword(
         list.map((item) => normalizeCategory(item)).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "zh-Hant")),
@@ -398,20 +428,24 @@ export async function listCatalogCategories(keyword = "", companyIdOverride?: st
     );
 }
 
-export async function listCatalogBrands(keyword = ""): Promise<BrandDoc[]> {
-    const scope = await resolveSessionScope();
-    if (!scope) return [];
+export async function listCatalogBrands(keyword = "", companyIdOverride?: string): Promise<BrandDoc[]> {
+    const companyId = await resolveCompanyIdOrThrow(companyIdOverride, "listCatalogBrands");
     let list: BrandDoc[] = [];
-    try {
-        const fsList = await listBrandsFromFirestore(scope.companyId);
-        if (fsList) {
-            list = fsList;
-            replaceMemoryList(memory.brandsByCompany, scope.companyId, fsList);
-        } else {
-            list = listFromMemory(memory.brandsByCompany, scope.companyId);
+    if (hasFreshReadCache(readCacheTouchedAt.brandsByCompany, companyId)) {
+        list = listFromMemory(memory.brandsByCompany, companyId);
+    } else {
+        try {
+            const fsList = await listBrandsFromFirestore(companyId);
+            if (fsList) {
+                list = fsList;
+                replaceMemoryList(memory.brandsByCompany, companyId, fsList);
+                touchReadCache(readCacheTouchedAt.brandsByCompany, companyId);
+            } else {
+                list = listFromMemory(memory.brandsByCompany, companyId);
+            }
+        } catch {
+            list = listFromMemory(memory.brandsByCompany, companyId);
         }
-    } catch {
-        list = listFromMemory(memory.brandsByCompany, scope.companyId);
     }
     return queryByKeyword(
         list.map((item) => normalizeBrand(item)).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "zh-Hant")),
@@ -420,20 +454,24 @@ export async function listCatalogBrands(keyword = ""): Promise<BrandDoc[]> {
     );
 }
 
-export async function listCatalogModels(keyword = ""): Promise<ModelDoc[]> {
-    const scope = await resolveSessionScope();
-    if (!scope) return [];
+export async function listCatalogModels(keyword = "", companyIdOverride?: string): Promise<ModelDoc[]> {
+    const companyId = await resolveCompanyIdOrThrow(companyIdOverride, "listCatalogModels");
     let list: ModelDoc[] = [];
-    try {
-        const fsList = await listModelsFromFirestore(scope.companyId);
-        if (fsList) {
-            list = fsList;
-            replaceMemoryList(memory.modelsByCompany, scope.companyId, fsList);
-        } else {
-            list = listFromMemory(memory.modelsByCompany, scope.companyId);
+    if (hasFreshReadCache(readCacheTouchedAt.modelsByCompany, companyId)) {
+        list = listFromMemory(memory.modelsByCompany, companyId);
+    } else {
+        try {
+            const fsList = await listModelsFromFirestore(companyId);
+            if (fsList) {
+                list = fsList;
+                replaceMemoryList(memory.modelsByCompany, companyId, fsList);
+                touchReadCache(readCacheTouchedAt.modelsByCompany, companyId);
+            } else {
+                list = listFromMemory(memory.modelsByCompany, companyId);
+            }
+        } catch {
+            list = listFromMemory(memory.modelsByCompany, companyId);
         }
-    } catch {
-        list = listFromMemory(memory.modelsByCompany, scope.companyId);
     }
     return queryByKeyword(
         list.map((item) => normalizeModel(item)).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "zh-Hant")),
@@ -442,20 +480,24 @@ export async function listCatalogModels(keyword = ""): Promise<ModelDoc[]> {
     );
 }
 
-export async function listCatalogProductNameEntries(keyword = ""): Promise<ProductNameEntryDoc[]> {
-    const scope = await resolveSessionScope();
-    if (!scope) return [];
+export async function listCatalogProductNameEntries(keyword = "", companyIdOverride?: string): Promise<ProductNameEntryDoc[]> {
+    const companyId = await resolveCompanyIdOrThrow(companyIdOverride, "listCatalogProductNameEntries");
     let list: ProductNameEntryDoc[] = [];
-    try {
-        const fsList = await listNameEntriesFromFirestore(scope.companyId);
-        if (fsList) {
-            list = fsList;
-            replaceMemoryList(memory.nameEntriesByCompany, scope.companyId, fsList);
-        } else {
-            list = listFromMemory(memory.nameEntriesByCompany, scope.companyId);
+    if (hasFreshReadCache(readCacheTouchedAt.nameEntriesByCompany, companyId)) {
+        list = listFromMemory(memory.nameEntriesByCompany, companyId);
+    } else {
+        try {
+            const fsList = await listNameEntriesFromFirestore(companyId);
+            if (fsList) {
+                list = fsList;
+                replaceMemoryList(memory.nameEntriesByCompany, companyId, fsList);
+                touchReadCache(readCacheTouchedAt.nameEntriesByCompany, companyId);
+            } else {
+                list = listFromMemory(memory.nameEntriesByCompany, companyId);
+            }
+        } catch {
+            list = listFromMemory(memory.nameEntriesByCompany, companyId);
         }
-    } catch {
-        list = listFromMemory(memory.nameEntriesByCompany, scope.companyId);
     }
     return queryByKeyword(
         list.map((item) => normalizeNameEntry(item)).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "zh-Hant")),
@@ -469,24 +511,30 @@ export async function listCatalogSuppliers(keyword = "", companyIdOverride?: str
     const path = catalogCollectionPath(companyId, "suppliers");
     debugCatalogLog("list_suppliers:start", { companyId, path, keyword });
     let list: SupplierDoc[] = [];
-    try {
-        const fsList = await listSuppliersFromFirestore(companyId);
-        if (fsList) {
-            list = fsList;
-            replaceMemoryList(memory.suppliersByCompany, companyId, fsList);
-            debugCatalogLog("list_suppliers:firestore", { companyId, path, fetchedCount: fsList.length });
-        } else {
-            list = listFromMemory(memory.suppliersByCompany, companyId);
-            debugCatalogLog("list_suppliers:memory_no_firestore", { companyId, path, fetchedCount: list.length });
-        }
-    } catch (error) {
+    if (hasFreshReadCache(readCacheTouchedAt.suppliersByCompany, companyId)) {
         list = listFromMemory(memory.suppliersByCompany, companyId);
-        debugCatalogLog("list_suppliers:fallback", {
-            companyId,
-            path,
-            fetchedCount: list.length,
-            error: toErrorMessage(error),
-        });
+        debugCatalogLog("list_suppliers:warm_cache", { companyId, path, fetchedCount: list.length });
+    } else {
+        try {
+            const fsList = await listSuppliersFromFirestore(companyId);
+            if (fsList) {
+                list = fsList;
+                replaceMemoryList(memory.suppliersByCompany, companyId, fsList);
+                touchReadCache(readCacheTouchedAt.suppliersByCompany, companyId);
+                debugCatalogLog("list_suppliers:firestore", { companyId, path, fetchedCount: fsList.length });
+            } else {
+                list = listFromMemory(memory.suppliersByCompany, companyId);
+                debugCatalogLog("list_suppliers:memory_no_firestore", { companyId, path, fetchedCount: list.length });
+            }
+        } catch (error) {
+            list = listFromMemory(memory.suppliersByCompany, companyId);
+            debugCatalogLog("list_suppliers:fallback", {
+                companyId,
+                path,
+                fetchedCount: list.length,
+                error: toErrorMessage(error),
+            });
+        }
     }
     return queryByKeyword(
         list.map((item) => normalizeSupplier(item)).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "zh-Hant")),
@@ -516,6 +564,7 @@ export async function createCatalogCategory(input: Partial<CategoryDoc>, company
         return null;
     }
     upsertMemory(memory.categoriesByCompany, companyId, next);
+    touchReadCache(readCacheTouchedAt.categoriesByCompany, companyId);
     debugCatalogLog("create_category:success", { companyId, path, recordId: next.id });
     return next;
 }
@@ -543,6 +592,7 @@ export async function updateCatalogCategory(categoryId: string, input: Partial<C
         return null;
     }
     upsertMemory(memory.categoriesByCompany, companyId, next);
+    touchReadCache(readCacheTouchedAt.categoriesByCompany, companyId);
     debugCatalogLog("update_category:success", { companyId, path, recordId: next.id });
     return next;
 }
@@ -564,6 +614,7 @@ export async function deleteCatalogCategory(categoryId: string, companyIdOverrid
         return false;
     }
     removeFromMemory(memory.categoriesByCompany, companyId, target);
+    touchReadCache(readCacheTouchedAt.categoriesByCompany, companyId);
     debugCatalogLog("delete_category:success", { companyId, path, recordId: target });
     return true;
 }
@@ -574,26 +625,28 @@ export async function createCatalogBrand(input: Partial<BrandDoc>): Promise<Bran
     const ts = nowIso();
     const next = normalizeBrand({ id: id("brand"), companyId: scope.companyId, ...input, createdAt: ts, updatedAt: ts });
     try {
-        const saved = await setBrandToFirestore(scope.companyId, next);
-        if (!saved) upsertMemory(memory.brandsByCompany, scope.companyId, next);
+        await setBrandToFirestore(scope.companyId, next);
     } catch {
-        upsertMemory(memory.brandsByCompany, scope.companyId, next);
+        // fall back to warm memory when Firestore is unavailable
     }
+    upsertMemory(memory.brandsByCompany, scope.companyId, next);
+    touchReadCache(readCacheTouchedAt.brandsByCompany, scope.companyId);
     return next;
 }
 
 export async function updateCatalogBrand(brandId: string, input: Partial<BrandDoc>): Promise<BrandDoc | null> {
     const scope = await resolveSessionScope();
     if (!scope) return null;
-    const current = (await listCatalogBrands()).find((item) => item.id === safeText(brandId, 120));
+    const current = (await listCatalogBrands("", scope.companyId)).find((item) => item.id === safeText(brandId, 120));
     if (!current) return null;
     const next = normalizeBrand({ ...current, ...input, id: current.id, companyId: scope.companyId, updatedAt: nowIso() });
     try {
-        const saved = await setBrandToFirestore(scope.companyId, next);
-        if (!saved) upsertMemory(memory.brandsByCompany, scope.companyId, next);
+        await setBrandToFirestore(scope.companyId, next);
     } catch {
-        upsertMemory(memory.brandsByCompany, scope.companyId, next);
+        // fall back to warm memory when Firestore is unavailable
     }
+    upsertMemory(memory.brandsByCompany, scope.companyId, next);
+    touchReadCache(readCacheTouchedAt.brandsByCompany, scope.companyId);
     return next;
 }
 
@@ -603,11 +656,12 @@ export async function deleteCatalogBrand(brandId: string): Promise<boolean> {
     const target = safeText(brandId, 120);
     if (!target) return false;
     try {
-        const deleted = await deleteBrandInFirestore(scope.companyId, target);
-        if (deleted === null) removeFromMemory(memory.brandsByCompany, scope.companyId, target);
+        await deleteBrandInFirestore(scope.companyId, target);
     } catch {
-        removeFromMemory(memory.brandsByCompany, scope.companyId, target);
+        // fall back to warm memory when Firestore is unavailable
     }
+    removeFromMemory(memory.brandsByCompany, scope.companyId, target);
+    touchReadCache(readCacheTouchedAt.brandsByCompany, scope.companyId);
     return true;
 }
 
@@ -617,26 +671,28 @@ export async function createCatalogModel(input: Partial<ModelDoc>): Promise<Mode
     const ts = nowIso();
     const next = normalizeModel({ id: id("model"), companyId: scope.companyId, ...input, createdAt: ts, updatedAt: ts });
     try {
-        const saved = await setModelToFirestore(scope.companyId, next);
-        if (!saved) upsertMemory(memory.modelsByCompany, scope.companyId, next);
+        await setModelToFirestore(scope.companyId, next);
     } catch {
-        upsertMemory(memory.modelsByCompany, scope.companyId, next);
+        // fall back to warm memory when Firestore is unavailable
     }
+    upsertMemory(memory.modelsByCompany, scope.companyId, next);
+    touchReadCache(readCacheTouchedAt.modelsByCompany, scope.companyId);
     return next;
 }
 
 export async function updateCatalogModel(modelId: string, input: Partial<ModelDoc>): Promise<ModelDoc | null> {
     const scope = await resolveSessionScope();
     if (!scope) return null;
-    const current = (await listCatalogModels()).find((item) => item.id === safeText(modelId, 120));
+    const current = (await listCatalogModels("", scope.companyId)).find((item) => item.id === safeText(modelId, 120));
     if (!current) return null;
     const next = normalizeModel({ ...current, ...input, id: current.id, companyId: scope.companyId, updatedAt: nowIso() });
     try {
-        const saved = await setModelToFirestore(scope.companyId, next);
-        if (!saved) upsertMemory(memory.modelsByCompany, scope.companyId, next);
+        await setModelToFirestore(scope.companyId, next);
     } catch {
-        upsertMemory(memory.modelsByCompany, scope.companyId, next);
+        // fall back to warm memory when Firestore is unavailable
     }
+    upsertMemory(memory.modelsByCompany, scope.companyId, next);
+    touchReadCache(readCacheTouchedAt.modelsByCompany, scope.companyId);
     return next;
 }
 
@@ -646,11 +702,12 @@ export async function deleteCatalogModel(modelId: string): Promise<boolean> {
     const target = safeText(modelId, 120);
     if (!target) return false;
     try {
-        const deleted = await deleteModelInFirestore(scope.companyId, target);
-        if (deleted === null) removeFromMemory(memory.modelsByCompany, scope.companyId, target);
+        await deleteModelInFirestore(scope.companyId, target);
     } catch {
-        removeFromMemory(memory.modelsByCompany, scope.companyId, target);
+        // fall back to warm memory when Firestore is unavailable
     }
+    removeFromMemory(memory.modelsByCompany, scope.companyId, target);
+    touchReadCache(readCacheTouchedAt.modelsByCompany, scope.companyId);
     return true;
 }
 
@@ -660,11 +717,12 @@ export async function createCatalogProductNameEntry(input: Partial<ProductNameEn
     const ts = nowIso();
     const next = normalizeNameEntry({ id: id("name_entry"), companyId: scope.companyId, ...input, createdAt: ts, updatedAt: ts });
     try {
-        const saved = await setNameEntryToFirestore(scope.companyId, next);
-        if (!saved) upsertMemory(memory.nameEntriesByCompany, scope.companyId, next);
+        await setNameEntryToFirestore(scope.companyId, next);
     } catch {
-        upsertMemory(memory.nameEntriesByCompany, scope.companyId, next);
+        // fall back to warm memory when Firestore is unavailable
     }
+    upsertMemory(memory.nameEntriesByCompany, scope.companyId, next);
+    touchReadCache(readCacheTouchedAt.nameEntriesByCompany, scope.companyId);
     return next;
 }
 
@@ -689,6 +747,7 @@ export async function createCatalogSupplier(input: Partial<SupplierDoc>, company
         return null;
     }
     upsertMemory(memory.suppliersByCompany, companyId, next);
+    touchReadCache(readCacheTouchedAt.suppliersByCompany, companyId);
     debugCatalogLog("create_supplier:success", { companyId, path, recordId: next.id });
     return next;
 }
@@ -716,6 +775,7 @@ export async function updateCatalogSupplier(supplierId: string, input: Partial<S
         return null;
     }
     upsertMemory(memory.suppliersByCompany, companyId, next);
+    touchReadCache(readCacheTouchedAt.suppliersByCompany, companyId);
     debugCatalogLog("update_supplier:success", { companyId, path, recordId: next.id });
     return next;
 }
@@ -737,6 +797,7 @@ export async function deleteCatalogSupplier(supplierId: string, companyIdOverrid
         return false;
     }
     removeFromMemory(memory.suppliersByCompany, companyId, target);
+    touchReadCache(readCacheTouchedAt.suppliersByCompany, companyId);
     debugCatalogLog("delete_supplier:success", { companyId, path, recordId: target });
     return true;
 }
@@ -744,15 +805,16 @@ export async function deleteCatalogSupplier(supplierId: string, companyIdOverrid
 export async function updateCatalogProductNameEntry(entryId: string, input: Partial<ProductNameEntryDoc>): Promise<ProductNameEntryDoc | null> {
     const scope = await resolveSessionScope();
     if (!scope) return null;
-    const current = (await listCatalogProductNameEntries()).find((item) => item.id === safeText(entryId, 120));
+    const current = (await listCatalogProductNameEntries("", scope.companyId)).find((item) => item.id === safeText(entryId, 120));
     if (!current) return null;
     const next = normalizeNameEntry({ ...current, ...input, id: current.id, companyId: scope.companyId, updatedAt: nowIso() });
     try {
-        const saved = await setNameEntryToFirestore(scope.companyId, next);
-        if (!saved) upsertMemory(memory.nameEntriesByCompany, scope.companyId, next);
+        await setNameEntryToFirestore(scope.companyId, next);
     } catch {
-        upsertMemory(memory.nameEntriesByCompany, scope.companyId, next);
+        // fall back to warm memory when Firestore is unavailable
     }
+    upsertMemory(memory.nameEntriesByCompany, scope.companyId, next);
+    touchReadCache(readCacheTouchedAt.nameEntriesByCompany, scope.companyId);
     return next;
 }
 
@@ -762,19 +824,20 @@ export async function deleteCatalogProductNameEntry(entryId: string): Promise<bo
     const target = safeText(entryId, 120);
     if (!target) return false;
     try {
-        const deleted = await deleteNameEntryInFirestore(scope.companyId, target);
-        if (deleted === null) removeFromMemory(memory.nameEntriesByCompany, scope.companyId, target);
+        await deleteNameEntryInFirestore(scope.companyId, target);
     } catch {
-        removeFromMemory(memory.nameEntriesByCompany, scope.companyId, target);
+        // fall back to warm memory when Firestore is unavailable
     }
+    removeFromMemory(memory.nameEntriesByCompany, scope.companyId, target);
+    touchReadCache(readCacheTouchedAt.nameEntriesByCompany, scope.companyId);
     return true;
 }
 
 export async function getCatalogDimensionBundle(companyIdOverride?: string): Promise<DimensionPickerBundle> {
     const [categories, brands, models] = await Promise.all([
         listCatalogCategories("", companyIdOverride),
-        listCatalogBrands(),
-        listCatalogModels(),
+        listCatalogBrands("", companyIdOverride),
+        listCatalogModels("", companyIdOverride),
     ]);
 
     const toOption = (item: { id: string; name: string; slug: string; status: CatalogRecordStatus }) => ({

@@ -1,6 +1,5 @@
 import "server-only";
-import { listCompanyCustomers } from "@/lib/services/merchant/customer-read-model.service";
-import { getCustomerRelationshipSnapshot } from "@/lib/services/customer360";
+import { listCustomerRelationshipRecords } from "@/lib/services/merchant/customer-relationship-read-model.service";
 
 export type MerchantRelationshipRow = {
     customerId: string;
@@ -15,14 +14,10 @@ export type MerchantRelationshipRow = {
 };
 
 export async function getMerchantRelationshipOverview(): Promise<MerchantRelationshipRow[]> {
-    const customers = await listCompanyCustomers();
-    const snapshots = await Promise.all(customers.map((customer) => getCustomerRelationshipSnapshot(customer.id)));
+    const records = await listCustomerRelationshipRecords();
 
-    return customers
-        .map((customer, index): MerchantRelationshipRow | null => {
-            const snapshot = snapshots[index];
-            if (!snapshot) return null;
-
+    return records
+        .map(({ customer, snapshot }): MerchantRelationshipRow => {
             const activeConsignments = snapshot.consignments.filter(
                 (consignment) =>
                     consignment.status === "active" ||
@@ -44,6 +39,5 @@ export async function getMerchantRelationshipOverview(): Promise<MerchantRelatio
                 ),
             };
         })
-        .filter((row): row is MerchantRelationshipRow => row !== null)
         .sort((a, b) => a.customerName.localeCompare(b.customerName, "zh-Hant"));
 }

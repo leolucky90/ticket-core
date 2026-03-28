@@ -8,8 +8,13 @@ import type {
 
 export type ShowContentLocale = "zh" | "en";
 
-export type ShowContentBlockType = "hero" | "about" | "services" | "contact" | "ad";
-export type ShowContentBlockId = ShowContentBlockType;
+export type ShowContentTemplateType = "hero" | "about" | "services" | "contact" | "ad" | "cta" | "promo";
+export type ShowContentBlockType = ShowContentTemplateType;
+export type ShowContentBlockId = string;
+
+export type ShowContentHeroVariant = "left-copy" | "center-copy" | "split-screen";
+export type ShowContentAdVariant = "single-banner" | "slider" | "card-rail";
+export type ShowContentBlockVariant = "default" | ShowContentHeroVariant | ShowContentAdVariant;
 
 export type ShowContentFontFamily = "default" | "serif" | "mono";
 export type ShowContentTitleScale = "md" | "lg" | "xl";
@@ -61,6 +66,8 @@ export type ShowContentBlockContentMap = {
     services: ShowServicesBlockContent;
     contact: ShowContactBlockContent;
     ad: ShowAdBlockContent;
+    cta: ShowSharedBlockContent;
+    promo: ShowSharedBlockContent;
 };
 
 export type ShowContentBlockStyles = BlockStyleConfig & {
@@ -82,6 +89,7 @@ export type ShowContentBlock<TType extends ShowContentBlockType = ShowContentBlo
     assets: Record<string, ImageAsset | ImageAsset[] | undefined>;
     ctas: BlockCtaConfig[];
     typography: ShowContentTypography;
+    variant: ShowContentBlockVariant;
     kicker: string;
     title: string;
     body: string;
@@ -102,15 +110,12 @@ export type PersistedShowContentBlock<TType extends ShowContentBlockType = ShowC
     assets: Record<string, ImageAsset | ImageAsset[] | undefined>;
     ctas: BlockCtaConfig[];
     typography: ShowContentTypography;
+    variant?: ShowContentBlockVariant;
 };
 
-export type ShowContentLocaleMap = {
-    [K in ShowContentBlockType]: ShowContentBlock<K>;
-};
+export type ShowContentLocaleMap = Record<ShowContentBlockId, ShowContentBlock>;
 
-export type PersistedShowContentLocaleMap = {
-    [K in ShowContentBlockType]: PersistedShowContentBlock<K>;
-};
+export type PersistedShowContentLocaleMap = Record<ShowContentBlockId, PersistedShowContentBlock>;
 
 export type ShowContentState = {
     order: ShowContentBlockId[];

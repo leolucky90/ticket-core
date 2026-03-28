@@ -43,9 +43,32 @@ Run:
 pnpm reset:firebase
 ```
 
-This script clears old shared collections and recreates:
+This script clears demo Firestore baseline and recreates:
 
-- Company A / Company B
-- A/B admin and customer auth accounts
-- A/B user docs and customer docs
-- one sample case and one sample sale per company
+- official homepage baseline at `app_config/business_homepage`
+- Company A / Company B company roots under `companies/{companyId}`
+- A/B admin and customer Firebase Auth accounts
+- A/B user docs, customer docs, staff baseline, company profile, security settings
+- one sample ticket and one sample sale per company
+- Company A baseline
+  - `companyId`: `company_a`
+  - public route: `/company_a`
+  - merchant login: `admina@gmail.com` / `123456`
+  - customer login: `cxa@gmail.com` / `123456`
+  - customer dashboard: `/company_a/dashboard`
+- Company B baseline
+  - `companyId`: `company_b`
+  - public route: `/company_b`
+  - merchant login: `adminb@gmail.com` / `123456`
+  - customer login: `cxb@gmail.com` / `123456`
+  - customer dashboard: `/company_b/dashboard`
+
+Boundary note:
+
+- `BossAdmin` remains hidden `/bossadmin` cookie auth and is not seeded as a Firebase `users/{uid}` role account
+
+Environment note:
+
+- emulator mode requires both `FIRESTORE_EMULATOR_HOST` and `FIREBASE_AUTH_EMULATOR_HOST`
+- hosted Firebase mode requires `FIREBASE_ADMIN_JSON_BASE64`
+- hybrid mode is not supported by the reset script

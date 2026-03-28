@@ -13,6 +13,7 @@ import { getUserCompanyId, getUserDoc, toAccountType } from "@/lib/services/user
 const MAX_TEXT = 160;
 const MAX_LONG = 800;
 const MAX_LIST_SIZE = 500;
+const READ_CACHE_TTL_MS = 30_000;
 
 type SessionScope = {
     companyId: string;
@@ -24,6 +25,18 @@ const memory: {
     entitlementsByCompany: Record<string, CampaignEntitlementDoc[]>;
     consignmentsByCompany: Record<string, ConsignmentDoc[]>;
     redemptionsByCompany: Record<string, ConsignmentRedemptionDoc[]>;
+} = {
+    campaignsByCompany: {},
+    entitlementsByCompany: {},
+    consignmentsByCompany: {},
+    redemptionsByCompany: {},
+};
+
+const readCacheTouchedAt: {
+    campaignsByCompany: Record<string, number>;
+    entitlementsByCompany: Record<string, number>;
+    consignmentsByCompany: Record<string, number>;
+    redemptionsByCompany: Record<string, number>;
 } = {
     campaignsByCompany: {},
     entitlementsByCompany: {},
@@ -165,6 +178,15 @@ function replaceMemoryList<T>(store: Record<string, T[]>, companyId: string, nex
 function upsertMemory<T extends { id: string }>(store: Record<string, T[]>, companyId: string, value: T) {
     const list = store[companyId] ?? [];
     store[companyId] = [value, ...list.filter((item) => item.id !== value.id)];
+}
+
+function hasFreshReadCache(store: Record<string, number>, companyId: string): boolean {
+    const touchedAt = store[companyId] ?? 0;
+    return touchedAt > 0 && Date.now() - touchedAt <= READ_CACHE_TTL_MS;
+}
+
+function touchReadCache(store: Record<string, number>, companyId: string) {
+    store[companyId] = Date.now();
 }
 
 function normalizeCampaign(input: Partial<CampaignDoc> & { id: string; companyId: string }): CampaignDoc {
@@ -448,16 +470,21 @@ export async function listCampaigns(): Promise<CampaignDoc[]> {
     const scope = await resolveSessionScope();
     if (!scope) return [];
     let list: CampaignDoc[] = [];
-    try {
-        const fsList = await listCampaignsFromFirestore(scope.companyId);
-        if (fsList) {
-            list = fsList;
-            replaceMemoryList(memory.campaignsByCompany, scope.companyId, fsList);
-        } else {
+    if (hasFreshReadCache(readCacheTouchedAt.campaignsByCompany, scope.companyId)) {
+        list = listFromMemory(memory.campaignsByCompany, scope.companyId);
+    } else {
+        try {
+            const fsList = await listCampaignsFromFirestore(scope.companyId);
+            if (fsList) {
+                list = fsList;
+                replaceMemoryList(memory.campaignsByCompany, scope.companyId, fsList);
+                touchReadCache(readCacheTouchedAt.campaignsByCompany, scope.companyId);
+            } else {
+                list = listFromMemory(memory.campaignsByCompany, scope.companyId);
+            }
+        } catch {
             list = listFromMemory(memory.campaignsByCompany, scope.companyId);
         }
-    } catch {
-        list = listFromMemory(memory.campaignsByCompany, scope.companyId);
     }
 
     const [entitlements, consignments] = await Promise.all([listCampaignEntitlements(), listConsignments()]);
@@ -492,6 +519,7 @@ export async function createCampaign(input: Partial<CampaignDoc>): Promise<Campa
     } catch {
         upsertMemory(memory.campaignsByCompany, scope.companyId, next);
     }
+    touchReadCache(readCacheTouchedAt.campaignsByCompany, scope.companyId);
     return next;
 }
 
@@ -513,6 +541,7 @@ export async function updateCampaign(campaignId: string, input: Partial<Campaign
     } catch {
         upsertMemory(memory.campaignsByCompany, scope.companyId, next);
     }
+    touchReadCache(readCacheTouchedAt.campaignsByCompany, scope.companyId);
     return next;
 }
 
@@ -520,16 +549,21 @@ export async function listCampaignEntitlements(): Promise<CampaignEntitlementDoc
     const scope = await resolveSessionScope();
     if (!scope) return [];
     let list: CampaignEntitlementDoc[] = [];
-    try {
-        const fsList = await listEntitlementsFromFirestore(scope.companyId);
-        if (fsList) {
-            list = fsList;
-            replaceMemoryList(memory.entitlementsByCompany, scope.companyId, fsList);
-        } else {
+    if (hasFreshReadCache(readCacheTouchedAt.entitlementsByCompany, scope.companyId)) {
+        list = listFromMemory(memory.entitlementsByCompany, scope.companyId);
+    } else {
+        try {
+            const fsList = await listEntitlementsFromFirestore(scope.companyId);
+            if (fsList) {
+                list = fsList;
+                replaceMemoryList(memory.entitlementsByCompany, scope.companyId, fsList);
+                touchReadCache(readCacheTouchedAt.entitlementsByCompany, scope.companyId);
+            } else {
+                list = listFromMemory(memory.entitlementsByCompany, scope.companyId);
+            }
+        } catch {
             list = listFromMemory(memory.entitlementsByCompany, scope.companyId);
         }
-    } catch {
-        list = listFromMemory(memory.entitlementsByCompany, scope.companyId);
     }
     return list.map((item) => normalizeEntitlement(item)).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
 }
@@ -553,6 +587,7 @@ export async function createCampaignEntitlement(input: Partial<CampaignEntitleme
     } catch {
         upsertMemory(memory.entitlementsByCompany, scope.companyId, next);
     }
+    touchReadCache(readCacheTouchedAt.entitlementsByCompany, scope.companyId);
     return next;
 }
 
@@ -560,16 +595,21 @@ export async function listConsignments(): Promise<ConsignmentDoc[]> {
     const scope = await resolveSessionScope();
     if (!scope) return [];
     let list: ConsignmentDoc[] = [];
-    try {
-        const fsList = await listConsignmentsFromFirestore(scope.companyId);
-        if (fsList) {
-            list = fsList;
-            replaceMemoryList(memory.consignmentsByCompany, scope.companyId, fsList);
-        } else {
+    if (hasFreshReadCache(readCacheTouchedAt.consignmentsByCompany, scope.companyId)) {
+        list = listFromMemory(memory.consignmentsByCompany, scope.companyId);
+    } else {
+        try {
+            const fsList = await listConsignmentsFromFirestore(scope.companyId);
+            if (fsList) {
+                list = fsList;
+                replaceMemoryList(memory.consignmentsByCompany, scope.companyId, fsList);
+                touchReadCache(readCacheTouchedAt.consignmentsByCompany, scope.companyId);
+            } else {
+                list = listFromMemory(memory.consignmentsByCompany, scope.companyId);
+            }
+        } catch {
             list = listFromMemory(memory.consignmentsByCompany, scope.companyId);
         }
-    } catch {
-        list = listFromMemory(memory.consignmentsByCompany, scope.companyId);
     }
     return list.map((item) => normalizeConsignment(item)).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
 }
@@ -593,6 +633,7 @@ export async function createConsignment(input: Partial<ConsignmentDoc>): Promise
     } catch {
         upsertMemory(memory.consignmentsByCompany, scope.companyId, next);
     }
+    touchReadCache(readCacheTouchedAt.consignmentsByCompany, scope.companyId);
     return next;
 }
 
@@ -600,16 +641,21 @@ export async function listConsignmentRedemptions(): Promise<ConsignmentRedemptio
     const scope = await resolveSessionScope();
     if (!scope) return [];
     let list: ConsignmentRedemptionDoc[] = [];
-    try {
-        const fsList = await listRedemptionsFromFirestore(scope.companyId);
-        if (fsList) {
-            list = fsList;
-            replaceMemoryList(memory.redemptionsByCompany, scope.companyId, fsList);
-        } else {
+    if (hasFreshReadCache(readCacheTouchedAt.redemptionsByCompany, scope.companyId)) {
+        list = listFromMemory(memory.redemptionsByCompany, scope.companyId);
+    } else {
+        try {
+            const fsList = await listRedemptionsFromFirestore(scope.companyId);
+            if (fsList) {
+                list = fsList;
+                replaceMemoryList(memory.redemptionsByCompany, scope.companyId, fsList);
+                touchReadCache(readCacheTouchedAt.redemptionsByCompany, scope.companyId);
+            } else {
+                list = listFromMemory(memory.redemptionsByCompany, scope.companyId);
+            }
+        } catch {
             list = listFromMemory(memory.redemptionsByCompany, scope.companyId);
         }
-    } catch {
-        list = listFromMemory(memory.redemptionsByCompany, scope.companyId);
     }
     return list.map((item) => normalizeRedemption(item)).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
 }
@@ -687,12 +733,14 @@ export async function redeemConsignment(input: {
     } catch {
         upsertMemory(memory.redemptionsByCompany, scope.companyId, redemption);
     }
+    touchReadCache(readCacheTouchedAt.redemptionsByCompany, scope.companyId);
     try {
         const saved = await saveConsignment(scope.companyId, nextConsignment);
         if (!saved) upsertMemory(memory.consignmentsByCompany, scope.companyId, nextConsignment);
     } catch {
         upsertMemory(memory.consignmentsByCompany, scope.companyId, nextConsignment);
     }
+    touchReadCache(readCacheTouchedAt.consignmentsByCompany, scope.companyId);
 
     if (consignment.entitlementId) {
         const entitlement = (await listCampaignEntitlements()).find((item) => item.id === consignment.entitlementId);
@@ -711,6 +759,7 @@ export async function redeemConsignment(input: {
             } catch {
                 upsertMemory(memory.entitlementsByCompany, scope.companyId, nextEntitlement);
             }
+            touchReadCache(readCacheTouchedAt.entitlementsByCompany, scope.companyId);
         }
     }
 

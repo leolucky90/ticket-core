@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CirclePlus, Eye, ShoppingCart, Trash2 } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { MerchantSectionCard } from "@/components/merchant/shell";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -318,15 +318,12 @@ export function CheckoutWorkspace({
 
     return (
         <div className="space-y-4">
-            <Card className="rounded-xl p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                    <div>
-                        <div className="text-base font-semibold">結帳中心</div>
-                        <div className="text-xs text-[rgb(var(--muted))]">建立可追蹤的收據明細，供客戶歷史與分析使用</div>
-                    </div>
-                    <IconTextActionButton icon={ShoppingCart} href="/dashboard?tab=inventory" label="前往庫存管理" tooltip="前往庫存管理" />
-                </div>
-
+            <MerchantSectionCard
+                title="結帳中心"
+                description="建立可追蹤的收據明細，供客戶歷史與分析使用。"
+                actions={<IconTextActionButton icon={ShoppingCart} href="/dashboard?tab=inventory" label="前往庫存管理" tooltip="前往庫存管理" />}
+                bodyClassName="space-y-3"
+            >
                 <form action={createCheckoutAction} className="grid gap-3">
                     <div className="grid gap-2 md:grid-cols-3">
                         <label className="grid gap-1 text-sm">
@@ -365,8 +362,7 @@ export function CheckoutWorkspace({
                         </label>
                     </div>
 
-                    <Card className="rounded-xl p-3">
-                        <div className="mb-2 text-sm font-semibold">客戶</div>
+                    <MerchantSectionCard title="客戶" bodyClassName="space-y-2">
                         <div className="grid gap-2 md:grid-cols-3">
                             <label className="grid gap-1 text-sm">
                                 <span className="text-xs text-[rgb(var(--muted))]">客戶類型</span>
@@ -447,10 +443,9 @@ export function CheckoutWorkspace({
                             name="customerEmail"
                             value={customerMode === "customer" ? selectedCustomer?.email ?? "" : defaultCompanyCustomer.email}
                         />
-                    </Card>
+                    </MerchantSectionCard>
 
-                    <Card className="rounded-xl p-3">
-                        <div className="mb-2 text-sm font-semibold">促銷活動（可多選）</div>
+                    <MerchantSectionCard title="促銷活動（可多選）" bodyClassName="space-y-3">
                         {activeActivities.length === 0 ? (
                             <div className="text-sm text-[rgb(var(--muted))]">目前沒有活動中的資料。</div>
                         ) : (
@@ -651,10 +646,9 @@ export function CheckoutWorkspace({
                                 })}
                             />
                         ))}
-                    </Card>
+                    </MerchantSectionCard>
 
-                    <Card className="rounded-xl p-3">
-                        <div className="mb-2 text-sm font-semibold">案件（可多選）</div>
+                    <MerchantSectionCard title="案件（可多選）" bodyClassName="space-y-2">
                         {customerMode !== "customer" || !selectedCustomer ? (
                             <div className="text-sm text-[rgb(var(--muted))]">選擇客戶後，若有進行中案件可在此勾選結帳案件。</div>
                         ) : availableCases.length === 0 ? (
@@ -708,13 +702,13 @@ export function CheckoutWorkspace({
                             </label>
                         ) : null}
                         <input type="hidden" name="closeCase" value={closeCase ? "1" : "0"} />
-                    </Card>
+                    </MerchantSectionCard>
 
-                    <Card className="rounded-xl p-3">
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                            <div className="text-sm font-semibold">商品明細</div>
-                            <IconTextActionButton icon={CirclePlus} type="button" label="加入商品" tooltip="加入一般商品明細" onClick={() => appendLine()} />
-                        </div>
+                    <MerchantSectionCard
+                        title="商品明細"
+                        actions={<IconTextActionButton icon={CirclePlus} type="button" label="加入商品" tooltip="加入一般商品明細" onClick={() => appendLine()} />}
+                        bodyClassName="space-y-3"
+                    >
                         <div className="mb-3">
                             <MerchantPredictiveSearchInput
                                 placeholder="快速搜尋商品加入明細（名稱、SKU、別名、分類、品牌、型號）"
@@ -874,10 +868,9 @@ export function CheckoutWorkspace({
                                 );
                             })}
                         </div>
-                    </Card>
+                    </MerchantSectionCard>
 
-                    <Card className="rounded-xl p-3">
-                        <div className="mb-2 text-sm font-semibold">收據預覽</div>
+                    <MerchantSectionCard title="收據預覽">
                         <div className="grid gap-1 text-sm">
                             <div>客戶：{customerMode === "customer" ? selectedCustomer?.name || "未選擇" : defaultCompanyCustomer.name}</div>
                             {customerMode !== "customer" &&
@@ -932,7 +925,7 @@ export function CheckoutWorkspace({
                             </div>
                             <div className="text-base font-semibold">總金額：{formatMoney(totalAmount)}</div>
                         </div>
-                    </Card>
+                    </MerchantSectionCard>
 
                     <div className="flex flex-wrap gap-2">
                         <IconTextActionButton
@@ -945,7 +938,7 @@ export function CheckoutWorkspace({
                         <IconTextActionButton icon={Eye} href="/dashboard/receipts" label="收據中心" tooltip="查看收據中心" />
                     </div>
                 </form>
-            </Card>
+            </MerchantSectionCard>
         </div>
     );
 }

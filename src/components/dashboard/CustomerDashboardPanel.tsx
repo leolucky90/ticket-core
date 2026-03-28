@@ -1,5 +1,4 @@
 import { Card } from "@/components/ui/card";
-import { Section } from "@/components/ui/section";
 import type { Ticket } from "@/lib/types/ticket";
 
 function formatDateTime(timestamp: number): string {
@@ -18,7 +17,7 @@ export function CustomerDashboardPanel({ tickets }: { tickets: Ticket[] }) {
     const totalSpent = tickets.reduce((sum, ticket) => sum + Math.max(0, ticket.repairAmount || 0), 0);
 
     return (
-        <Section title="客戶儀錶板">
+        <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-4">
                 <Card>
                     <div className="text-xs text-[rgb(var(--muted))]">我的案件數</div>
@@ -97,6 +96,6 @@ export function CustomerDashboardPanel({ tickets }: { tickets: Ticket[] }) {
                     </div>
                 )}
             </Card>
-        </Section>
+        </div>
     );
 }

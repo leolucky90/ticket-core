@@ -158,6 +158,15 @@ body {
   }
 }
 
+@keyframes routeProgressSlide {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(260%);
+  }
+}
+
 .biz-grid {
   background-image:
     linear-gradient(to right, var(--biz-grid-line, rgba(255, 255, 255, 0.06)) 1px, transparent 1px),
@@ -193,13 +202,32 @@ body {
   animation: bizShimmer 3.2s linear infinite;
 }
 
+.route-progress-track {
+  overflow: hidden;
+  background: color-mix(in srgb, rgb(var(--panel2)) 78%, transparent);
+}
+
+.route-progress-bar {
+  width: 38%;
+  min-width: 160px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(var(--accent)) 35%,
+    color-mix(in srgb, rgb(var(--accent)) 70%, rgb(var(--panel)) 30%) 100%
+  );
+  box-shadow: 0 0 18px color-mix(in srgb, rgb(var(--accent)) 40%, transparent);
+  animation: routeProgressSlide 1.15s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .biz-fade-up,
   .biz-float,
   .biz-pulse,
   .biz-rotate-slow,
   .biz-marquee,
-  .biz-shimmer {
+  .biz-shimmer,
+  .route-progress-bar {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;

@@ -1,56 +1,66 @@
 import type { StaffMember } from "@/lib/schema";
+import { MerchantSectionCard } from "@/components/merchant/shell";
 import { StaffGoogleBindingClient } from "@/components/account/StaffGoogleBindingClient";
 import { ChangePasswordForm } from "@/components/settings/ChangePasswordForm";
-import { Card } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import type { UiLanguage } from "@/lib/i18n/ui-text";
+import { getUiText } from "@/lib/i18n/ui-text";
 
 type AccountSecurityPanelProps = {
     email: string;
     staff: StaffMember | null;
+    lang: UiLanguage;
 };
 
-export function AccountSecurityPanel({ email, staff }: AccountSecurityPanelProps) {
+export function AccountSecurityPanel({ email, staff, lang }: AccountSecurityPanelProps) {
+    const ui = getUiText(lang);
     const linked = Boolean(staff?.googleLinked);
     return (
         <div className="grid max-w-3xl gap-4">
-            <Card className="grid gap-2">
-                <div className="flex items-center justify-between gap-2">
-                    <div className="text-sm font-medium">帳號安全狀態</div>
-                    <StatusBadge label={staff?.status ?? "unknown"} tone={staff?.status === "active" ? "success" : "warning"} />
-                </div>
+            <MerchantSectionCard
+                title={ui.accountSecurity.statusTitle}
+                actions={<StatusBadge label={staff?.status ?? "unknown"} tone={staff?.status === "active" ? "success" : "warning"} />}
+            >
                 <div className="grid gap-1 text-sm text-[rgb(var(--muted))]">
-                    <div>主信箱：{email}</div>
-                    <div>最後登入：{staff?.lastLoginAt ?? "-"}</div>
-                    <div>Google 綁定：{linked ? "已綁定" : "未綁定"}</div>
-                    <div>需下次改密碼：{staff?.mustChangePassword ? "是" : "否"}</div>
+                    <div>{ui.accountSecurity.primaryEmail}：{email}</div>
+                    <div>{ui.accountSecurity.lastSignIn}：{staff?.lastLoginAt ?? "-"}</div>
+                    <div>{ui.accountSecurity.googleBinding}：{linked ? ui.accountSecurity.linked : ui.accountSecurity.notLinked}</div>
+                    <div>{ui.accountSecurity.requirePasswordChange}：{staff?.mustChangePassword ? ui.accountSecurity.yes : ui.accountSecurity.no}</div>
                 </div>
-            </Card>
+            </MerchantSectionCard>
 
-            <Card className="grid gap-2">
-                <div className="text-sm font-medium">Google 綁定</div>
+            <MerchantSectionCard title={ui.accountSecurity.googleBindingTitle}>
                 {staff ? (
                     <StaffGoogleBindingClient
                         staffId={staff.id}
                         primaryEmail={staff.email}
                         linked={Boolean(staff.googleLinked)}
                         googleEmail={staff.googleEmail}
+                        labels={{
+                            statusPrefix: ui.googleBinding.statusPrefix,
+                            linked: ui.accountSecurity.linked,
+                            notLinked: ui.accountSecurity.notLinked,
+                            bindAction: ui.googleBinding.bindAction,
+                            bindLoading: ui.googleBinding.bindLoading,
+                            unbindAction: ui.googleBinding.unbindAction,
+                            unbindLoading: ui.googleBinding.unbindLoading,
+                            linkSuccess: ui.googleBinding.linkSuccess,
+                            unlinkSuccess: ui.googleBinding.unlinkSuccess,
+                            requireEmailPassword: ui.googleBinding.requireEmailPassword,
+                            emailMustMatch: ui.googleBinding.emailMustMatch,
+                            emailMismatch: ui.googleBinding.emailMismatch,
+                        }}
                     />
                 ) : (
-                    <div className="text-sm text-[rgb(var(--muted))]">目前帳號尚未建立 staff profile，無法綁定 Google。</div>
+                    <div className="text-sm text-[rgb(var(--muted))]">{ui.accountSecurity.noStaffProfile}</div>
                 )}
-            </Card>
+            </MerchantSectionCard>
 
-            <Card>
-                <ChangePasswordForm email={email} />
-            </Card>
+            <ChangePasswordForm email={email} labels={ui.changePassword} />
 
-            <Card className="grid gap-2">
-                <div className="text-sm font-medium">兩步驟驗證（2FA）</div>
-                <div className="text-sm text-[rgb(var(--muted))]">
-                    目前保留擴充架構，後續可接入 OTP / TOTP / WebAuthn。
-                </div>
-            </Card>
+            <MerchantSectionCard title={ui.accountSecurity.twoFactorTitle}>
+                <div className="text-sm text-[rgb(var(--muted))]">{ui.accountSecurity.twoFactorHint}</div>
+            </MerchantSectionCard>
         </div>
     );
 }
-

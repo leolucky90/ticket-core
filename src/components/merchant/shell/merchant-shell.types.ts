@@ -42,6 +42,13 @@ export type MerchantToolbarProps = {
     className?: string;
 };
 
+export type MerchantListPaginationProps = {
+    summary?: ReactNode;
+    previousAction?: ReactNode;
+    nextAction?: ReactNode;
+    className?: string;
+};
+
 export type MerchantStatItem = {
     id: string;
     label: string;
@@ -68,6 +75,13 @@ export type MerchantSidebarGroup = {
     id: string;
     title: string;
     items: MerchantSidebarItem[];
+};
+
+export type MerchantTopbarLink = {
+    id: string;
+    label: string;
+    href: string;
+    external?: boolean;
 };
 
 export type MerchantSidebarIcon =

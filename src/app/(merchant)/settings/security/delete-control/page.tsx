@@ -1,6 +1,8 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { MerchantPageShell } from "@/components/merchant/shell";
 import { DeleteControlSettingsForm } from "@/components/settings/DeleteControlSettingsForm";
+import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
 import { getSecuritySettings, updateSecuritySettings } from "@/lib/services/security-settings.service";
 
 type DeleteControlPageProps = {
@@ -21,6 +23,9 @@ function toLevel(formData: FormData, key: string, fallback: number): number {
 }
 
 export default async function DeleteControlPage({ searchParams }: DeleteControlPageProps) {
+    const cookieStore = await cookies();
+    const lang = getUiLanguage(cookieStore.get("lang")?.value);
+    const ui = getUiText(lang).deleteControl;
     const settings = await getSecuritySettings();
     const sp = await searchParams;
 
@@ -46,18 +51,17 @@ export default async function DeleteControlPage({ searchParams }: DeleteControlP
                     employeeStrictOwnerOnly: toBool(formData, "employeeStrictOwnerOnly"),
                 },
             });
-            redirect(`/settings/security/delete-control?flash=${encodeURIComponent("設定已更新")}&ts=${Date.now()}`);
+            redirect(`/settings/security/delete-control?flash=${encodeURIComponent(ui.updated)}&ts=${Date.now()}`);
         } catch (error) {
-            const message = error instanceof Error ? error.message : "更新失敗";
+            const message = error instanceof Error ? error.message : ui.updateFailed;
             redirect(`/settings/security/delete-control?flash=${encodeURIComponent(message)}&ts=${Date.now()}`);
         }
     }
 
     return (
-        <MerchantPageShell title="Delete Security Control" subtitle="管理刪除安全策略與權限閾值" width="index">
+        <MerchantPageShell title={ui.pageTitle} subtitle={ui.pageSubtitle} width="index">
             {sp.flash ? <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2 text-sm">{sp.flash}</div> : null}
-            <DeleteControlSettingsForm settings={settings} canEdit={true} saveAction={saveAction} />
+            <DeleteControlSettingsForm settings={settings} canEdit={true} saveAction={saveAction} lang={lang} />
         </MerchantPageShell>
     );
 }
-

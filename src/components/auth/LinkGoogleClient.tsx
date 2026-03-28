@@ -25,6 +25,7 @@ export function LinkGoogleClient({
         if (!u) return false;
         return (u.providerData ?? []).some((p: UserInfo) => p.providerId === "google.com");
     });
+    const [linking, setLinking] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
 
     // keep linked state in sync if auth state changes
@@ -49,9 +50,13 @@ export function LinkGoogleClient({
             <AuthButton
                 type="button"
                 variant="primary"
-                disabled={disabled || !firebaseClientReady}
+                disabled={disabled || !firebaseClientReady || linking}
+                loading={linking}
+                loadingLabel="處理中..."
                 onClick={async () => {
                     try {
+                        setLinking(true);
+                        setMessage(null);
                         if (!firebaseClientReady) throw new Error(getFirebaseClientErrorMessage(null));
                         const fbAuth = getFirebaseClientAuth();
                         const fbGoogleProvider = getFirebaseGoogleProvider();
@@ -76,6 +81,8 @@ export function LinkGoogleClient({
                         await fetch("/api/auth/bootstrap", { method: "POST" });
                     } catch (error) {
                         setMessage(getFirebaseClientErrorMessage(error));
+                    } finally {
+                        setLinking(false);
                     }
                 }}
             >

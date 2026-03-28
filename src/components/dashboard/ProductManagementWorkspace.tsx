@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, Filter, PackagePlus, PackageSearch, Plus, Rotate
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import {
     FilterCard,
+    MerchantListPagination,
     MerchantListShell,
     MerchantSectionCard,
     SearchToolbar,
@@ -505,9 +506,9 @@ export function ProductManagementWorkspace({
         >
             {products.length === 0 ? null : (
                 <div className="space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[rgb(var(--muted))]">
-                        <span>本頁顯示 {products.length} 筆，清單高度固定並可滾動。</span>
-                        <div className="flex flex-wrap items-center gap-2">
+                    <MerchantListPagination
+                        summary={<span>本頁顯示 {products.length} 筆，清單高度固定並可滾動。</span>}
+                        previousAction={
                             <form action="/dashboard/products" method="get">
                                 {renderBaseQueryInputs()}
                                 {previousCursor ? <input type="hidden" name="cursor" value={previousCursor} /> : null}
@@ -523,6 +524,8 @@ export function ProductManagementWorkspace({
                                     上一頁
                                 </IconTextActionButton>
                             </form>
+                        }
+                        nextAction={
                             <form action="/dashboard/products" method="get">
                                 {renderBaseQueryInputs()}
                                 <input type="hidden" name="cursor" value={nextCursor} />
@@ -538,8 +541,8 @@ export function ProductManagementWorkspace({
                                     下一頁
                                 </IconTextActionButton>
                             </form>
-                        </div>
-                    </div>
+                        }
+                    />
                     <div className="h-[720px] overflow-y-auto pr-1">
                         <div className="grid gap-2">
                             {products.map((product) => (

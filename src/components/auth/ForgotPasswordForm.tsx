@@ -63,8 +63,14 @@ export function ForgotPasswordForm({ loginHref, authTenantId = null }: ForgotPas
                     onChange={(event) => setEmail(event.target.value)}
                 />
             </div>
-            <AuthButton variant="primary" type="submit" disabled={submitting || !firebaseClientReady}>
-                {submitting ? "寄送中..." : "寄送重設連結"}
+            <AuthButton
+                variant="primary"
+                type="submit"
+                disabled={submitting || !firebaseClientReady}
+                loading={submitting}
+                loadingLabel="寄送中..."
+            >
+                寄送重設連結
             </AuthButton>
             {message ? <div className="auth-muted text-sm">{message}</div> : null}
             <div className="text-center text-xs text-[rgb(var(--muted))]">

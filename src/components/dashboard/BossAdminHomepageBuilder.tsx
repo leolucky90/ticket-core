@@ -3,9 +3,12 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ProcessingIndicator } from "@/components/ui/processing-indicator";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { BusinessLandingPage } from "@/features/business/components/BusinessLandingPage";
+import type { UiLanguage } from "@/lib/i18n/ui-text";
+import { getUiText } from "@/lib/i18n/ui-text";
 import {
     DEFAULT_BUSINESS_HOMEPAGE_CONTENT_STATE,
     normalizeBusinessHomepageContentState,
@@ -15,6 +18,7 @@ import {
 } from "@/features/business/services/businessHomepageContent";
 
 type BossAdminHomepageBuilderProps = {
+    lang: UiLanguage;
     initialState: BusinessHomepageContentState;
     hasSavedPreferences?: boolean;
 };
@@ -27,17 +31,11 @@ type PreviewScale = 0.5 | 0.6 | 0.7 | 0.8 | 0.9 | 1 | 1.1 | 1.2;
 const PREVIEW_SCALE_STEPS: PreviewScale[] = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2];
 const DEFAULT_PREVIEW_SCALE: PreviewScale = 0.7;
 
-const sectionLabels: Record<BuilderSectionId, string> = {
-    hero: "Hero",
-    closing: "Closing CTA",
-    theme: "Theme",
-};
-
-const themeOptions: Array<{ value: BusinessHomepageThemePreset; label: string; hint: string }> = [
-    { value: "forest", label: "Forest", hint: "綠色、沉穩、營運系統感" },
-    { value: "ocean", label: "Ocean", hint: "藍色、理性、SaaS 感" },
-    { value: "sunset", label: "Sunset", hint: "橘色、提案、展示感" },
-    { value: "slate", label: "Slate", hint: "灰藍、專業、平台感" },
+const themeOptions: Array<{ value: BusinessHomepageThemePreset; label: Record<UiLanguage, string>; hint: Record<UiLanguage, string> }> = [
+    { value: "forest", label: { zh: "森林", en: "Forest" }, hint: { zh: "綠色、沉穩、營運系統感", en: "Green, steady, operational system mood" } },
+    { value: "ocean", label: { zh: "海洋", en: "Ocean" }, hint: { zh: "藍色、理性、SaaS 感", en: "Blue, analytical, SaaS-oriented" } },
+    { value: "sunset", label: { zh: "夕照", en: "Sunset" }, hint: { zh: "橘色、提案、展示感", en: "Orange, proposal-driven, presentation mood" } },
+    { value: "slate", label: { zh: "石板", en: "Slate" }, hint: { zh: "灰藍、專業、平台感", en: "Slate blue, professional, platform feel" } },
 ];
 
 function cloneDefaultState(): BusinessHomepageContentState {
@@ -45,9 +43,11 @@ function cloneDefaultState(): BusinessHomepageContentState {
 }
 
 export function BossAdminHomepageBuilder({
+    lang,
     initialState,
     hasSavedPreferences = true,
 }: BossAdminHomepageBuilderProps) {
+    const ui = getUiText(lang).bossAdmin;
     const [state, setState] = useState<BusinessHomepageContentState>(() => normalizeBusinessHomepageContentState(initialState));
     const [locale, setLocale] = useState<BusinessHomepageLocale>("zh");
     const [activeSection, setActiveSection] = useState<BuilderSectionId>("hero");
@@ -57,12 +57,18 @@ export function BossAdminHomepageBuilder({
     const current = state.locale[locale];
     const desktopPreviewWidth = Math.round(1180 * previewScale);
 
+    const sectionLabels: Record<BuilderSectionId, string> = {
+        hero: ui.sectionHero,
+        closing: ui.sectionClosing,
+        theme: ui.sectionTheme,
+    };
+
     const saveStatusText = useMemo(() => {
-        if (saveStatus === "saving") return "儲存中...";
-        if (saveStatus === "saved") return "已儲存";
-        if (saveStatus === "error") return "儲存失敗";
+        if (saveStatus === "saving") return ui.saving;
+        if (saveStatus === "saved") return ui.saved;
+        if (saveStatus === "error") return ui.saveFailed;
         return "";
-    }, [saveStatus]);
+    }, [saveStatus, ui.saveFailed, ui.saved, ui.saving]);
 
     function updateField(
         key: keyof BusinessHomepageContentState["locale"]["zh"],
@@ -116,20 +122,17 @@ export function BossAdminHomepageBuilder({
                     <div className="grid gap-3">
                         <div className="inline-flex w-fit items-center gap-2 rounded-full border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-3 py-1 text-[11px] font-semibold tracking-[0.12em] text-[rgb(var(--muted))] uppercase">
                             <span className="biz-pulse h-2 w-2 rounded-full bg-[rgb(var(--accent))]" />
-                            Official Homepage Studio
+                            {ui.homepageStudioTag}
                         </div>
-                        <div className="text-2xl font-semibold text-[rgb(var(--text))]">把官方首頁的前台敘事、主題與 CTA 放進同一個編輯介面</div>
-                        <div className="max-w-3xl text-sm leading-relaxed text-[rgb(var(--muted))]">
-                            這個 builder 現在直接對應 `http://localhost:3000/` 的視覺與文案邏輯。左側維持 section list，中間是 live canvas，右側是 inspector，
-                            讓官方首頁的展示感和後台編輯體驗保持同一套系統語言。
-                        </div>
+                        <div className="text-2xl font-semibold text-[rgb(var(--text))]">{ui.builderTitle}</div>
+                        <div className="max-w-3xl text-sm leading-relaxed text-[rgb(var(--muted))]">{ui.builderDescription}</div>
                     </div>
 
                     <div className="grid gap-3 sm:grid-cols-3">
                         {[
-                            ["Hero", "首頁文案與第一印象"],
-                            ["Closing CTA", "頁尾提案與導流"],
-                            ["Theme", "品牌色與風格"],
+                            [ui.sectionHero, ui.sectionHeroHint],
+                            [ui.sectionClosing, ui.sectionClosingHint],
+                            [ui.sectionTheme, ui.sectionThemeHint],
                         ].map(([title, note], index) => (
                             <div
                                 key={title}
@@ -145,9 +148,9 @@ export function BossAdminHomepageBuilder({
                 <section className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)_380px] 2xl:grid-cols-[300px_minmax(0,1fr)_420px]">
             <aside className="grid gap-4 rounded-[1.8rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel))]/90 p-4 backdrop-blur-xl xl:sticky xl:top-4 xl:self-start">
                 <div className="grid gap-1">
-                    <div className="text-base font-semibold">官方首頁 Builder</div>
-                    <div className="text-xs text-[rgb(var(--muted))]">把 `http://localhost:3000/` 的內容編輯切成 section list / live canvas / inspector。</div>
-                    <div className="text-xs text-[rgb(var(--muted))]">目前首頁維持固定區段順序，先對齊單頁 builder 體驗，再往 block schema 演進。</div>
+                    <div className="text-base font-semibold">{ui.builderName}</div>
+                    <div className="text-xs text-[rgb(var(--muted))]">{ui.builderHint}</div>
+                    <div className="text-xs text-[rgb(var(--muted))]">{ui.builderSubHint}</div>
                 </div>
 
                 <div className="inline-flex w-fit rounded-full border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-1">
@@ -156,14 +159,14 @@ export function BossAdminHomepageBuilder({
                         className={`rounded-full px-3 py-1 text-xs ${locale === "zh" ? "bg-[rgb(var(--accent))] text-[rgb(var(--bg))]" : "text-[rgb(var(--text))]"}`}
                         onClick={() => setLocale("zh")}
                     >
-                        中文
+                        {ui.zhLabel}
                     </button>
                     <button
                         type="button"
                         className={`rounded-full px-3 py-1 text-xs ${locale === "en" ? "bg-[rgb(var(--accent))] text-[rgb(var(--bg))]" : "text-[rgb(var(--text))]"}`}
                         onClick={() => setLocale("en")}
                     >
-                        English
+                        {ui.enLabel}
                     </button>
                 </div>
 
@@ -182,20 +185,20 @@ export function BossAdminHomepageBuilder({
                                     ? current.title
                                     : sectionId === "closing"
                                       ? current.finalTitle
-                                      : themeOptions.find((option) => option.value === state.theme.preset)?.hint}
+                                      : themeOptions.find((option) => option.value === state.theme.preset)?.hint[lang]}
                             </div>
                         </button>
                     ))}
                 </div>
 
                 <div className="grid gap-2 rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                    <div className="text-sm font-semibold">Inserter</div>
-                    <div className="text-xs text-[rgb(var(--muted))]">首頁目前是固定段落模板。這裡先保留與 showcase builder 一致的 UI 架構。</div>
+                    <div className="text-sm font-semibold">{ui.inserterTitle}</div>
+                    <div className="text-xs text-[rgb(var(--muted))]">{ui.inserterHint}</div>
                     <div className="grid gap-2">
                         {(["hero", "closing", "theme"] as const).map((sectionId) => (
                             <div key={`insert-${sectionId}`} className="flex items-center justify-between rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-3 py-2">
                                 <span className="text-sm">{sectionLabels[sectionId]}</span>
-                                <span className="text-[11px] text-[rgb(var(--muted))]">Template section</span>
+                                <span className="text-[11px] text-[rgb(var(--muted))]">{ui.templateSection}</span>
                             </div>
                         ))}
                     </div>
@@ -205,23 +208,23 @@ export function BossAdminHomepageBuilder({
             <section className="grid gap-4 rounded-[1.8rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel))]/90 p-4 backdrop-blur-xl">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="grid gap-1">
-                        <div className="text-base font-semibold">官方首頁 Preview Canvas</div>
-                        <div className="text-xs text-[rgb(var(--muted))]">這裡直接預覽 `http://localhost:3000/` 使用的 `BusinessLandingPage`。</div>
+                        <div className="text-base font-semibold">{ui.previewTitle}</div>
+                        <div className="text-xs text-[rgb(var(--muted))]">{ui.previewHint}</div>
                     </div>
                     {!hasSavedPreferences ? (
                         <span className="rounded-full border border-[rgb(var(--accent))] bg-[rgb(var(--panel2))] px-3 py-1 text-xs">
-                            目前使用 default homepage content
+                            {ui.usingDefaultContent}
                         </span>
                     ) : null}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-4 rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-3">
                     <div className="grid gap-1">
-                        <div className="text-[11px] uppercase tracking-[0.08em] text-[rgb(var(--muted))]">Viewport</div>
+                        <div className="text-[11px] uppercase tracking-[0.08em] text-[rgb(var(--muted))]">{ui.viewport}</div>
                         <div className="inline-flex rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-1">
                             {([
-                                ["desktop", "桌機"],
-                                ["mobile", "手機"],
+                                ["desktop", ui.desktop],
+                                ["mobile", ui.mobile],
                             ] as const).map(([value, label]) => (
                                 <button
                                     key={value}
@@ -237,7 +240,7 @@ export function BossAdminHomepageBuilder({
 
                     {previewViewport === "desktop" ? (
                         <div className="grid gap-1">
-                            <div className="text-[11px] uppercase tracking-[0.08em] text-[rgb(var(--muted))]">縮放比例</div>
+                            <div className="text-[11px] uppercase tracking-[0.08em] text-[rgb(var(--muted))]">{ui.previewScale}</div>
                             <div className="inline-flex items-center gap-1 rounded-[1.1rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-1.5 shadow-sm">
                                 <div className="min-w-[4.4rem] rounded-[0.9rem] px-3 py-1.5 text-center text-sm font-medium text-[rgb(var(--text))]">
                                     {Math.round(previewScale * 100)}%
@@ -247,7 +250,7 @@ export function BossAdminHomepageBuilder({
                                     className="grid h-9 w-9 place-items-center rounded-[0.85rem] text-lg text-[rgb(var(--text))] transition hover:bg-[rgb(var(--panel2))] disabled:cursor-not-allowed disabled:opacity-40"
                                     onClick={() => updatePreviewScale(-1)}
                                     disabled={previewScale === PREVIEW_SCALE_STEPS[0]}
-                                    aria-label="縮小預覽"
+                                    aria-label={ui.zoomOut}
                                 >
                                     -
                                 </button>
@@ -256,7 +259,7 @@ export function BossAdminHomepageBuilder({
                                     className="grid h-9 w-9 place-items-center rounded-[0.85rem] text-xl text-[rgb(var(--text))] transition hover:bg-[rgb(var(--panel2))] disabled:cursor-not-allowed disabled:opacity-40"
                                     onClick={() => updatePreviewScale(1)}
                                     disabled={previewScale === PREVIEW_SCALE_STEPS[PREVIEW_SCALE_STEPS.length - 1]}
-                                    aria-label="放大預覽"
+                                    aria-label={ui.zoomIn}
                                 >
                                     +
                                 </button>
@@ -265,7 +268,7 @@ export function BossAdminHomepageBuilder({
                                     className="rounded-full border border-[rgb(var(--accent))] px-4 py-1.5 text-sm font-medium text-[rgb(var(--text))] transition hover:bg-[rgb(var(--panel2))]"
                                     onClick={() => setPreviewScale(DEFAULT_PREVIEW_SCALE)}
                                 >
-                                    重設
+                                    {ui.reset}
                                 </button>
                             </div>
                         </div>
@@ -291,13 +294,19 @@ export function BossAdminHomepageBuilder({
 
             <section className="grid gap-4 rounded-[1.8rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel))]/90 p-4 backdrop-blur-xl xl:sticky xl:top-4 xl:max-h-[calc(100dvh-2rem)] xl:self-start xl:overflow-auto">
                 <div className="grid gap-1">
-                    <div className="text-base font-semibold">Inspector</div>
+                    <div className="text-base font-semibold">{ui.inspectorTitle}</div>
                     <div className="text-xs text-[rgb(var(--muted))]">{sectionLabels[activeSection]}</div>
                 </div>
 
                 <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-3">
-                    <Button type="button" onClick={save} disabled={saveStatus === "saving"}>
-                        儲存首頁內容
+                    <Button
+                        type="button"
+                        onClick={save}
+                        disabled={saveStatus === "saving"}
+                        loading={saveStatus === "saving"}
+                        loadingLabel={ui.saving}
+                    >
+                        {ui.save}
                     </Button>
                     <Button
                         type="button"
@@ -308,33 +317,34 @@ export function BossAdminHomepageBuilder({
                         }}
                         disabled={saveStatus === "saving"}
                     >
-                        重設預設值
+                        {ui.resetDefault}
                     </Button>
-                    {saveStatusText ? <span className="text-xs text-[rgb(var(--muted))]">{saveStatusText}</span> : null}
+                    {saveStatus === "saving" ? <ProcessingIndicator label={ui.syncing} size="sm" /> : null}
+                    {saveStatus !== "saving" && saveStatusText ? <span className="text-xs text-[rgb(var(--muted))]">{saveStatusText}</span> : null}
                 </div>
 
                 {activeSection === "hero" ? (
                     <div className="grid gap-3 rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                        <div className="text-sm font-medium">Hero Content</div>
+                        <div className="text-sm font-medium">{ui.heroContent}</div>
                         <label className="grid gap-1">
-                            <span className="text-xs text-[rgb(var(--muted))]">Kicker / 前綴文字</span>
+                            <span className="text-xs text-[rgb(var(--muted))]">{ui.kickerField}</span>
                             <Input value={current.kicker} onChange={(event) => updateField("kicker", event.target.value)} />
                         </label>
                         <label className="grid gap-1">
-                            <span className="text-xs text-[rgb(var(--muted))]">主標題</span>
+                            <span className="text-xs text-[rgb(var(--muted))]">{ui.titleField}</span>
                             <Input value={current.title} onChange={(event) => updateField("title", event.target.value)} />
                         </label>
                         <label className="grid gap-1">
-                            <span className="text-xs text-[rgb(var(--muted))]">說明文字</span>
+                            <span className="text-xs text-[rgb(var(--muted))]">{ui.descriptionField}</span>
                             <Textarea rows={5} value={current.desc} onChange={(event) => updateField("desc", event.target.value)} />
                         </label>
                         <div className="grid gap-3 md:grid-cols-2">
                             <label className="grid gap-1">
-                                <span className="text-xs text-[rgb(var(--muted))]">主要按鈕文字</span>
+                                <span className="text-xs text-[rgb(var(--muted))]">{ui.primaryCtaField}</span>
                                 <Input value={current.ctaPrimary} onChange={(event) => updateField("ctaPrimary", event.target.value)} />
                             </label>
                             <label className="grid gap-1">
-                                <span className="text-xs text-[rgb(var(--muted))]">次要按鈕文字</span>
+                                <span className="text-xs text-[rgb(var(--muted))]">{ui.secondaryCtaField}</span>
                                 <Input value={current.ctaSecondary} onChange={(event) => updateField("ctaSecondary", event.target.value)} />
                             </label>
                         </div>
@@ -343,17 +353,17 @@ export function BossAdminHomepageBuilder({
 
                 {activeSection === "closing" ? (
                     <div className="grid gap-3 rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                        <div className="text-sm font-medium">Closing CTA</div>
+                        <div className="text-sm font-medium">{ui.closingTitle}</div>
                         <label className="grid gap-1">
-                            <span className="text-xs text-[rgb(var(--muted))]">頁尾 CTA 標題</span>
+                            <span className="text-xs text-[rgb(var(--muted))]">{ui.closingCtaTitle}</span>
                             <Input value={current.finalTitle} onChange={(event) => updateField("finalTitle", event.target.value)} />
                         </label>
                         <label className="grid gap-1">
-                            <span className="text-xs text-[rgb(var(--muted))]">頁尾 CTA 說明</span>
+                            <span className="text-xs text-[rgb(var(--muted))]">{ui.closingCtaDescription}</span>
                             <Textarea rows={4} value={current.finalDesc} onChange={(event) => updateField("finalDesc", event.target.value)} />
                         </label>
                         <label className="grid gap-1 md:max-w-xs">
-                            <span className="text-xs text-[rgb(var(--muted))]">頁尾 CTA 按鈕文字</span>
+                            <span className="text-xs text-[rgb(var(--muted))]">{ui.closingCtaButton}</span>
                             <Input value={current.finalCta} onChange={(event) => updateField("finalCta", event.target.value)} />
                         </label>
                     </div>
@@ -361,9 +371,9 @@ export function BossAdminHomepageBuilder({
 
                 {activeSection === "theme" ? (
                     <div className="grid gap-3 rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                        <div className="text-sm font-medium">Theme Preset</div>
+                        <div className="text-sm font-medium">{ui.themePresetTitle}</div>
                         <label className="grid gap-1 md:max-w-xs">
-                            <span className="text-xs text-[rgb(var(--muted))]">整體配色風格</span>
+                            <span className="text-xs text-[rgb(var(--muted))]">{ui.themePresetField}</span>
                             <Select
                                 value={state.theme.preset}
                                 onChange={(event) => {
@@ -378,7 +388,7 @@ export function BossAdminHomepageBuilder({
                             >
                                 {themeOptions.map((option) => (
                                     <option key={option.value} value={option.value}>
-                                        {option.label}
+                                        {option.label[lang]}
                                     </option>
                                 ))}
                             </Select>
@@ -397,8 +407,8 @@ export function BossAdminHomepageBuilder({
                                     }}
                                     className={`grid gap-1 rounded-xl border px-3 py-3 text-left ${state.theme.preset === option.value ? "border-[rgb(var(--accent))] bg-[rgb(var(--panel))]" : "border-[rgb(var(--border))] bg-[rgb(var(--panel))]"}`}
                                 >
-                                    <div className="text-sm font-semibold">{option.label}</div>
-                                    <div className="text-xs text-[rgb(var(--muted))]">{option.hint}</div>
+                                    <div className="text-sm font-semibold">{option.label[lang]}</div>
+                                    <div className="text-xs text-[rgb(var(--muted))]">{option.hint[lang]}</div>
                                 </button>
                             ))}
                         </div>
@@ -406,9 +416,9 @@ export function BossAdminHomepageBuilder({
                 ) : null}
 
                 <details className="rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                    <summary className="cursor-pointer list-none text-sm font-medium">JSON Snapshot</summary>
+                    <summary className="cursor-pointer list-none text-sm font-medium">{ui.jsonSnapshot}</summary>
                     <div className="mt-3 grid gap-2">
-                        <div className="text-xs text-[rgb(var(--muted))]">唯讀檢視目前首頁可編輯內容，方便後續往 block schema 遷移。</div>
+                        <div className="text-xs text-[rgb(var(--muted))]">{ui.jsonHint}</div>
                         <Textarea rows={16} readOnly value={JSON.stringify(state, null, 2)} />
                     </div>
                 </details>

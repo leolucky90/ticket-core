@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import Link from "next/link";
-import { Pencil, Save, Search, Trash2, X } from "lucide-react";
+import { MerchantListShell, MerchantSectionCard, SearchToolbar } from "@/components/merchant/shell";
+import { MerchantPredictiveSearchInput } from "@/components/merchant/search";
+import { IconActionButton } from "@/components/ui/icon-action-button";
+import { Pencil, RotateCcw, Save, Search, Trash2, X } from "lucide-react";
 import type { PaymentMethod, Sale } from "@/lib/types/sale";
 import type { SalesLabels } from "@/components/sales/sales-labels";
 import { CreateSaleModal } from "@/components/sales/CreateSaleModal";
@@ -113,78 +114,83 @@ export function SalesWorkspace({
         return `${labels.lastQueryAt}: ${formatTime(ts, lang)}`;
     }, [queryAt, labels.lastQueryAt, lang]);
 
-    return (
-        <>
-            <Card>
-                <div className="mb-3 text-sm font-semibold">{labels.queryTitle}</div>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <form
-                        action="/sales"
-                        method="get"
-                        className="flex w-full flex-col gap-2 sm:flex-row sm:items-center"
-                        onSubmit={() => {
-                            const ts = String(Date.now());
-                            setQueryAt(ts);
-                            if (queryAtRef.current) queryAtRef.current.value = ts;
-                        }}
-                    >
-                        <div className="relative w-full">
-                            <Input
-                                type="text"
-                                name="q"
-                                defaultValue={keyword}
-                                placeholder={labels.queryPlaceholder}
-                                className="pr-10"
-                            />
-                            <Link
-                                href="/sales"
-                                aria-label={labels.clearBtn}
-                                className="group absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-[rgb(var(--muted))] hover:bg-[rgb(var(--panel2))] hover:text-[rgb(var(--text))]"
-                            >
-                                <X className="h-4 w-4" aria-hidden="true" />
-                                <span className="sr-only">{labels.clearBtn}</span>
-                                <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                                    {labels.clearBtn}
-                                </span>
-                            </Link>
-                        </div>
-                        <input ref={queryAtRef} type="hidden" name="qt" defaultValue={queryAt} />
-                        <Button
-                            type="submit"
-                            variant="ghost"
-                            aria-label={labels.queryBtn}
-                            className="group relative h-10 w-10 shrink-0 !p-0 flex items-center justify-center"
-                        >
-                            <Search className="h-6 w-6 transition-transform group-hover:scale-110" aria-hidden="true" />
-                            <span className="sr-only">{labels.queryBtn}</span>
-                            <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                                {labels.queryBtn}
-                            </span>
-                        </Button>
-                    </form>
-                    <CreateSaleModal
-                        createAction={createAction}
-                        labels={{
-                            addBtn: labels.addBtn,
-                            addWindowTitle: labels.addWindowTitle,
-                            item: labels.item,
-                            amount: labels.amount,
-                            checkoutAt: labels.checkoutAt,
-                            paymentMethod: labels.paymentMethod,
-                            paymentCash: labels.paymentCash,
-                            paymentCard: labels.paymentCard,
-                            submitCreate: labels.submitCreate,
-                            cancelBtn: labels.cancelBtn,
-                            closeLabel: labels.closeLabel,
-                        }}
-                    />
-                </div>
-                {lastQueryText ? <div className="mt-2 text-xs text-[rgb(var(--muted))]">{lastQueryText}</div> : null}
-            </Card>
+    const saleSuggestions = useMemo(
+        () =>
+            sales.map((sale) => ({
+                id: sale.id,
+                value: sale.item,
+                title: sale.item,
+                subtitle: [paymentText[sale.paymentMethod], formatAmount(sale.amount, lang)].join(" / "),
+                keywords: [sale.item, String(sale.amount), paymentText[sale.paymentMethod]],
+            })),
+        [lang, paymentText, sales],
+    );
 
-            <Card>
-                <div className="mb-3 text-sm font-semibold">{labels.listTitle}</div>
-                <p className="mb-3 text-sm text-[rgb(var(--muted))]">{labels.total}</p>
+    const toolbar = (
+        <SearchToolbar
+            searchSlot={
+                <form
+                    action="/sales"
+                    method="get"
+                    className="flex w-full flex-col gap-2 sm:flex-row sm:items-center"
+                    onSubmit={() => {
+                        const ts = String(Date.now());
+                        setQueryAt(ts);
+                        if (queryAtRef.current) queryAtRef.current.value = ts;
+                    }}
+                >
+                    <MerchantPredictiveSearchInput
+                        name="q"
+                        defaultValue={keyword}
+                        placeholder={labels.queryPlaceholder}
+                        localSuggestions={saleSuggestions}
+                        className="min-w-0 flex-1"
+                        inputClassName="h-10"
+                    />
+                    <input ref={queryAtRef} type="hidden" name="qt" defaultValue={queryAt} />
+                    <div className="flex items-center gap-2">
+                        <IconActionButton icon={Search} type="submit" label={labels.queryBtn} tooltip={labels.queryBtn} />
+                        <IconActionButton href="/sales" icon={RotateCcw} label={labels.clearBtn} tooltip={labels.clearBtn} />
+                    </div>
+                </form>
+            }
+            toolsSlot={lastQueryText ? <div className="text-xs text-[rgb(var(--muted))]">{lastQueryText}</div> : undefined}
+            primaryActionSlot={
+                <CreateSaleModal
+                    createAction={createAction}
+                    labels={{
+                        addBtn: labels.addBtn,
+                        addWindowTitle: labels.addWindowTitle,
+                        item: labels.item,
+                        amount: labels.amount,
+                        checkoutAt: labels.checkoutAt,
+                        paymentMethod: labels.paymentMethod,
+                        paymentCash: labels.paymentCash,
+                        paymentCard: labels.paymentCard,
+                        submitCreate: labels.submitCreate,
+                        cancelBtn: labels.cancelBtn,
+                        closeLabel: labels.closeLabel,
+                    }}
+                />
+            }
+        />
+    );
+
+    const list = (
+        <MerchantSectionCard
+            title={labels.listTitle}
+            description={labels.total}
+            emptyState={
+                sales.length === 0
+                    ? {
+                          icon: Search,
+                          title: lang === "zh" ? "尚無銷售資料" : "No sales records yet",
+                          description: lang === "zh" ? "建立或搜尋銷售資料後，結果會集中顯示在這裡。" : "Created or matched sales will appear here.",
+                      }
+                    : undefined
+            }
+        >
+            {sales.length === 0 ? null : (
                 <div className="grid gap-3">
                     {sales.map((sale) => (
                         <details
@@ -322,7 +328,11 @@ export function SalesWorkspace({
                         </details>
                     ))}
                 </div>
-            </Card>
-        </>
+            )}
+        </MerchantSectionCard>
+    );
+
+    return (
+        <MerchantListShell toolbar={toolbar} list={list} />
     );
 }

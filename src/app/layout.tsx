@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 import { Fraunces, Manrope } from "next/font/google";
+import { NavigationProgress } from "@/components/layout/navigation-progress";
+import { UiLanguageProvider } from "@/components/layout/ui-language-provider";
+import { getUiLanguage } from "@/lib/i18n/ui-text";
 import { getThemeInitScript } from "@/lib/services/themePreferences";
 import "@/styles/globals.css";
 import "@/styles/auth.css";
@@ -29,7 +32,8 @@ const fraunces = Fraunces({
 export default async function RootLayout({ children }: RootLayoutProps) {
   const cookieStore = await cookies();
   const langCookie = cookieStore.get("lang")?.value;
-  const htmlLang = langCookie === "en" ? "en" : "zh-Hant";
+  const uiLang = getUiLanguage(langCookie);
+  const htmlLang = uiLang === "en" ? "en" : "zh-Hant";
 
   return (
     <html lang={htmlLang} suppressHydrationWarning className={`${manrope.variable} ${fraunces.variable}`}>
@@ -37,7 +41,10 @@ export default async function RootLayout({ children }: RootLayoutProps) {
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body suppressHydrationWarning>
-        {children}
+        <UiLanguageProvider lang={uiLang}>
+          <NavigationProgress />
+          {children}
+        </UiLanguageProvider>
       </body>
     </html>
   );

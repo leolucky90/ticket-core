@@ -1,14 +1,17 @@
 import type { SecuritySettings } from "@/lib/schema";
+import { MerchantSectionCard } from "@/components/merchant/shell";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import type { UiLanguage } from "@/lib/i18n/ui-text";
+import { getUiText } from "@/lib/i18n/ui-text";
 
 type DeleteControlSettingsFormProps = {
     settings: SecuritySettings;
     canEdit: boolean;
     saveAction: (formData: FormData) => Promise<void>;
+    lang: UiLanguage;
 };
 
 function levelOptions() {
@@ -30,28 +33,28 @@ function ToggleRow({ name, label, defaultChecked, disabled }: { name: string; la
     );
 }
 
-export function DeleteControlSettingsForm({ settings, canEdit, saveAction }: DeleteControlSettingsFormProps) {
+export function DeleteControlSettingsForm({ settings, canEdit, saveAction, lang }: DeleteControlSettingsFormProps) {
+    const ui = getUiText(lang).deleteControl;
     return (
         <form action={saveAction} className="grid max-w-4xl gap-4">
-            <Card className="grid gap-3">
-                <div className="text-sm font-medium">刪除控制策略</div>
-                <ToggleRow name="deleteButtonEnabled" label="是否顯示刪除按鍵" defaultChecked={settings.deleteButtonEnabled} disabled={!canEdit} />
+            <MerchantSectionCard title={ui.policyTitle} bodyClassName="grid gap-3">
+                <ToggleRow name="deleteButtonEnabled" label={ui.showDeleteButton} defaultChecked={settings.deleteButtonEnabled} disabled={!canEdit} />
                 <ToggleRow
                     name="requirePasswordWhenDeleteDisabled"
-                    label="刪除按鍵關閉時需管理密碼解鎖"
+                    label={ui.requirePasswordWhenDeleteDisabled}
                     defaultChecked={settings.requirePasswordWhenDeleteDisabled}
                     disabled={!canEdit}
                 />
                 <ToggleRow
                     name="requireSecondConfirmation"
-                    label="啟用二次刪除確認"
+                    label={ui.requireSecondConfirmation}
                     defaultChecked={settings.requireSecondConfirmation}
                     disabled={!canEdit}
                 />
-                <ToggleRow name="requireReasonOnDelete" label="刪除時要求輸入原因" defaultChecked={settings.requireReasonOnDelete} disabled={!canEdit} />
-                <ToggleRow name="deleteAuditLogEnabled" label="啟用刪除 audit log" defaultChecked={settings.deleteAuditLogEnabled} disabled={!canEdit} />
-                <ToggleRow name="softDeleteOnly" label="只允許 soft delete" defaultChecked={settings.softDeleteOnly} disabled={!canEdit} />
-                <FormField label="最低刪除權限等級">
+                <ToggleRow name="requireReasonOnDelete" label={ui.requireReasonOnDelete} defaultChecked={settings.requireReasonOnDelete} disabled={!canEdit} />
+                <ToggleRow name="deleteAuditLogEnabled" label={ui.deleteAuditLogEnabled} defaultChecked={settings.deleteAuditLogEnabled} disabled={!canEdit} />
+                <ToggleRow name="softDeleteOnly" label={ui.softDeleteOnly} defaultChecked={settings.softDeleteOnly} disabled={!canEdit} />
+                <FormField label={ui.minDeleteLevel}>
                     <Select name="allowLevelToDeleteFrom" defaultValue={String(settings.allowLevelToDeleteFrom)} disabled={!canEdit}>
                         {levelOptions().map((level) => (
                             <option key={level} value={level}>
@@ -60,13 +63,12 @@ export function DeleteControlSettingsForm({ settings, canEdit, saveAction }: Del
                         ))}
                     </Select>
                 </FormField>
-            </Card>
+            </MerchantSectionCard>
 
-            <Card className="grid gap-3">
-                <div className="text-sm font-medium">回復與永久刪除控制</div>
-                <ToggleRow name="restoreEnabled" label="允許回復資料" defaultChecked={settings.restoreEnabled} disabled={!canEdit} />
-                <ToggleRow name="hardDeleteEnabled" label="允許永久刪除" defaultChecked={settings.hardDeleteEnabled} disabled={!canEdit} />
-                <FormField label="永久刪除最低權限等級">
+            <MerchantSectionCard title={ui.restoreAndHardDeleteTitle} bodyClassName="grid gap-3">
+                <ToggleRow name="restoreEnabled" label={ui.restoreEnabled} defaultChecked={settings.restoreEnabled} disabled={!canEdit} />
+                <ToggleRow name="hardDeleteEnabled" label={ui.hardDeleteEnabled} defaultChecked={settings.hardDeleteEnabled} disabled={!canEdit} />
+                <FormField label={ui.minHardDeleteLevel}>
                     <Select name="allowLevelToHardDeleteFrom" defaultValue={String(settings.allowLevelToHardDeleteFrom)} disabled={!canEdit}>
                         {levelOptions().map((level) => (
                             <option key={level} value={level}>
@@ -77,21 +79,20 @@ export function DeleteControlSettingsForm({ settings, canEdit, saveAction }: Del
                 </FormField>
                 <ToggleRow
                     name="requirePasswordForHardDelete"
-                    label="永久刪除需輸入授權密碼"
+                    label={ui.requirePasswordForHardDelete}
                     defaultChecked={settings.requirePasswordForHardDelete}
                     disabled={!canEdit}
                 />
                 <ToggleRow
                     name="requireReasonOnHardDelete"
-                    label="永久刪除需輸入原因"
+                    label={ui.requireReasonOnHardDelete}
                     defaultChecked={settings.requireReasonOnHardDelete}
                     disabled={!canEdit}
                 />
-            </Card>
+            </MerchantSectionCard>
 
-            <Card className="grid gap-3">
-                <div className="text-sm font-medium">員工資料刪除控制</div>
-                <FormField label="員工回復最低權限等級">
+            <MerchantSectionCard title={ui.staffDeleteTitle} bodyClassName="grid gap-3">
+                <FormField label={ui.staffRestoreLevel}>
                     <Select name="employeeRestoreLevel" defaultValue={String(settings.employeeRestoreLevel)} disabled={!canEdit}>
                         {levelOptions().map((level) => (
                             <option key={level} value={level}>
@@ -100,7 +101,7 @@ export function DeleteControlSettingsForm({ settings, canEdit, saveAction }: Del
                         ))}
                     </Select>
                 </FormField>
-                <FormField label="員工永久刪除最低權限等級">
+                <FormField label={ui.staffHardDeleteLevel}>
                     <Select name="employeeHardDeleteLevel" defaultValue={String(settings.employeeHardDeleteLevel)} disabled={!canEdit}>
                         {levelOptions().map((level) => (
                             <option key={level} value={level}>
@@ -111,26 +112,25 @@ export function DeleteControlSettingsForm({ settings, canEdit, saveAction }: Del
                 </FormField>
                 <ToggleRow
                     name="employeeStrictOwnerOnly"
-                    label="員工資料僅限 Lv9 或授權者處理"
+                    label={ui.staffStrictOwnerOnly}
                     defaultChecked={settings.employeeStrictOwnerOnly}
                     disabled={!canEdit}
                 />
-            </Card>
+            </MerchantSectionCard>
 
-            <Card className="grid gap-3">
+            <MerchantSectionCard title={ui.statusTitle} bodyClassName="grid gap-3">
                 <div className="grid gap-2 text-sm text-[rgb(var(--muted))]">
-                    <div>最後更新時間：{settings.updatedAt}</div>
-                    <div>最後更新者：{settings.updatedBy}</div>
+                    <div>{ui.updatedAt}：{settings.updatedAt}</div>
+                    <div>{ui.updatedBy}：{settings.updatedBy}</div>
                 </div>
                 {canEdit ? (
                     <div className="flex flex-wrap gap-2">
-                        <Button type="submit">儲存刪除安全設定</Button>
+                        <Button type="submit">{ui.save}</Button>
                     </div>
                 ) : (
-                    <Input value="你沒有編輯權限" readOnly />
+                    <Input value={ui.noPermission} readOnly />
                 )}
-            </Card>
+            </MerchantSectionCard>
         </form>
     );
 }
-

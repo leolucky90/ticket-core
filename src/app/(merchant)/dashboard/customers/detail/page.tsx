@@ -2,15 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { getCustomerRelationshipSnapshot } from "@/lib/services/customer360";
-import { listCustomerEntitlements, listEntitlementRedemptions } from "@/lib/services/entitlements";
-import { listActivityPurchases, listCompanyCustomers } from "@/lib/services/merchant/customer-read-model.service";
-import { listPickupReservations } from "@/lib/services/pickupReservations";
-import {
-    isActivityPurchaseLinkedToCustomer,
-    listTicketsForCustomer,
-} from "@/lib/services/customerRelationships";
-import { listTickets } from "@/lib/services/ticket";
+import { getMerchantCustomerDetail } from "@/lib/services/merchant/customer-detail-read-model.service";
 
 type CustomerDetailSearchParams = {
     id?: string;
@@ -91,24 +83,12 @@ export default async function CustomerDetailPage({ searchParams }: { searchParam
     const customerId = (sp.id ?? "").trim();
     if (!customerId) redirect("/dashboard?tab=customers");
 
-    const [customers, tickets, purchases, customerSnapshot, entitlements, redemptions, pickupReservations] = await Promise.all([
-        listCompanyCustomers(),
-        listTickets(),
-        listActivityPurchases(),
-        getCustomerRelationshipSnapshot(customerId),
-        listCustomerEntitlements(customerId),
-        listEntitlementRedemptions(customerId),
-        listPickupReservations(customerId),
-    ]);
+    const detail = await getMerchantCustomerDetail(customerId);
+    if (!detail) redirect("/dashboard?tab=customers");
 
-    const customer = customers.find((item) => item.id === customerId);
-    if (!customer) redirect("/dashboard?tab=customers");
-
-    const repairRecords = listTicketsForCustomer(customer, tickets).sort((a, b) => b.updatedAt - a.updatedAt);
+    const { relationshipRecord, entitlements, redemptions, pickupReservations } = detail;
+    const { customer, repairRecords, purchaseRecords, snapshot: customerSnapshot } = relationshipRecord;
     const warrantyRecords = repairRecords.filter((ticket) => ticket.caseType === "warranty");
-    const purchaseRecords = purchases
-        .filter((purchase) => isActivityPurchaseLinkedToCustomer(customer, purchase))
-        .sort((a, b) => b.purchasedAt - a.purchasedAt);
     const activityConsumptionRecords = purchaseRecords.filter((purchase) => (purchase.activityName || "") !== "一般銷售");
 
     const totalPurchaseAmount = purchaseRecords.reduce((sum, row) => sum + row.salesAmount, 0);

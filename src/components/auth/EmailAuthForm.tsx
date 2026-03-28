@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent } from "react";
-import { Check, Eye, EyeOff, Loader2, X } from "lucide-react";
+import { Check, Eye, EyeOff, X } from "lucide-react";
 import {
     createUserWithEmailAndPassword,
     sendEmailVerification,
@@ -13,6 +13,7 @@ import { getFirebaseClientAuth, getFirebaseClientErrorMessage } from "@/lib/fire
 import { AuthButton } from "@/components/auth/ui/AuthButton";
 import { AuthDivider } from "@/components/auth/ui/AuthDivider";
 import { AuthInput } from "@/components/auth/ui/AuthInput";
+import { ProcessingIndicator } from "@/components/ui/processing-indicator";
 
 type Mode = "signIn" | "signUp";
 type SignUpAccountType = "customer" | "company";
@@ -280,6 +281,8 @@ export function EmailAuthForm({
                 variant="primary"
                 type="button"
                 disabled={isSubmitDisabled || submitting}
+                loading={submitting}
+                loadingLabel={submittingMessage}
                 onClick={async () => {
                     if (submitting) return;
                     setMsg(null);
@@ -363,17 +366,14 @@ export function EmailAuthForm({
                     }
                 }}
             >
-                {submitting ? (
-                    <span className="inline-flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                        <span>{submittingMessage}</span>
-                    </span>
-                ) : (
-                    primaryLabel
-                )}
+                {primaryLabel}
             </AuthButton>
 
-            {submitting ? <div className="auth-muted text-sm">{submittingMessage}</div> : null}
+            {submitting ? (
+                <div className="auth-muted text-sm">
+                    <ProcessingIndicator label={submittingMessage} size="sm" labelClassName="auth-muted text-sm" />
+                </div>
+            ) : null}
             {msg ? <div className="auth-error">{msg}</div> : null}
 
             {msg === labels.verifyNeeded ? (

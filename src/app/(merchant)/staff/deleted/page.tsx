@@ -23,6 +23,8 @@ export default async function StaffDeletedPage({ searchParams }: StaffDeletedPag
     const lang: "zh" | "en" = langCookie === "en" ? "en" : "zh";
     const sp = await searchParams;
     const keyword = (sp.keyword ?? "").trim();
+    const title = lang === "zh" ? "員工刪除紀錄" : "Deleted Staff Records";
+    const subtitle = lang === "zh" ? "員工誤刪恢復與永久刪除操作。" : "Review deleted staff records and handle restore or hard-delete actions.";
     const logs = await listDeleteLogs({
         module: "staff",
         keyword,
@@ -59,7 +61,7 @@ export default async function StaffDeletedPage({ searchParams }: StaffDeletedPag
     }
 
     return (
-        <MerchantPageShell title="Deleted Staff Records" subtitle="員工誤刪恢復與復職恢復操作" width="index">
+        <MerchantPageShell title={title} subtitle={subtitle} width="index">
             <StaffDeletedRecordsPanel
                 logs={logs}
                 keyword={keyword}

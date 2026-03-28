@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
-import { Section } from "@/components/ui/section";
 import { ChatBall } from "@/components/ai/chat-ball";
+import { MerchantPageShell } from "@/components/merchant/shell";
 import { SalesWorkspace } from "@/components/sales/SalesWorkspace";
 import { getPaymentMethodText, getSalesLabels } from "@/components/sales/sales-labels";
 import { createSale, deleteSale, querySales, updateSale } from "@/lib/services/sales";
@@ -24,10 +24,11 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
 
     const labels = getSalesLabels(lang, sales.length);
     const paymentText: Record<PaymentMethod, string> = getPaymentMethodText(labels);
+    const subtitle = lang === "zh" ? "交易索引頁，集中處理查詢、建立與維護。" : "Operational sales index for search, create, and maintenance flows.";
 
     return (
         <>
-            <Section title={labels.pageTitle}>
+            <MerchantPageShell title={labels.pageTitle} subtitle={subtitle} width="index">
                 <SalesWorkspace
                     labels={labels}
                     lang={lang}
@@ -41,7 +42,7 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
                     actionTs={actionTs}
                     queryTs={queryTs}
                 />
-            </Section>
+            </MerchantPageShell>
             <ChatBall />
         </>
     );

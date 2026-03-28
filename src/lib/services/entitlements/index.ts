@@ -52,6 +52,14 @@ const memory: {
     entitlementsByCompany: {},
     redemptionsByCompany: {},
 };
+const READ_CACHE_TTL_MS = 30_000;
+const readCacheTouchedAt: {
+    entitlementsByCompany: Record<string, number>;
+    redemptionsByCompany: Record<string, number>;
+} = {
+    entitlementsByCompany: {},
+    redemptionsByCompany: {},
+};
 
 function toText(value: unknown, max = 240): string {
     if (typeof value !== "string") return "";
@@ -73,6 +81,15 @@ function toMs(value: string | null | undefined): number {
     if (!value) return 0;
     const parsed = Date.parse(value);
     return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function hasFreshReadCache(store: Record<string, number>, companyId: string): boolean {
+    const touchedAt = store[companyId] ?? 0;
+    return touchedAt > 0 && Date.now() - touchedAt <= READ_CACHE_TTL_MS;
+}
+
+function touchReadCache(store: Record<string, number>, companyId: string) {
+    store[companyId] = Date.now();
 }
 
 async function resolveSessionScope(): Promise<SessionScope | null> {
@@ -154,6 +171,10 @@ function matchesEntitlementScope(entitlement: CustomerEntitlement, product: Prod
 }
 
 async function readEntitlements(companyId: string): Promise<CustomerEntitlement[]> {
+    if (hasFreshReadCache(readCacheTouchedAt.entitlementsByCompany, companyId)) {
+        return [...(memory.entitlementsByCompany[companyId] ?? [])];
+    }
+
     const db = await getFirestoreDb();
     if (!db) return [...(memory.entitlementsByCompany[companyId] ?? [])];
 
@@ -167,10 +188,15 @@ async function readEntitlements(companyId: string): Promise<CustomerEntitlement[
         }),
     );
     memory.entitlementsByCompany[companyId] = rows;
+    touchReadCache(readCacheTouchedAt.entitlementsByCompany, companyId);
     return rows;
 }
 
 async function readRedemptions(companyId: string): Promise<EntitlementRedemption[]> {
+    if (hasFreshReadCache(readCacheTouchedAt.redemptionsByCompany, companyId)) {
+        return [...(memory.redemptionsByCompany[companyId] ?? [])];
+    }
+
     const db = await getFirestoreDb();
     if (!db) return [...(memory.redemptionsByCompany[companyId] ?? [])];
 
@@ -186,12 +212,14 @@ async function readRedemptions(companyId: string): Promise<EntitlementRedemption
         }),
     );
     memory.redemptionsByCompany[companyId] = rows;
+    touchReadCache(readCacheTouchedAt.redemptionsByCompany, companyId);
     return rows;
 }
 
 async function saveEntitlement(companyId: string, row: CustomerEntitlement): Promise<void> {
     const list = memory.entitlementsByCompany[companyId] ?? [];
     memory.entitlementsByCompany[companyId] = [row, ...list.filter((item) => item.id !== row.id)];
+    touchReadCache(readCacheTouchedAt.entitlementsByCompany, companyId);
 
     const db = await getFirestoreDb();
     if (!db) return;
@@ -201,6 +229,7 @@ async function saveEntitlement(companyId: string, row: CustomerEntitlement): Pro
 async function saveRedemption(companyId: string, row: EntitlementRedemption): Promise<void> {
     const list = memory.redemptionsByCompany[companyId] ?? [];
     memory.redemptionsByCompany[companyId] = [row, ...list.filter((item) => item.id !== row.id)];
+    touchReadCache(readCacheTouchedAt.redemptionsByCompany, companyId);
 
     const db = await getFirestoreDb();
     if (!db) return;

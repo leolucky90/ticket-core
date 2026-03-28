@@ -31,6 +31,8 @@ const memory: {
 } = {
     reservationsByCompany: {},
 };
+const READ_CACHE_TTL_MS = 30_000;
+const readCacheTouchedAt: Record<string, number> = {};
 
 function toText(value: unknown, max = 240): string {
     if (typeof value !== "string") return "";
@@ -63,6 +65,15 @@ function toMs(value: string | null | undefined): number {
     if (!value) return 0;
     const parsed = Date.parse(value);
     return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function hasFreshReadCache(companyId: string): boolean {
+    const touchedAt = readCacheTouchedAt[companyId] ?? 0;
+    return touchedAt > 0 && Date.now() - touchedAt <= READ_CACHE_TTL_MS;
+}
+
+function touchReadCache(companyId: string): void {
+    readCacheTouchedAt[companyId] = Date.now();
 }
 
 function createReservationCode(): string {
@@ -146,6 +157,7 @@ async function getFirestoreDb() {
 async function saveReservation(companyId: string, row: PickupReservation): Promise<void> {
     const list = memory.reservationsByCompany[companyId] ?? [];
     memory.reservationsByCompany[companyId] = [row, ...list.filter((item) => item.id !== row.id)];
+    touchReadCache(companyId);
 
     const db = await getFirestoreDb();
     if (!db) return;
@@ -153,6 +165,8 @@ async function saveReservation(companyId: string, row: PickupReservation): Promi
 }
 
 async function readReservations(companyId: string): Promise<PickupReservation[]> {
+    if (hasFreshReadCache(companyId)) return [...(memory.reservationsByCompany[companyId] ?? [])];
+
     const db = await getFirestoreDb();
     if (!db) return [...(memory.reservationsByCompany[companyId] ?? [])];
 
@@ -165,6 +179,7 @@ async function readReservations(companyId: string): Promise<PickupReservation[]>
         }),
     );
     memory.reservationsByCompany[companyId] = rows;
+    touchReadCache(companyId);
     return rows;
 }
 

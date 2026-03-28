@@ -10,6 +10,7 @@ import {
 } from "@/lib/firebase-client/client";
 import { AuthButton } from "@/components/auth/ui/AuthButton";
 import { AuthInput } from "@/components/auth/ui/AuthInput";
+import { ProcessingIndicator } from "@/components/ui/processing-indicator";
 
 type ResetPasswordFormProps = {
     loginHref: string;
@@ -117,7 +118,11 @@ export function ResetPasswordForm({ loginHref, oobCode = null, authTenantId = nu
 
     return (
         <div className="auth-actions">
-            {checkingCode ? <div className="auth-muted text-sm">驗證重設連結中...</div> : null}
+            {checkingCode ? (
+                <div className="auth-muted text-sm">
+                    <ProcessingIndicator label="驗證重設連結中..." size="sm" labelClassName="auth-muted text-sm" />
+                </div>
+            ) : null}
             {!checkingCode && message ? <div className="auth-muted text-sm">{message}</div> : null}
             {!checkingCode && verifiedCode ? (
                 <form onSubmit={onSubmit} className="auth-actions">
@@ -145,8 +150,14 @@ export function ResetPasswordForm({ loginHref, oobCode = null, authTenantId = nu
                             </div>
                         </div>
                     </div>
-                    <AuthButton variant="primary" type="submit" disabled={submitting || success || !firebaseClientReady}>
-                        {submitting ? "更新中..." : "更新密碼"}
+                    <AuthButton
+                        variant="primary"
+                        type="submit"
+                        disabled={submitting || success || !firebaseClientReady}
+                        loading={submitting}
+                        loadingLabel="更新中..."
+                    >
+                        更新密碼
                     </AuthButton>
                 </form>
             ) : null}

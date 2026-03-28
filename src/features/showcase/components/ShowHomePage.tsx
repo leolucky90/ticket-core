@@ -39,7 +39,11 @@ export function ShowHomePage({
     const localeContent = showContentState.locale[lang];
     const orderedBlocks: ShowContentBlock[] = showContentState.order
         .map((blockId) => localeContent[blockId])
+        .filter((block): block is ShowContentBlock => Boolean(block))
         .filter((block) => block.enabled);
+
+    const firstEnabledAnchorByType = (type: ShowContentBlock["type"]) =>
+        orderedBlocks.find((block) => block.type === type && block.anchor)?.anchor;
 
     const showcaseVars: CSSProperties = {
         ["--showcase-page-bg" as string]: showThemeColors.page,
@@ -92,19 +96,19 @@ export function ShowHomePage({
                 }
               : { href: links.loginHref, label: copy.ctaGuest };
 
-    const servicesAnchor = localeContent.services.enabled ? `#${localeContent.services.anchor}` : localeContent.contact.enabled ? `#${localeContent.contact.anchor}` : "#hero";
+    const servicesAnchor = firstEnabledAnchorByType("services")
+        ? `#${firstEnabledAnchorByType("services")}`
+        : firstEnabledAnchorByType("contact")
+          ? `#${firstEnabledAnchorByType("contact")}`
+          : "#hero";
     const heroSecondaryCta: CompanyHomeCta = { href: servicesAnchor, label: copy.ctaServices };
 
     const navLinks: CompanyHomeNavLink[] = [
-        { id: "about", anchor: localeContent.about.anchor, label: copy.navAbout },
-        { id: "services", anchor: localeContent.services.anchor, label: copy.navServices },
-        { id: "contact", anchor: localeContent.contact.anchor, label: copy.navContact },
-        { id: "location", anchor: localeContent.contact.anchor, label: copy.navLocation },
-    ].filter((item) => {
-        if (item.id === "about") return localeContent.about.enabled;
-        if (item.id === "services") return localeContent.services.enabled;
-        return localeContent.contact.enabled;
-    });
+        { id: "about", anchor: firstEnabledAnchorByType("about") ?? "", label: copy.navAbout },
+        { id: "services", anchor: firstEnabledAnchorByType("services") ?? "", label: copy.navServices },
+        { id: "contact", anchor: firstEnabledAnchorByType("contact") ?? "", label: copy.navContact },
+        { id: "location", anchor: firstEnabledAnchorByType("contact") ?? "", label: copy.navLocation },
+    ].filter((item) => Boolean(item.anchor));
 
     return (
         <div

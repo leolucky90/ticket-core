@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { usePathname, useSearchParams } from "next/navigation";
+import { useUiLanguage } from "@/components/layout/ui-language-provider";
 import { cn } from "@/components/ui/cn";
 import { MerchantPageHeader } from "@/components/merchant/shell/merchant-page-header";
 import type { MerchantPageShellProps } from "@/components/merchant/shell/merchant-shell.types";
+import { ProcessingOverlay } from "@/components/ui/processing-overlay";
+import { getUiText } from "@/lib/i18n/ui-text";
 
 const WIDTH_CLASS: Record<NonNullable<MerchantPageShellProps["width"]>, string> = {
     default: "max-w-[1320px]",
@@ -24,6 +26,8 @@ export function MerchantPageShell({
     className,
     contentClassName,
 }: MerchantPageShellProps) {
+    const lang = useUiLanguage();
+    const ui = getUiText(lang);
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const locationKey = `${pathname}?${searchParams.toString()}`;
@@ -58,15 +62,10 @@ export function MerchantPageShell({
             }}
         >
             {isSubmitting ? (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(255,255,255,0.45)] backdrop-blur-[1px]">
-                    <div className="flex items-center gap-3 rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-5 py-4 shadow-xl">
-                        <Loader2 className="h-5 w-5 animate-spin text-[rgb(var(--accent))]" aria-hidden="true" />
-                        <div className="grid gap-0.5">
-                            <div className="text-sm font-medium">資料處理中</div>
-                            <div className="text-xs text-[rgb(var(--muted))]">正在同步資料或切換查詢結果，請稍候...</div>
-                        </div>
-                    </div>
-                </div>
+                <ProcessingOverlay
+                    title={ui.processing.pageActionTitle}
+                    description={ui.processing.pageActionDescription}
+                />
             ) : null}
             <MerchantPageHeader title={title} subtitle={subtitle} actions={actions} tabs={tabs} />
             <div className={cn("w-full space-y-4", contentClassName)}>{children}</div>

@@ -29,6 +29,8 @@ import { attachUsedProductToReceipt, getUsedProductById } from "@/lib/services/u
 import type { Ticket } from "@/lib/types/ticket";
 
 const memory: { salesByCompany: Record<string, Sale[]> } = { salesByCompany: {} };
+const READ_CACHE_TTL_MS = 30_000;
+const readCacheTouchedAt: Record<string, number> = {};
 
 const MAX_TEXT = 160;
 const MAX_QUERY = 120;
@@ -530,9 +532,19 @@ function listFromMemory(companyId: string): Sale[] {
     return [...(memory.salesByCompany[companyId] ?? [])].sort((a, b) => b.checkoutAt - a.checkoutAt);
 }
 
+function hasFreshReadCache(companyId: string): boolean {
+    const touchedAt = readCacheTouchedAt[companyId] ?? 0;
+    return touchedAt > 0 && Date.now() - touchedAt <= READ_CACHE_TTL_MS;
+}
+
+function touchReadCache(companyId: string): void {
+    readCacheTouchedAt[companyId] = Date.now();
+}
+
 function upsertMemorySale(companyId: string, sale: Sale): void {
     const list = memory.salesByCompany[companyId] ?? [];
     memory.salesByCompany[companyId] = [sale, ...list.filter((item) => item.id !== sale.id)];
+    touchReadCache(companyId);
 }
 
 function removeMemorySale(companyId: string, saleId: string): boolean {
@@ -540,6 +552,7 @@ function removeMemorySale(companyId: string, saleId: string): boolean {
     const next = list.filter((sale) => sale.id !== saleId);
     const removed = next.length !== list.length;
     memory.salesByCompany[companyId] = next;
+    touchReadCache(companyId);
     return removed;
 }
 
@@ -548,7 +561,10 @@ async function listFromFirebase(companyId: string): Promise<Sale[] | null> {
     if (!db) return null;
 
     const snap = await companySalesRef(db, companyId).orderBy("checkoutAt", "desc").limit(200).get();
-    return snap.docs.map((doc) => normalizeSale({ id: doc.id, ...(doc.data() as Partial<Sale>) }));
+    const rows = snap.docs.map((doc) => normalizeSale({ id: doc.id, ...(doc.data() as Partial<Sale>) }));
+    memory.salesByCompany[companyId] = rows;
+    touchReadCache(companyId);
+    return rows;
 }
 
 async function createInMemory(
@@ -754,6 +770,10 @@ function listCheckoutSalesPageFromMemory(companyId: string, params: CheckoutSale
 export async function listSales(): Promise<Sale[]> {
     const scope = await resolveSessionScope(true);
     if (!scope) return [];
+
+    if (hasFreshReadCache(scope.companyId)) {
+        return listFromMemory(scope.companyId);
+    }
 
     try {
         const firebaseSales = await listFromFirebase(scope.companyId);

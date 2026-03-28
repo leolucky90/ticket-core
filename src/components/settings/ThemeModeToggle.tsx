@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { ThemeColorPalette } from "@/components/settings/ThemeColorPalette";
+import { ProcessingIndicator } from "@/components/ui/processing-indicator";
 import {
     applyThemeState,
     DEFAULT_THEME_CUSTOM_COLORS,
@@ -46,14 +47,13 @@ const SERVER_THEME_STATE = {
 
 async function saveThemeToFirebase() {
     const theme = getThemeStateFromClient();
-    try {
-        await fetch("/api/dashboard/preferences", {
-            method: "PUT",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ theme }),
-        });
-    } catch {
-        // Keep local theme even when remote save fails.
+    const response = await fetch("/api/dashboard/preferences", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ theme }),
+    });
+    if (!response.ok) {
+        throw new Error("save failed");
     }
 }
 
@@ -64,15 +64,40 @@ export function ThemeModeToggle({ labels }: ThemeModeToggleProps) {
         () => SERVER_THEME_STATE,
     );
     const saveTimerRef = useRef<number | null>(null);
+    const saveStatusResetTimerRef = useRef<number | null>(null);
+    const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+    function setSettledStatus(status: "saved" | "error") {
+        setSaveStatus(status);
+        if (typeof window === "undefined") return;
+        if (saveStatusResetTimerRef.current !== null) {
+            window.clearTimeout(saveStatusResetTimerRef.current);
+        }
+        saveStatusResetTimerRef.current = window.setTimeout(() => {
+            saveStatusResetTimerRef.current = null;
+            setSaveStatus("idle");
+        }, 1800);
+    }
 
     function scheduleThemeSave() {
         if (typeof window === "undefined") return;
         if (saveTimerRef.current !== null) {
             window.clearTimeout(saveTimerRef.current);
         }
+        if (saveStatusResetTimerRef.current !== null) {
+            window.clearTimeout(saveStatusResetTimerRef.current);
+            saveStatusResetTimerRef.current = null;
+        }
+        setSaveStatus("saving");
         saveTimerRef.current = window.setTimeout(() => {
             saveTimerRef.current = null;
-            void saveThemeToFirebase();
+            void saveThemeToFirebase()
+                .then(() => {
+                    setSettledStatus("saved");
+                })
+                .catch(() => {
+                    setSettledStatus("error");
+                });
         }, 220);
     }
 
@@ -80,6 +105,9 @@ export function ThemeModeToggle({ labels }: ThemeModeToggleProps) {
         () => () => {
             if (saveTimerRef.current !== null) {
                 window.clearTimeout(saveTimerRef.current);
+            }
+            if (saveStatusResetTimerRef.current !== null) {
+                window.clearTimeout(saveStatusResetTimerRef.current);
             }
         },
         [],
@@ -141,7 +169,12 @@ export function ThemeModeToggle({ labels }: ThemeModeToggleProps) {
 
     return (
         <div className="grid gap-4">
-            <div className="text-sm text-[rgb(var(--muted))]">{labels.sectionTitle}</div>
+            <div className="grid gap-1">
+                <div className="text-sm text-[rgb(var(--muted))]">{labels.sectionTitle}</div>
+                {saveStatus === "saving" ? <ProcessingIndicator label="外觀設定同步中..." size="sm" /> : null}
+                {saveStatus === "saved" ? <div className="text-xs text-[rgb(var(--muted))]">外觀設定已同步到後台。</div> : null}
+                {saveStatus === "error" ? <div className="text-xs text-[rgb(var(--muted))]">外觀設定同步失敗，已保留本機預覽。</div> : null}
+            </div>
             <div className="flex flex-wrap gap-2">
                 {modeOptions.map(({ mode, label }) => (
                     <Button

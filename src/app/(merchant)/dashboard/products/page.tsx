@@ -1,8 +1,9 @@
 import { ProductManagementWorkspace } from "@/components/dashboard/ProductManagementWorkspace";
 import { MerchantPageShell } from "@/components/merchant/shell";
+import { decodeCursorStack, encodeCursorStack, parseListPageSize } from "@/lib/pagination/query-controls";
 import { getCatalogDimensionBundle, listCatalogSuppliers } from "@/lib/services/merchant/catalog-service";
-import { createProduct, deleteProduct, updateProduct } from "@/lib/services/commerce";
 import { listRepairBrands, queryProductsPage } from "@/lib/services/merchant/inventory-read-model.service";
+import { createProduct, deleteProduct, updateProduct } from "@/lib/services/merchant/product-write.service";
 import type { DimensionOption } from "@/lib/types/catalog";
 
 type ProductManagementPageProps = {
@@ -30,31 +31,6 @@ function parseOptionalNumber(text: string): number | null {
     const value = Number.parseInt(text, 10);
     if (!Number.isFinite(value) || value < 0) return null;
     return value;
-}
-
-function parsePageSize(text: string): number {
-    const value = Number.parseInt(text, 10);
-    if (!Number.isFinite(value)) return 20;
-    if (value <= 10) return 10;
-    if (value <= 20) return 20;
-    if (value <= 50) return 50;
-    return 100;
-}
-
-function decodeCursorStack(text: string): string[] {
-    if (!text) return [];
-    try {
-        const parsed = JSON.parse(Buffer.from(text, "base64url").toString("utf8"));
-        if (!Array.isArray(parsed)) return [];
-        return parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
-    } catch {
-        return [];
-    }
-}
-
-function encodeCursorStack(items: string[]): string {
-    if (items.length === 0) return "";
-    return Buffer.from(JSON.stringify(items)).toString("base64url");
 }
 
 function dedupeDimensionOptions(items: DimensionOption[]): DimensionOption[] {
@@ -101,7 +77,7 @@ export default async function ProductManagementPage({ searchParams }: ProductMan
     const maxPriceInput = (sp.maxPrice ?? "").trim();
     const currentCursor = (sp.cursor ?? "").trim();
     const currentCursorStack = decodeCursorStack((sp.cursorStack ?? "").trim());
-    const pageSize = parsePageSize((sp.pageSize ?? "").trim());
+    const pageSize = parseListPageSize((sp.pageSize ?? "").trim(), "20");
 
     const minStock = parseOptionalNumber(minStockInput);
     const maxStock = parseOptionalNumber(maxStockInput);

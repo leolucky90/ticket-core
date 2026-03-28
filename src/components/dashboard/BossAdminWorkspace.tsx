@@ -6,8 +6,11 @@ import { Button } from "@/components/ui/button";
 import type { BossAdminCompanyRecord, CompanyDashboardStats } from "@/lib/types/reporting";
 import type { BusinessHomepageContentState } from "@/features/business/services/businessHomepageContent";
 import { BossAdminHomepageBuilder } from "@/components/dashboard/BossAdminHomepageBuilder";
+import type { UiLanguage } from "@/lib/i18n/ui-text";
+import { getUiText } from "@/lib/i18n/ui-text";
 
 type BossAdminWorkspaceProps = {
+    lang: UiLanguage;
     tab: "dashboard" | "query";
     stats: CompanyDashboardStats;
     companies: BossAdminCompanyRecord[];
@@ -15,13 +18,13 @@ type BossAdminWorkspaceProps = {
     homepageUpdatedAt?: number;
 };
 
-function formatMoney(value: number) {
-    return new Intl.NumberFormat("zh-TW").format(value);
+function formatMoney(value: number, lang: UiLanguage) {
+    return new Intl.NumberFormat(lang === "zh" ? "zh-TW" : "en-US").format(value);
 }
 
-function formatTime(ts: number) {
+function formatTime(ts: number, lang: UiLanguage) {
     if (!Number.isFinite(ts) || ts <= 0) return "-";
-    return new Intl.DateTimeFormat("zh-TW", {
+    return new Intl.DateTimeFormat(lang === "zh" ? "zh-TW" : "en-US", {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
@@ -30,7 +33,8 @@ function formatTime(ts: number) {
     }).format(ts);
 }
 
-function TrendChart({ stats, range }: { stats: CompanyDashboardStats; range: "day" | "month" }) {
+function TrendChart({ stats, range, lang }: { stats: CompanyDashboardStats; range: "day" | "month"; lang: UiLanguage }) {
+    const ui = getUiText(lang);
     const points = range === "day" ? stats.pointsByDay : stats.pointsByMonth;
     const values = points.map((point) => point.revenue);
     const max = Math.max(1, ...values);
@@ -48,7 +52,9 @@ function TrendChart({ stats, range }: { stats: CompanyDashboardStats; range: "da
 
     return (
         <Card>
-            <div className="mb-2 text-sm font-semibold">數據曲線（{range === "day" ? "日" : "月"}）</div>
+            <div className="mb-2 text-sm font-semibold">
+                {ui.bossAdmin.trendTitle}（{range === "day" ? ui.bossAdmin.daySuffix : ui.bossAdmin.monthSuffix}）
+            </div>
             <div className="overflow-x-auto">
                 <svg viewBox={`0 0 ${width} ${height}`} className="h-48 min-w-[680px] w-full">
                     <path d={path} fill="none" stroke="rgb(var(--accent))" strokeWidth="3" />
@@ -63,8 +69,8 @@ function TrendChart({ stats, range }: { stats: CompanyDashboardStats; range: "da
                 {points.map((point, index) => (
                     <div key={`${point.label}-${index}`} className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-2 text-xs">
                         <div className="text-[rgb(var(--muted))]">{point.label}</div>
-                        <div>訂閱數量 {point.count}</div>
-                        <div>營收 {formatMoney(point.revenue)}</div>
+                        <div>{ui.bossAdmin.subscriptionCount} {point.count}</div>
+                        <div>{ui.bossAdmin.revenue} {formatMoney(point.revenue, lang)}</div>
                     </div>
                 ))}
             </div>
@@ -72,7 +78,8 @@ function TrendChart({ stats, range }: { stats: CompanyDashboardStats; range: "da
     );
 }
 
-export function BossAdminWorkspace({ tab, stats, companies, homepageContent, homepageUpdatedAt = 0 }: BossAdminWorkspaceProps) {
+export function BossAdminWorkspace({ lang, tab, stats, companies, homepageContent, homepageUpdatedAt = 0 }: BossAdminWorkspaceProps) {
+    const ui = getUiText(lang);
     const [range, setRange] = useState<"day" | "month">("day");
 
     return (
@@ -80,48 +87,48 @@ export function BossAdminWorkspace({ tab, stats, companies, homepageContent, hom
             {tab === "dashboard" ? (
                 <>
                     <Card>
-                        <div className="mb-3 text-base font-semibold">本日/月收入</div>
+                        <div className="mb-3 text-base font-semibold">{ui.bossAdmin.revenueCardTitle}</div>
                         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                             <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                                <div className="text-xs text-[rgb(var(--muted))]">當日訂閱數量</div>
+                                <div className="text-xs text-[rgb(var(--muted))]">{ui.bossAdmin.todaySubscriptionCount}</div>
                                 <div className="mt-1 text-2xl font-semibold">{stats.todaySubscriptionCount}</div>
                             </div>
                             <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                                <div className="text-xs text-[rgb(var(--muted))]">當日營收金額</div>
-                                <div className="mt-1 text-2xl font-semibold">{formatMoney(stats.todayRevenue)}</div>
+                                <div className="text-xs text-[rgb(var(--muted))]">{ui.bossAdmin.todayRevenue}</div>
+                                <div className="mt-1 text-2xl font-semibold">{formatMoney(stats.todayRevenue, lang)}</div>
                             </div>
                             <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                                <div className="text-xs text-[rgb(var(--muted))]">當月訂閱數量</div>
+                                <div className="text-xs text-[rgb(var(--muted))]">{ui.bossAdmin.monthSubscriptionCount}</div>
                                 <div className="mt-1 text-2xl font-semibold">{stats.monthSubscriptionCount}</div>
                             </div>
                             <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                                <div className="text-xs text-[rgb(var(--muted))]">當月營收金額</div>
-                                <div className="mt-1 text-2xl font-semibold">{formatMoney(stats.monthRevenue)}</div>
+                                <div className="text-xs text-[rgb(var(--muted))]">{ui.bossAdmin.monthRevenue}</div>
+                                <div className="mt-1 text-2xl font-semibold">{formatMoney(stats.monthRevenue, lang)}</div>
                             </div>
                         </div>
                         <div className="mt-4 flex items-center gap-2">
-                            <Button type="button" variant={range === "day" ? "solid" : "ghost"} onClick={() => setRange("day")}>日</Button>
-                            <Button type="button" variant={range === "month" ? "solid" : "ghost"} onClick={() => setRange("month")}>月</Button>
+                            <Button type="button" variant={range === "day" ? "solid" : "ghost"} onClick={() => setRange("day")}>{ui.bossAdmin.dayRange}</Button>
+                            <Button type="button" variant={range === "month" ? "solid" : "ghost"} onClick={() => setRange("month")}>{ui.bossAdmin.monthRange}</Button>
                         </div>
                     </Card>
-                    <TrendChart stats={stats} range={range} />
-                    <BossAdminHomepageBuilder initialState={homepageContent} hasSavedPreferences={homepageUpdatedAt > 0} />
+                    <TrendChart stats={stats} range={range} lang={lang} />
+                    <BossAdminHomepageBuilder lang={lang} initialState={homepageContent} hasSavedPreferences={homepageUpdatedAt > 0} />
                 </>
             ) : null}
 
             {tab === "query" ? (
                 <Card>
-                    <div className="mb-3 text-base font-semibold">查詢頁面（預設全部資訊）</div>
+                    <div className="mb-3 text-base font-semibold">{ui.bossAdmin.queryHeading}</div>
                     <div className="overflow-x-auto">
                         <table className="min-w-full text-sm">
                             <thead>
                                 <tr className="border-b border-[rgb(var(--border))] text-left text-xs text-[rgb(var(--muted))]">
-                                    <th className="px-2 py-2">公司</th>
-                                    <th className="px-2 py-2">公司電話</th>
-                                    <th className="px-2 py-2">公司地址</th>
-                                    <th className="px-2 py-2">公司付款資訊</th>
-                                    <th className="px-2 py-2">訂閱時間</th>
-                                    <th className="px-2 py-2">訂閱結束時間</th>
+                                    <th className="px-2 py-2">{ui.bossAdmin.companyColumn}</th>
+                                    <th className="px-2 py-2">{ui.bossAdmin.phoneColumn}</th>
+                                    <th className="px-2 py-2">{ui.bossAdmin.addressColumn}</th>
+                                    <th className="px-2 py-2">{ui.bossAdmin.paymentInfoColumn}</th>
+                                    <th className="px-2 py-2">{ui.bossAdmin.subscriptionStartColumn}</th>
+                                    <th className="px-2 py-2">{ui.bossAdmin.subscriptionEndColumn}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -131,8 +138,8 @@ export function BossAdminWorkspace({ tab, stats, companies, homepageContent, hom
                                         <td className="px-2 py-2">{company.phone || "-"}</td>
                                         <td className="px-2 py-2">{company.address || "-"}</td>
                                         <td className="px-2 py-2">{company.paymentInfo || "-"}</td>
-                                        <td className="px-2 py-2">{formatTime(company.subscriptionStartAt)}</td>
-                                        <td className="px-2 py-2">{formatTime(company.subscriptionEndAt)}</td>
+                                        <td className="px-2 py-2">{formatTime(company.subscriptionStartAt, lang)}</td>
+                                        <td className="px-2 py-2">{formatTime(company.subscriptionEndAt, lang)}</td>
                                     </tr>
                                 ))}
                             </tbody>

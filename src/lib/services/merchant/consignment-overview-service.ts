@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { listCampaignEntitlements, listCampaigns, listConsignments } from "@/lib/services/merchant/campaign-consignment-service";
 import { getInventoryRiskReminders } from "@/lib/services/merchant/inventory-risk-service";
 
@@ -92,7 +93,7 @@ function toScopeLabel(input: {
     return parts.join(" / ") || "通用範圍";
 }
 
-export async function getConsignmentOverviewData(): Promise<ConsignmentOverviewData> {
+export const getConsignmentOverviewData = cache(async (): Promise<ConsignmentOverviewData> => {
     const nowMs = Date.now();
     const [campaigns, entitlements, consignments, riskReminders] = await Promise.all([
         listCampaigns(),
@@ -208,4 +209,4 @@ export async function getConsignmentOverviewData(): Promise<ConsignmentOverviewD
         customerRows,
         riskReminders,
     };
-}
+});

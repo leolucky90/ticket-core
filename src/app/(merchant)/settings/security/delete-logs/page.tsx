@@ -1,6 +1,8 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { MerchantPageShell } from "@/components/merchant/shell";
 import { DeleteLogsPanel } from "@/components/settings/DeleteLogsPanel";
+import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
 import { decodeCursorStack, encodeCursorStack, parseListPageSize } from "@/lib/pagination/query-controls";
 import { hardDeleteRecord, queryDeleteLogsPage, restoreDeletedRecord } from "@/lib/services/delete-log.service";
 
@@ -23,12 +25,11 @@ type DeleteLogsPageProps = {
     }>;
 };
 
-function redirectWith(message: string): never {
-    redirect(`/settings/security/delete-logs?flash=${encodeURIComponent(message)}&ts=${Date.now()}`);
-}
-
 export default async function DeleteLogsPage({ searchParams }: DeleteLogsPageProps) {
     const sp = await searchParams;
+    const cookieStore = await cookies();
+    const lang = getUiLanguage(cookieStore.get("lang")?.value);
+    const ui = getUiText(lang).deleteLogs;
     const currentCursor = (sp.cursor ?? "").trim();
     const currentCursorStack = decodeCursorStack((sp.cursorStack ?? "").trim());
     const deleteLogPage = await queryDeleteLogsPage({
@@ -48,6 +49,10 @@ export default async function DeleteLogsPage({ searchParams }: DeleteLogsPagePro
     const previousCursorStack = encodeCursorStack(currentCursorStack.slice(0, -1));
     const nextCursorStack = encodeCursorStack(currentCursor ? [...currentCursorStack, currentCursor] : currentCursorStack);
 
+    function redirectWith(message: string): never {
+        redirect(`/settings/security/delete-logs?flash=${encodeURIComponent(message)}&ts=${Date.now()}`);
+    }
+
     async function restoreAction(formData: FormData): Promise<void> {
         "use server";
         try {
@@ -55,9 +60,9 @@ export default async function DeleteLogsPage({ searchParams }: DeleteLogsPagePro
                 deleteLogId: String(formData.get("deleteLogId") ?? ""),
                 restoreReason: String(formData.get("restoreReason") ?? ""),
             });
-            redirectWith("資料已回復");
+            redirectWith(ui.restored);
         } catch (error) {
-            redirectWith(error instanceof Error ? error.message : "回復失敗");
+            redirectWith(error instanceof Error ? error.message : ui.restoreFailed);
         }
     }
 
@@ -69,15 +74,16 @@ export default async function DeleteLogsPage({ searchParams }: DeleteLogsPagePro
                 reason: String(formData.get("reason") ?? ""),
                 authorizationPassword: String(formData.get("authorizationPassword") ?? ""),
             });
-            redirectWith("資料已永久刪除");
+            redirectWith(ui.hardDeleted);
         } catch (error) {
-            redirectWith(error instanceof Error ? error.message : "永久刪除失敗");
+            redirectWith(error instanceof Error ? error.message : ui.hardDeleteFailed);
         }
     }
 
     return (
-        <MerchantPageShell title="Delete Logs" subtitle="刪除紀錄查詢、回復與永久刪除" width="index">
+        <MerchantPageShell title={ui.pageTitle} subtitle={ui.pageSubtitle} width="index">
             <DeleteLogsPanel
+                lang={lang}
                 logs={deleteLogPage.items}
                 filters={{
                     module: sp.module ?? "",

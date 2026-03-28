@@ -14,6 +14,20 @@ type StaffGoogleBindingClientProps = {
     primaryEmail: string;
     linked: boolean;
     googleEmail?: string;
+    labels: {
+        statusPrefix: string;
+        linked: string;
+        notLinked: string;
+        bindAction: string;
+        bindLoading: string;
+        unbindAction: string;
+        unbindLoading: string;
+        linkSuccess: string;
+        unlinkSuccess: string;
+        requireEmailPassword: string;
+        emailMustMatch: string;
+        emailMismatch: string;
+    };
 };
 
 async function postJson(url: string, payload: Record<string, unknown>) {
@@ -29,8 +43,8 @@ async function postJson(url: string, payload: Record<string, unknown>) {
     return data;
 }
 
-export function StaffGoogleBindingClient({ staffId, primaryEmail, linked, googleEmail }: StaffGoogleBindingClientProps) {
-    const [busy, setBusy] = useState(false);
+export function StaffGoogleBindingClient({ staffId, primaryEmail, linked, googleEmail, labels }: StaffGoogleBindingClientProps) {
+    const [busyAction, setBusyAction] = useState<"link" | "unlink" | null>(null);
     const [isLinked, setIsLinked] = useState(linked);
     const [boundEmail, setBoundEmail] = useState(googleEmail ?? "");
     const [message, setMessage] = useState("");
@@ -38,29 +52,31 @@ export function StaffGoogleBindingClient({ staffId, primaryEmail, linked, google
     return (
         <div className="grid gap-2">
             <div className="text-sm text-[rgb(var(--muted))]">
-                狀態：{isLinked ? "已綁定" : "未綁定"} {boundEmail ? `(${boundEmail})` : ""}
+                {labels.statusPrefix}：{isLinked ? labels.linked : labels.notLinked} {boundEmail ? `(${boundEmail})` : ""}
             </div>
             <div className="flex flex-wrap gap-2">
                 <Button
                     type="button"
-                    disabled={busy || isLinked}
+                    disabled={busyAction !== null || isLinked}
+                    loading={busyAction === "link"}
+                    loadingLabel={labels.bindLoading}
                     onClick={async () => {
-                        setBusy(true);
+                        setBusyAction("link");
                         setMessage("");
                         try {
                             const fbAuth = getFirebaseClientAuth();
                             const fbGoogleProvider = getFirebaseGoogleProvider();
                             const currentUser = fbAuth.currentUser;
-                            if (!currentUser) throw new Error("請先以 email/password 登入後再綁定");
+                            if (!currentUser) throw new Error(labels.requireEmailPassword);
                             if (!currentUser.email || currentUser.email.toLowerCase() !== primaryEmail.toLowerCase()) {
-                                throw new Error("Google 信箱必須與員工主信箱一致");
+                                throw new Error(labels.emailMustMatch);
                             }
                             const result = await linkWithPopup(currentUser, fbGoogleProvider);
                             const credentialUser = result.user;
                             const provider = credentialUser.providerData.find((item) => item.providerId === "google.com");
                             const linkedEmail = provider?.email?.toLowerCase() || credentialUser.email?.toLowerCase();
                             if (!linkedEmail || linkedEmail !== primaryEmail.toLowerCase()) {
-                                throw new Error("Google 信箱與員工主信箱不一致，不可綁定");
+                                throw new Error(labels.emailMismatch);
                             }
                             const idToken = await credentialUser.getIdToken(true);
                             await postJson("/api/account/security/google-link", {
@@ -71,22 +87,24 @@ export function StaffGoogleBindingClient({ staffId, primaryEmail, linked, google
                             });
                             setIsLinked(true);
                             setBoundEmail(linkedEmail);
-                            setMessage("Google 帳號綁定完成");
+                            setMessage(labels.linkSuccess);
                         } catch (error) {
                             setMessage(getFirebaseClientErrorMessage(error));
                         } finally {
-                            setBusy(false);
+                            setBusyAction(null);
                         }
                     }}
                 >
-                    {busy ? "處理中..." : "綁定 Google 帳號"}
+                    {labels.bindAction}
                 </Button>
                 <Button
                     type="button"
                     variant="ghost"
-                    disabled={busy || !isLinked}
+                    disabled={busyAction !== null || !isLinked}
+                    loading={busyAction === "unlink"}
+                    loadingLabel={labels.unbindLoading}
                     onClick={async () => {
-                        setBusy(true);
+                        setBusyAction("unlink");
                         setMessage("");
                         try {
                             const fbAuth = getFirebaseClientAuth();
@@ -100,15 +118,15 @@ export function StaffGoogleBindingClient({ staffId, primaryEmail, linked, google
                             await postJson("/api/account/security/google-unlink", { staffId });
                             setIsLinked(false);
                             setBoundEmail("");
-                            setMessage("Google 綁定已解除");
+                            setMessage(labels.unlinkSuccess);
                         } catch (error) {
                             setMessage(getFirebaseClientErrorMessage(error));
                         } finally {
-                            setBusy(false);
+                            setBusyAction(null);
                         }
                     }}
                 >
-                    {busy ? "處理中..." : "解除 Google 綁定"}
+                    {labels.unbindAction}
                 </Button>
             </div>
             {message ? <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2 text-sm">{message}</div> : null}

@@ -1,6 +1,6 @@
 import { Archive, Eye, Pencil, Plus, Search, Store, Wrench } from "lucide-react";
+import { MerchantListShell, MerchantSectionCard, SearchToolbar } from "@/components/merchant/shell";
 import { MerchantPredictiveSearchInput } from "@/components/merchant/search";
-import { Card } from "@/components/ui/card";
 import { IconActionButton } from "@/components/ui/icon-action-button";
 import { IconTextActionButton } from "@/components/ui/icon-text-action-button";
 import { Select } from "@/components/ui/select";
@@ -52,14 +52,9 @@ export function UsedProductsManagementPanel({
         ),
     }));
 
-    return (
-        <div className="grid gap-4">
-            <Card className="grid gap-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-sm font-semibold">二手商品管理</div>
-                    <IconTextActionButton icon={Plus} href="/products/used/new" label="新增二手商品" tooltip="新增二手商品" />
-                </div>
-
+    const toolbar = (
+        <SearchToolbar
+            searchSlot={
                 <form action="/products/used" method="get" className="grid gap-2 md:grid-cols-[1fr_auto_auto_auto]">
                     <MerchantPredictiveSearchInput
                         name="q"
@@ -90,9 +85,26 @@ export function UsedProductsManagementPanel({
                         <IconActionButton href="/products/used" icon={Archive} label="重置篩選" tooltip="重置篩選" />
                     </div>
                 </form>
-            </Card>
+            }
+            primaryActionSlot={<IconTextActionButton icon={Plus} href="/products/used/new" label="新增二手商品" tooltip="新增二手商品" />}
+        />
+    );
 
-            <Card className="p-3 md:p-4">
+    const list = (
+        <MerchantSectionCard
+            title="二手商品清單"
+            description={`共 ${products.length} 筆`}
+            emptyState={
+                products.length === 0
+                    ? {
+                          icon: Search,
+                          title: "找不到符合條件的二手商品",
+                          description: "調整搜尋或篩選條件後再試，或先建立新的二手商品資料。",
+                      }
+                    : undefined
+            }
+        >
+            {products.length === 0 ? null : (
                 <div className="overflow-x-auto">
                     <table className="w-full min-w-[1280px] text-sm">
                         <thead className="bg-[rgb(var(--panel2))] text-[rgb(var(--muted))]">
@@ -165,19 +177,14 @@ export function UsedProductsManagementPanel({
                                     </td>
                                 </tr>
                             ))}
-                            {products.length === 0 ? (
-                                <tr>
-                                    <td colSpan={10} className="px-2 py-8 text-center text-[rgb(var(--muted))]">
-                                        找不到符合條件的二手商品。
-                                    </td>
-                                </tr>
-                            ) : null}
                         </tbody>
                     </table>
                 </div>
-            </Card>
+            )}
+        </MerchantSectionCard>
+    );
 
-            <div className="text-xs text-[rgb(var(--muted))]">共 {products.length} 筆</div>
-        </div>
+    return (
+        <MerchantListShell toolbar={toolbar} list={list} />
     );
 }

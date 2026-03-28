@@ -71,6 +71,12 @@ Path: `src/lib/services`
 - CRUD logic
 - business rules
 - relationship sync logic
+- relationship-heavy read pages should prefer shared read-model aggregators over route-local per-entity fan-out queries
+- read-heavy catalog/domain lookups should prefer focused service caching/invalidation helpers over repeated route-load fetches
+- detail pages that join multiple domains should prefer one focused detail read-model service, then let routes consume that aggregate
+- dashboard / workspace routes should prefer one focused route-data read-model service over page-local service orchestration
+- write-side route actions should prefer focused `merchant/*-write.service.ts` wrappers over direct action imports from `src/lib/services/commerce.ts`
+- if a service introduces warm cache / memory cache, the same module must update invalidation or memory sync in every write path touched this round
 - no heavy business logic inside `page.tsx`
 - new read-side callers should prefer focused service modules over `src/lib/services/commerce.ts`
 
@@ -108,6 +114,66 @@ Path: `src/app`
   - `rgb(var(--border))`
   - `rgb(var(--accent))`
 
+## Loading And Processing Feedback Rules
+
+- important flows must provide visible processing feedback
+- route change / page transition should prefer shared progress/loading baseline over page-local silent waits
+- save / update / delete / builder save / upload / auth / async settings sync should not be silent
+- spinner / overlay / processing notice should prefer shared helpers in:
+  - `src/components/ui/processing-indicator.tsx`
+  - `src/components/ui/processing-state.tsx`
+  - `src/components/ui/processing-overlay.tsx`
+- app / segment loading UI should prefer shared loading state baseline before inventing a new page-local spinner block
+- client-triggered navigation that does not naturally hit `loading.tsx` should prefer shared route progress baseline
+
+## Shared Shell And List UX Rules
+
+- backend shell / page shell 一律優先收斂到 `src/components/merchant/shell`
+- operational list/index pages 優先重用:
+  - `SearchToolbar`
+  - `MerchantToolbar`
+  - `MerchantListShell`
+  - `MerchantListPagination`
+  - `EmptyStateCard`
+  - `MerchantSectionCard`
+- search / filter 入口若是 operational toolbar，不要再手包一層 page-local card；優先直接用 `SearchToolbar` 放進 `MerchantSectionCard`
+- operational list/detail 組合若有明確 toolbar + list + detail 區塊，優先收斂到 `MerchantListShell`
+- 同一個 operational domain 下若多個 view 共用同一組 secondary detail/result panel，優先抽成共用 section，不要每個 view 各自掛一份
+- 同一個 operational domain 下若多個 view 共用同一種 create / edit list panel，也優先抽成共用 helper 或 focused component，避免 view-local duplication 漂移
+- 同一個 operational domain 下若存在平行的 lookup lists（例如 category / supplier），應優先共用同一套 editable list helper，而不是分別維護兩份相似表單
+- result-heavy pages 不要自己手寫 page-local pagination summary / previous-next bar
+- empty / no-results / no-data 狀態優先重用 `EmptyStateCard`，不要散落多種純文字提示樣式
+- cursor-based pagination 一律優先共用 `src/lib/pagination/query-controls.ts`
+- page-size 選項一律優先共用 `src/lib/ui/list-display.ts`
+- dashboard 內的 operational tabs 若還留在大型 workspace，也應持續往 shared pagination / empty state baseline 收斂
+- 新的 list/detail panel UX 應先求一致，再考慮客製 layout
+
+## Iteration Guardrails
+
+- 不要在迭代過程中新增新的 handoff / phase / recap docs 來分散規則；除非使用者明確要求，否則一律更新既有 canonical docs:
+  - `docs/project-rules.md`
+  - `docs/project-summary.md`
+- 只要這次工作改變了 architecture、service boundary、shared shell、shared helper、canonical naming、route baseline、demo baseline，就必須在同一輪同步更新 docs
+- Phase 1 到 Phase 4 的進度更新，一律回寫 `docs/project-summary.md` 的 phase map；不要另外新增 phase 專用 recap docs
+- Phase 狀態更新應優先補進既有 section，不要為了單次進度再開新文件
+- 新增 shared helper / shell / panel 後，同一輪應盡量把至少兩個 call sites 收斂進去；不要只新增 abstraction 卻保留舊 pattern 漂移
+- 如果新 helper 已覆蓋舊 pattern，舊的 page-local duplication 應在同一輪刪除或收斂，不要長期並存
+- 同一職責只保留一種 canonical helper；不要為了局部方便再長出第二種近似 wrapper
+- 大型 workspace 若持續承接新功能，應優先拆成 focused workspace / helper，再繼續加功能，避免單檔反覆膨脹
+- 若新的 read-model 已覆蓋舊 route-local aggregation，後續 call sites 應優先切到同一條資料流，不要長期雙軌
+- 若新的 write wrapper 已建立，後續 route / page 不應再新增對 `commerce.ts` action 的直接 import
+- 平行 view 若屬於同一個 operational domain，應優先共用:
+  - toolbar pattern
+  - list shell pattern
+  - detail panel pattern
+  - create / edit helper
+  - empty state copy
+- 新 work 不應讓 shared pattern 回退成 page-local markup；若必須例外，需先確認既有 shared components 無法承載
+- 每輪收尾時，`project-summary.md` 應能回答三件事:
+  - 目前 canonical baseline 是什麼
+  - 這輪新增了哪些 shared rules / helpers
+  - 下一輪安全起手點是什麼
+
 ## Authentication And Demo Accounts
 
 Planned validation / reset target after Firebase rebuild:
@@ -118,6 +184,7 @@ Official hidden login:
 
 - `http://localhost:3000/bossadmin`
 - `bossadmin@gmail.com`
+- `BossAdmin` 是 hidden cookie login，不是一般 Firebase Auth / `users/{uid}` 角色帳號
 
 User login entry:
 
@@ -693,6 +760,11 @@ Required checks:
 - login / route change / form submit / data fetch should have clear feedback
 - searchable list pages should support smart suggestion where feasible
 - result-heavy pages should support page count and filter options
+- result-heavy pages should reuse `src/lib/pagination/query-controls.ts` and `src/lib/ui/list-display.ts`
+- avoid page-local cursor stack / page-size parser duplication unless doing compatibility convergence
+- merchant operational index pages should prefer `MerchantPageShell` + `SearchToolbar` + `MerchantListShell` + `MerchantSectionCard`
+- merchant settings/detail pages should prefer `MerchantPageShell` + `MerchantSectionCard`
+- merchant workflow pages should prefer `MerchantSectionCard` for major flow sections before introducing new custom shells
 - same entity names should remain linked across flows
 
 ## i18n Rule
@@ -708,6 +780,25 @@ Required checks:
 - empty states
 - result labels
 - settings labels
+
+實作基線:
+
+- shared UI vocabulary 應優先集中到 `src/lib/i18n/ui-text.ts`
+- app-wide UI language state 應優先透過 `src/components/layout/ui-language-provider.tsx` 提供
+- shared shell / shared toolbar / shared processing / shared settings / shared builder chrome 不要再散落 page-local hard-coded 文案
+- DB 內保存的商業內容、builder content、名稱、備註、slug、enum code 保持 content-driven；UI 只負責翻譯框架字串
+- status / filter / pagination / empty state / button / flash message 的可切換文案，應優先回到 shared translation key，而不是在 route/component 內各自寫 `lang === "zh" ? ... : ...`
+- 不可把 runtime Google Translate 當作產品 i18n 架構；機器翻譯最多只能作為草稿輔助
+
+## Storefront Builder Rule
+
+- storefront / showcase builder 新增 template 或 variant 時，優先更新 shared registry 與 shared renderer：
+  - `src/features/showcase/services/showBlockRegistry.ts`
+  - `src/features/showcase/services/showContentPreferences.ts`
+  - `src/features/showcase/components/companyHomeDefault/blockRenderer.tsx`
+- 不要再把 showcase builder 綁回固定 `hero/about/services/contact/ad` block map
+- builder content schema 升級必須維持 normalize/serialize 相容層，避免舊 merchant preference 文件失效
+- block insert / remove / reorder / variant UI 若屬於 builder framework，應優先放在 shared builder chrome，不要散落 route-local page markup
 
 ## Recommended Implementation Order
 

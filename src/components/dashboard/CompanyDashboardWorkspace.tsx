@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { MerchantStatGrid } from "@/components/merchant/shell";
+import { EmptyStateCard, MerchantListPagination, MerchantListShell, MerchantSectionCard, MerchantStatGrid, SearchToolbar } from "@/components/merchant/shell";
 import { MerchantPredictiveSearchInput } from "@/components/merchant/search";
 import { TechnicianAutocomplete, UsedProductTypeSettingsCard } from "@/components/used-products";
 import type { MerchantStatItem } from "@/components/merchant/shell";
@@ -138,6 +138,11 @@ type ActivityDraftItem = {
     qty: number;
     price: number;
     cost: number;
+};
+
+type MarketingLookupRow = {
+    id: string;
+    name: string;
 };
 
 type CustomerCaseFilter = "all" | "active_case" | "closed_case" | "no_case";
@@ -606,7 +611,14 @@ function CaseCardList({
     const [editingCaseId, setEditingCaseId] = useState<string | null>(null);
 
     if (tickets.length === 0) {
-        return <div className="text-sm text-[rgb(var(--muted))]">目前沒有符合條件的案件。</div>;
+        return (
+            <EmptyStateCard
+                icon={Search}
+                title="沒有符合條件的案件"
+                description="可以調整查詢條件，或先建立第一筆案件資料。"
+                className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
+            />
+        );
     }
 
     return (
@@ -1077,6 +1089,251 @@ export function CompanyDashboardWorkspace({
         ],
         [activeActivities.length, customers.length, lang, stats.monthRevenue, stats.monthSubscriptionCount, stats.todayRevenue, stats.todaySubscriptionCount, tickets],
     );
+    const renderInventoryLogPanel = () => (
+        <MerchantSectionCard title={`操作紀錄（${stockLogs.length}）`} description="時間、商品、數量、操作者">
+            {stockLogs.length === 0 ? (
+                <EmptyStateCard
+                    icon={Search}
+                    title="目前還沒有庫存異動紀錄"
+                    description="完成第一次入庫或出庫後，這裡會顯示完整的庫存操作歷程。"
+                    className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
+                />
+            ) : (
+                <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                        <thead>
+                            <tr className="text-left text-[rgb(var(--muted))]">
+                                <th className="px-2 py-2">時間</th>
+                                <th className="px-2 py-2">商品</th>
+                                <th className="px-2 py-2">動作</th>
+                                <th className="px-2 py-2">數量</th>
+                                <th className="px-2 py-2">前庫存</th>
+                                <th className="px-2 py-2">後庫存</th>
+                                <th className="px-2 py-2">操作者</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {stockLogs.map((log) => (
+                                <tr key={log.id} className="border-t border-[rgb(var(--border))]">
+                                    <td className="px-2 py-2">{formatTime(log.createdAt, lang)}</td>
+                                    <td className="px-2 py-2">{log.productName}</td>
+                                    <td className="px-2 py-2">{stockActionText(log.action)}</td>
+                                    <td className="px-2 py-2">{log.qty}</td>
+                                    <td className="px-2 py-2">{log.beforeStock}</td>
+                                    <td className="px-2 py-2">{log.afterStock}</td>
+                                    <td className="px-2 py-2">
+                                        <div>{log.operatorName || "-"}</div>
+                                        <div className="text-xs text-[rgb(var(--muted))]">{log.operatorEmail || "-"}</div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </MerchantSectionCard>
+    );
+    const renderInventoryCreateProductForm = (view: InventoryView) => (
+        <form action={createProductAction} className="grid gap-2 md:grid-cols-5">
+            <input type="hidden" name="tab" value="inventory" />
+            <input type="hidden" name="inventoryView" value={view} />
+            <Input name="name" placeholder="品名" required />
+            <Input type="number" min={0} name="price" placeholder="售價" required />
+            <Input type="number" min={0} name="cost" placeholder="成本" required />
+            <Input name="supplier" placeholder="供應商" list="dashboard-supplier-options" />
+            <Input name="sku" placeholder="SKU" />
+            <Input type="number" min={0} name="stock" placeholder="庫存" defaultValue={0} className="md:col-span-1" />
+            <Button type="submit" className="md:col-span-4">新增產品</Button>
+        </form>
+    );
+    const renderInventoryEditableProductList = (view: InventoryView, title: string) => (
+        <MerchantSectionCard title={`${title}（${products.length}）`}>
+            {products.length === 0 ? (
+                <EmptyStateCard
+                    icon={Search}
+                    title="目前沒有產品資料"
+                    description="可以先新增產品，或切回庫存設置建立基本商品清單。"
+                    className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
+                />
+            ) : (
+                <div className="grid gap-2">
+                    {products.map((product) => (
+                        <details key={product.id} className="rounded-lg border border-[rgb(var(--border))]">
+                            <summary className="grid cursor-pointer list-none gap-1 px-3 py-2 text-sm sm:grid-cols-6 [&::-webkit-details-marker]:hidden">
+                                <span>{product.name}</span>
+                                <span>On hand {product.onHandQty ?? product.stock} / Reserved {product.reservedQty ?? 0}</span>
+                                <span>售價 {formatMoney(product.price, lang)}</span>
+                                <span>成本 {formatMoney(product.cost, lang)}</span>
+                                <span>{product.supplier || "-"}</span>
+                                <span>{product.sku || "-"}</span>
+                            </summary>
+                            <div className="border-t border-[rgb(var(--border))] p-3">
+                                <form action={updateProductAction} className="grid gap-2 md:grid-cols-5">
+                                    <input type="hidden" name="tab" value="inventory" />
+                                    <input type="hidden" name="inventoryView" value={view} />
+                                    <input type="hidden" name="productId" value={product.id} />
+                                    <Input name="name" defaultValue={product.name} required />
+                                    <Input type="number" min={0} name="price" defaultValue={product.price} required />
+                                    <Input type="number" min={0} name="cost" defaultValue={product.cost} required />
+                                    <Input name="supplier" defaultValue={product.supplier} list="dashboard-supplier-options" />
+                                    <Input name="sku" defaultValue={product.sku} />
+                                    <Input type="number" min={0} name="stock" defaultValue={product.onHandQty ?? product.stock} />
+                                    <Button type="submit" className="md:col-span-3">更新產品</Button>
+                                </form>
+                                <form action={deleteProductAction} className="mt-2" onSubmit={guardDeleteWithPassword} data-delete-target={`產品 ${product.name}`}>
+                                    <input type="hidden" name="tab" value="inventory" />
+                                    <input type="hidden" name="inventoryView" value={view} />
+                                    <input type="hidden" name="productId" value={product.id} />
+                                    <Button type="submit" variant="ghost">刪除產品</Button>
+                                </form>
+                            </div>
+                        </details>
+                    ))}
+                </div>
+            )}
+        </MerchantSectionCard>
+    );
+    const renderMarketingLookupCreateForm = ({
+        formAction,
+        inputId,
+        inputName,
+        inputListId,
+        label,
+        hint,
+        placeholder,
+        draftValue,
+        onDraftChange,
+        onSearch,
+        searchLabel,
+        createLabel,
+    }: {
+        formAction: (formData: FormData) => Promise<void>;
+        inputId: string;
+        inputName: string;
+        inputListId: string;
+        label: string;
+        hint: string;
+        placeholder: string;
+        draftValue: string;
+        onDraftChange: (value: string) => void;
+        onSearch: () => void;
+        searchLabel: string;
+        createLabel: string;
+    }) => (
+        <form action={formAction} className="space-y-3 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-4">
+            <input type="hidden" name="tab" value="marketing" />
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <FieldLabel htmlFor={inputId} label={label} />
+                <div className="text-xs text-[rgb(var(--muted))]">{hint}</div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+                <Input
+                    id={inputId}
+                    name={inputName}
+                    list={inputListId}
+                    placeholder={placeholder}
+                    value={draftValue}
+                    onChange={(event) => onDraftChange(event.target.value)}
+                    required
+                    className="min-w-[220px] flex-1"
+                />
+                <IconOnlyButton label={searchLabel} type="button" icon={<Search className="h-4 w-4" aria-hidden="true" />} onClick={onSearch} />
+                <IconOnlyButton label={createLabel} type="submit" variant="solid" icon={<Plus className="h-4 w-4" aria-hidden="true" />} />
+            </div>
+        </form>
+    );
+    const renderMarketingLookupListPanel = ({
+        title,
+        countLabel,
+        searchTerm,
+        onClearSearch,
+        emptyTitle,
+        emptyDescription,
+        rows,
+        kindLabel,
+        updateAction,
+        deleteAction,
+        updateFieldName,
+        updateHiddenName,
+        deleteTargetPrefix,
+        updateLabel,
+        deleteLabel,
+    }: {
+        title: string;
+        countLabel: string;
+        searchTerm: string;
+        onClearSearch: () => void;
+        emptyTitle: string;
+        emptyDescription: string;
+        rows: MarketingLookupRow[];
+        kindLabel: string;
+        updateAction: (formData: FormData) => Promise<void>;
+        deleteAction: (formData: FormData) => Promise<void>;
+        updateFieldName: string;
+        updateHiddenName: string;
+        deleteTargetPrefix: string;
+        updateLabel: string;
+        deleteLabel: string;
+    }) => (
+        <div className="rounded-lg border border-[rgb(var(--border))] p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="text-xs text-[rgb(var(--muted))]">{title}</div>
+                {searchTerm ? (
+                    <IconOnlyButton
+                        label={`清除${kindLabel}搜尋`}
+                        icon={<X className="h-4 w-4" aria-hidden="true" />}
+                        className="h-8 w-8"
+                        onClick={onClearSearch}
+                    />
+                ) : null}
+            </div>
+            {rows.length === 0 ? (
+                <EmptyStateCard
+                    icon={Search}
+                    title={emptyTitle}
+                    description={emptyDescription}
+                    className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
+                />
+            ) : (
+                <div className="max-h-[560px] overflow-y-auto pr-1">
+                    <div className="grid gap-2">
+                        {rows.map((row) => {
+                            const updateFormId = `update-${kindLabel}-${row.id}`;
+                            return (
+                                <details key={`${kindLabel}-${row.id}`} className="overflow-hidden rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]">
+                                    <summary className="cursor-pointer list-none px-3 py-3 [&::-webkit-details-marker]:hidden">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="min-w-0">
+                                                <div className="truncate text-sm font-medium">{row.name}</div>
+                                                <div className="text-xs text-[rgb(var(--muted))]">點擊展開編輯名稱或刪除</div>
+                                            </div>
+                                            <div className="text-xs text-[rgb(var(--muted))]">{countLabel}</div>
+                                        </div>
+                                    </summary>
+                                    <div className="space-y-3 border-t border-[rgb(var(--border))] p-3">
+                                        <form id={updateFormId} action={updateAction} className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                                            <input type="hidden" name="tab" value="marketing" />
+                                            <input type="hidden" name={updateHiddenName} value={row.id} />
+                                            <Input name={updateFieldName} defaultValue={row.name} required className="w-full" />
+                                        </form>
+                                        <div className="flex items-center justify-end gap-2 rounded-lg bg-[rgb(var(--panel))] px-2 py-2">
+                                            <div className="mr-auto text-xs text-[rgb(var(--muted))]">操作</div>
+                                            <IconOnlyButton label={updateLabel} form={updateFormId} type="submit" variant="solid" icon={<Save className="h-4 w-4" aria-hidden="true" />} />
+                                            <form action={deleteAction} onSubmit={guardDeleteWithPassword} data-delete-target={`${deleteTargetPrefix} ${row.name}`}>
+                                                <input type="hidden" name="tab" value="marketing" />
+                                                <input type="hidden" name={updateHiddenName} value={row.id} />
+                                                <IconOnlyButton label={deleteLabel} type="submit" icon={<Trash2 className="h-4 w-4" aria-hidden="true" />} />
+                                            </form>
+                                        </div>
+                                    </div>
+                                </details>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
 
     return (
         <div className="space-y-4">
@@ -1142,7 +1399,12 @@ export function CompanyDashboardWorkspace({
                             <SectionTitle title="當前活動" hint="抓取活動狀態為活動中" />
                             <div className="grid gap-2">
                                 {activeActivities.length === 0 ? (
-                                    <div className="text-sm text-[rgb(var(--muted))]">目前沒有活動中資料。</div>
+                                    <EmptyStateCard
+                                        icon={Search}
+                                        title="目前沒有活動中資料"
+                                        description="可以切到活動頁建立新活動，或稍後再查看最新 campaign 狀態。"
+                                        className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
+                                    />
                                 ) : (
                                     activeActivities.map((activity) => (
                                         <details key={activity.id} className="rounded-lg border border-[rgb(var(--border))]">
@@ -1165,7 +1427,12 @@ export function CompanyDashboardWorkspace({
                             <SectionTitle title="活動預告" hint="抓取活動狀態為未開始" />
                             <div className="grid gap-2">
                                 {upcomingActivities.length === 0 ? (
-                                    <div className="text-sm text-[rgb(var(--muted))]">目前沒有未開始活動。</div>
+                                    <EmptyStateCard
+                                        icon={Search}
+                                        title="目前沒有未開始活動"
+                                        description="目前沒有排程中的活動預告；建立新活動後會在這裡顯示。"
+                                        className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
+                                    />
                                 ) : (
                                     upcomingActivities.map((activity) => (
                                         <details key={activity.id} className="rounded-lg border border-[rgb(var(--border))]">
@@ -1312,7 +1579,12 @@ export function CompanyDashboardWorkspace({
                                 </form>
                             </div>
                             {visibleCustomerRows.length === 0 ? (
-                                <div className="text-sm text-[rgb(var(--muted))]">目前沒有符合條件的客戶。</div>
+                                <EmptyStateCard
+                                    icon={Search}
+                                    title="沒有符合條件的客戶"
+                                    description="可以調整搜尋或過濾條件，或先建立第一筆客戶資料。"
+                                    className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
+                                />
                             ) : (
                                 <div className="max-h-[720px] overflow-y-auto pr-1">
                                 <div className="grid gap-3">
@@ -1414,33 +1686,39 @@ export function CompanyDashboardWorkspace({
                                         );
                                     })}
                                 </div>
-                                <div className="mt-3 flex flex-wrap justify-end gap-2">
-                                    <form action="/dashboard" method="get">
-                                        <input type="hidden" name="tab" value="customers" />
-                                        {customerKeyword ? <input type="hidden" name="customerQ" value={customerKeyword} /> : null}
-                                        <input type="hidden" name="customerCaseFilter" value={customerCaseFilter} />
-                                        <input type="hidden" name="customerOrder" value={customerOrder} />
-                                        <input type="hidden" name="customerPageSize" value={customerPageSize} />
-                                        {customerPreviousCursor ? <input type="hidden" name="customerCursor" value={customerPreviousCursor} /> : null}
-                                        {customerPreviousCursorStack ? <input type="hidden" name="customerCursorStack" value={customerPreviousCursorStack} /> : null}
-                                        <IconOnlyButton label="上一頁客戶" type="submit" icon={<ArrowLeft className="h-4 w-4" aria-hidden="true" />} disabled={!customerCurrentCursor} />
-                                    </form>
-                                    <form action="/dashboard" method="get">
-                                        <input type="hidden" name="tab" value="customers" />
-                                        {customerKeyword ? <input type="hidden" name="customerQ" value={customerKeyword} /> : null}
-                                        <input type="hidden" name="customerCaseFilter" value={customerCaseFilter} />
-                                        <input type="hidden" name="customerOrder" value={customerOrder} />
-                                        <input type="hidden" name="customerPageSize" value={customerPageSize} />
-                                        {customerNextCursor ? <input type="hidden" name="customerCursor" value={customerNextCursor} /> : null}
-                                        {customerNextCursorStack ? <input type="hidden" name="customerCursorStack" value={customerNextCursorStack} /> : null}
-                                        <IconOnlyButton
-                                            label="下一頁客戶"
-                                            type="submit"
-                                            icon={<ArrowRight className="h-4 w-4" aria-hidden="true" />}
-                                            disabled={!customerHasNextPage || !customerNextCursor}
-                                        />
-                                    </form>
-                                </div>
+                                <MerchantListPagination
+                                    className="mt-3"
+                                    summary={`共 ${visibleCustomerRows.length} 筆客戶結果，支援 server 分頁與條件查詢。`}
+                                    previousAction={
+                                        <form action="/dashboard" method="get">
+                                            <input type="hidden" name="tab" value="customers" />
+                                            {customerKeyword ? <input type="hidden" name="customerQ" value={customerKeyword} /> : null}
+                                            <input type="hidden" name="customerCaseFilter" value={customerCaseFilter} />
+                                            <input type="hidden" name="customerOrder" value={customerOrder} />
+                                            <input type="hidden" name="customerPageSize" value={customerPageSize} />
+                                            {customerPreviousCursor ? <input type="hidden" name="customerCursor" value={customerPreviousCursor} /> : null}
+                                            {customerPreviousCursorStack ? <input type="hidden" name="customerCursorStack" value={customerPreviousCursorStack} /> : null}
+                                            <IconOnlyButton label="上一頁客戶" type="submit" icon={<ArrowLeft className="h-4 w-4" aria-hidden="true" />} disabled={!customerCurrentCursor} />
+                                        </form>
+                                    }
+                                    nextAction={
+                                        <form action="/dashboard" method="get">
+                                            <input type="hidden" name="tab" value="customers" />
+                                            {customerKeyword ? <input type="hidden" name="customerQ" value={customerKeyword} /> : null}
+                                            <input type="hidden" name="customerCaseFilter" value={customerCaseFilter} />
+                                            <input type="hidden" name="customerOrder" value={customerOrder} />
+                                            <input type="hidden" name="customerPageSize" value={customerPageSize} />
+                                            {customerNextCursor ? <input type="hidden" name="customerCursor" value={customerNextCursor} /> : null}
+                                            {customerNextCursorStack ? <input type="hidden" name="customerCursorStack" value={customerNextCursorStack} /> : null}
+                                            <IconOnlyButton
+                                                label="下一頁客戶"
+                                                type="submit"
+                                                icon={<ArrowRight className="h-4 w-4" aria-hidden="true" />}
+                                                disabled={!customerHasNextPage || !customerNextCursor}
+                                            />
+                                        </form>
+                                    }
+                                />
                                 </div>
                             )}
                         </Card>
@@ -1611,33 +1889,39 @@ export function CompanyDashboardWorkspace({
                                     createWarrantyCaseAction={createWarrantyCaseAction}
                                     updateCaseAction={updateCaseAction}
                                 />
-                                <div className="pt-2 flex flex-wrap justify-end gap-2">
-                                    <form action="/dashboard" method="get">
-                                        <input type="hidden" name="tab" value="cases" />
-                                        {caseKeyword ? <input type="hidden" name="caseQ" value={caseKeyword} /> : null}
-                                        <input type="hidden" name="caseStatus" value={caseStatus} />
-                                        <input type="hidden" name="caseOrder" value={caseOrder} />
-                                        <input type="hidden" name="casePageSize" value={casePageSize} />
-                                        {casePreviousCursor ? <input type="hidden" name="caseCursor" value={casePreviousCursor} /> : null}
-                                        {casePreviousCursorStack ? <input type="hidden" name="caseCursorStack" value={casePreviousCursorStack} /> : null}
-                                        <IconOnlyButton label="上一頁案件" type="submit" icon={<ArrowLeft className="h-4 w-4" aria-hidden="true" />} disabled={!caseCurrentCursor} />
-                                    </form>
-                                    <form action="/dashboard" method="get">
-                                        <input type="hidden" name="tab" value="cases" />
-                                        {caseKeyword ? <input type="hidden" name="caseQ" value={caseKeyword} /> : null}
-                                        <input type="hidden" name="caseStatus" value={caseStatus} />
-                                        <input type="hidden" name="caseOrder" value={caseOrder} />
-                                        <input type="hidden" name="casePageSize" value={casePageSize} />
-                                        {caseNextCursor ? <input type="hidden" name="caseCursor" value={caseNextCursor} /> : null}
-                                        {caseNextCursorStack ? <input type="hidden" name="caseCursorStack" value={caseNextCursorStack} /> : null}
-                                        <IconOnlyButton
-                                            label="下一頁案件"
-                                            type="submit"
-                                            icon={<ArrowRight className="h-4 w-4" aria-hidden="true" />}
-                                            disabled={!caseHasNextPage || !caseNextCursor}
-                                        />
-                                    </form>
-                                </div>
+                                <MerchantListPagination
+                                    className="pt-2"
+                                    summary={`共 ${visibleCaseTickets.length} 筆案件結果，支援 server 分頁與狀態查詢。`}
+                                    previousAction={
+                                        <form action="/dashboard" method="get">
+                                            <input type="hidden" name="tab" value="cases" />
+                                            {caseKeyword ? <input type="hidden" name="caseQ" value={caseKeyword} /> : null}
+                                            <input type="hidden" name="caseStatus" value={caseStatus} />
+                                            <input type="hidden" name="caseOrder" value={caseOrder} />
+                                            <input type="hidden" name="casePageSize" value={casePageSize} />
+                                            {casePreviousCursor ? <input type="hidden" name="caseCursor" value={casePreviousCursor} /> : null}
+                                            {casePreviousCursorStack ? <input type="hidden" name="caseCursorStack" value={casePreviousCursorStack} /> : null}
+                                            <IconOnlyButton label="上一頁案件" type="submit" icon={<ArrowLeft className="h-4 w-4" aria-hidden="true" />} disabled={!caseCurrentCursor} />
+                                        </form>
+                                    }
+                                    nextAction={
+                                        <form action="/dashboard" method="get">
+                                            <input type="hidden" name="tab" value="cases" />
+                                            {caseKeyword ? <input type="hidden" name="caseQ" value={caseKeyword} /> : null}
+                                            <input type="hidden" name="caseStatus" value={caseStatus} />
+                                            <input type="hidden" name="caseOrder" value={caseOrder} />
+                                            <input type="hidden" name="casePageSize" value={casePageSize} />
+                                            {caseNextCursor ? <input type="hidden" name="caseCursor" value={caseNextCursor} /> : null}
+                                            {caseNextCursorStack ? <input type="hidden" name="caseCursorStack" value={caseNextCursorStack} /> : null}
+                                            <IconOnlyButton
+                                                label="下一頁案件"
+                                                type="submit"
+                                                icon={<ArrowRight className="h-4 w-4" aria-hidden="true" />}
+                                                disabled={!caseHasNextPage || !caseNextCursor}
+                                            />
+                                        </form>
+                                    }
+                                />
                             </div>
                         </Card>
                     </>
@@ -1977,6 +2261,14 @@ export function CompanyDashboardWorkspace({
                                 <span>狀態</span>
                             </div>
                             <div className="max-h-[720px] overflow-y-auto pr-1">
+                            {visibleActivities.length === 0 ? (
+                                <EmptyStateCard
+                                    icon={Search}
+                                    title="沒有符合條件的活動"
+                                    description="可以調整搜尋或狀態條件，或先建立第一檔活動資料。"
+                                    className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
+                                />
+                            ) : (
                             <div className="grid gap-2">
                                 {visibleActivities.map((activity) => (
                                     <details key={activity.id} className="rounded-lg border border-[rgb(var(--border))]">
@@ -2278,33 +2570,40 @@ export function CompanyDashboardWorkspace({
                                     </details>
                                 ))}
                             </div>
-                            <div className="pt-2 flex flex-wrap justify-end gap-2">
-                                <form action="/dashboard" method="get">
-                                    <input type="hidden" name="tab" value="activities" />
-                                    {activityKeyword ? <input type="hidden" name="activityQ" value={activityKeyword} /> : null}
-                                    <input type="hidden" name="activityOrder" value={activityOrder} />
-                                    <input type="hidden" name="activityStatusFilter" value={activityStatusFilter} />
-                                    <input type="hidden" name="activityPageSize" value={activityPageSize} />
-                                    {activityPreviousCursor ? <input type="hidden" name="activityCursor" value={activityPreviousCursor} /> : null}
-                                    {activityPreviousCursorStack ? <input type="hidden" name="activityCursorStack" value={activityPreviousCursorStack} /> : null}
-                                    <IconOnlyButton label="上一頁活動" type="submit" icon={<ArrowLeft className="h-4 w-4" aria-hidden="true" />} disabled={!activityCurrentCursor} />
-                                </form>
-                                <form action="/dashboard" method="get">
-                                    <input type="hidden" name="tab" value="activities" />
-                                    {activityKeyword ? <input type="hidden" name="activityQ" value={activityKeyword} /> : null}
-                                    <input type="hidden" name="activityOrder" value={activityOrder} />
-                                    <input type="hidden" name="activityStatusFilter" value={activityStatusFilter} />
-                                    <input type="hidden" name="activityPageSize" value={activityPageSize} />
-                                    {activityNextCursor ? <input type="hidden" name="activityCursor" value={activityNextCursor} /> : null}
-                                    {activityNextCursorStack ? <input type="hidden" name="activityCursorStack" value={activityNextCursorStack} /> : null}
-                                    <IconOnlyButton
-                                        label="下一頁活動"
-                                        type="submit"
-                                        icon={<ArrowRight className="h-4 w-4" aria-hidden="true" />}
-                                        disabled={!activityHasNextPage || !activityNextCursor}
-                                    />
-                                </form>
-                            </div>
+                            )}
+                            <MerchantListPagination
+                                className="pt-2"
+                                summary={`共 ${visibleActivities.length} 筆活動結果，支援 server 分頁與狀態查詢。`}
+                                previousAction={
+                                    <form action="/dashboard" method="get">
+                                        <input type="hidden" name="tab" value="activities" />
+                                        {activityKeyword ? <input type="hidden" name="activityQ" value={activityKeyword} /> : null}
+                                        <input type="hidden" name="activityOrder" value={activityOrder} />
+                                        <input type="hidden" name="activityStatusFilter" value={activityStatusFilter} />
+                                        <input type="hidden" name="activityPageSize" value={activityPageSize} />
+                                        {activityPreviousCursor ? <input type="hidden" name="activityCursor" value={activityPreviousCursor} /> : null}
+                                        {activityPreviousCursorStack ? <input type="hidden" name="activityCursorStack" value={activityPreviousCursorStack} /> : null}
+                                        <IconOnlyButton label="上一頁活動" type="submit" icon={<ArrowLeft className="h-4 w-4" aria-hidden="true" />} disabled={!activityCurrentCursor} />
+                                    </form>
+                                }
+                                nextAction={
+                                    <form action="/dashboard" method="get">
+                                        <input type="hidden" name="tab" value="activities" />
+                                        {activityKeyword ? <input type="hidden" name="activityQ" value={activityKeyword} /> : null}
+                                        <input type="hidden" name="activityOrder" value={activityOrder} />
+                                        <input type="hidden" name="activityStatusFilter" value={activityStatusFilter} />
+                                        <input type="hidden" name="activityPageSize" value={activityPageSize} />
+                                        {activityNextCursor ? <input type="hidden" name="activityCursor" value={activityNextCursor} /> : null}
+                                        {activityNextCursorStack ? <input type="hidden" name="activityCursorStack" value={activityNextCursorStack} /> : null}
+                                        <IconOnlyButton
+                                            label="下一頁活動"
+                                            type="submit"
+                                            icon={<ArrowRight className="h-4 w-4" aria-hidden="true" />}
+                                            disabled={!activityHasNextPage || !activityNextCursor}
+                                        />
+                                    </form>
+                                }
+                            />
                             </div>
                         </Card>
                     </>
@@ -2361,568 +2660,403 @@ export function CompanyDashboardWorkspace({
                                 })}
                             </div>
                         </Card>
-                        <Card>
-                            <SectionTitle title="搜尋與篩選" hint="功能切換與搜尋區分離，避免操作混淆。" />
-                            <form action="/dashboard" method="get" className="flex flex-wrap items-center gap-2">
-                                <input type="hidden" name="tab" value="inventory" />
-                                <input type="hidden" name="inventoryView" value={inventoryView} />
-                                <MerchantPredictiveSearchInput
-                                    name="productQ"
-                                    defaultValue={productKeyword}
-                                    placeholder="搜尋品名、SKU、分類、品牌、型號"
-                                    targets={["inventory"]}
-                                    className="w-full sm:w-80"
-                                />
-                                <Button type="submit">查詢</Button>
-                                <Link
-                                    href={`/dashboard?tab=inventory&inventoryView=${encodeURIComponent(inventoryView)}`}
-                                    className="text-sm text-[rgb(var(--accent))] hover:underline"
-                                >
-                                    清除
-                                </Link>
-                            </form>
-                        </Card>
+                        <MerchantSectionCard title="搜尋與篩選" description="功能切換與搜尋區分離，避免操作混淆。">
+                            <SearchToolbar
+                                searchSlot={
+                                    <form action="/dashboard" method="get" className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                        <input type="hidden" name="tab" value="inventory" />
+                                        <input type="hidden" name="inventoryView" value={inventoryView} />
+                                        <MerchantPredictiveSearchInput
+                                            name="productQ"
+                                            defaultValue={productKeyword}
+                                            placeholder="搜尋品名、SKU、分類、品牌、型號"
+                                            targets={["inventory"]}
+                                            className="w-full"
+                                        />
+                                        <Button type="submit">查詢</Button>
+                                        <Link
+                                            href={`/dashboard?tab=inventory&inventoryView=${encodeURIComponent(inventoryView)}`}
+                                            className="text-sm text-[rgb(var(--accent))] hover:underline"
+                                        >
+                                            清除
+                                        </Link>
+                                    </form>
+                                }
+                            />
+                        </MerchantSectionCard>
 
                         {inventoryView === "stock" ? (
-                            <>
-                                <Card>
-                                    <SectionTitle title="庫存摘要" hint="只統計實體庫存與真實 reserved，不含客戶權益。"/>
-                                    <div className="grid gap-3 sm:grid-cols-4">
-                                        <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                                            <div className="text-xs text-[rgb(var(--muted))]">On hand 總數</div>
-                                            <div className="mt-1 text-2xl font-semibold">{formatMoney(inventorySummary.totalOnHandUnits, lang)}</div>
-                                        </div>
-                                        <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                                            <div className="text-xs text-[rgb(var(--muted))]">Reserved 總數</div>
-                                            <div className="mt-1 text-2xl font-semibold">{formatMoney(inventorySummary.totalReservedUnits, lang)}</div>
-                                        </div>
-                                        <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                                            <div className="text-xs text-[rgb(var(--muted))]">Available 總數</div>
-                                            <div className="mt-1 text-2xl font-semibold">{formatMoney(inventorySummary.totalAvailableUnits, lang)}</div>
-                                        </div>
-                                        <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                                            <div className="text-xs text-[rgb(var(--muted))]">庫存成本總值</div>
-                                            <div className="mt-1 text-2xl font-semibold">{formatMoney(inventorySummary.totalValue, lang)}</div>
-                                        </div>
-                                    </div>
-                                    <div className="mt-3 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                                        <div className="text-xs text-[rgb(var(--muted))]">低庫存（依各商品 lowStockThreshold）</div>
-                                        <div className="mt-1 text-2xl font-semibold">{inventorySummary.lowStockCount}</div>
-                                    </div>
-                                    <div className="mt-3 flex flex-wrap gap-2 text-sm">
-                                        <Link href="/dashboard?tab=inventory&inventoryView=stock-in" className="text-[rgb(var(--accent))] hover:underline">
-                                            前往入庫
-                                        </Link>
-                                        <Link href="/dashboard?tab=inventory&inventoryView=stock-out" className="text-[rgb(var(--accent))] hover:underline">
-                                            前往出庫
-                                        </Link>
-                                    </div>
-                                </Card>
+                            <MerchantListShell
+                                list={
+                                    <>
+                                        <MerchantSectionCard title="庫存摘要" description="只統計實體庫存與真實 reserved，不含客戶權益。">
+                                            <div className="grid gap-3 sm:grid-cols-4">
+                                                <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                                                    <div className="text-xs text-[rgb(var(--muted))]">On hand 總數</div>
+                                                    <div className="mt-1 text-2xl font-semibold">{formatMoney(inventorySummary.totalOnHandUnits, lang)}</div>
+                                                </div>
+                                                <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                                                    <div className="text-xs text-[rgb(var(--muted))]">Reserved 總數</div>
+                                                    <div className="mt-1 text-2xl font-semibold">{formatMoney(inventorySummary.totalReservedUnits, lang)}</div>
+                                                </div>
+                                                <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                                                    <div className="text-xs text-[rgb(var(--muted))]">Available 總數</div>
+                                                    <div className="mt-1 text-2xl font-semibold">{formatMoney(inventorySummary.totalAvailableUnits, lang)}</div>
+                                                </div>
+                                                <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                                                    <div className="text-xs text-[rgb(var(--muted))]">庫存成本總值</div>
+                                                    <div className="mt-1 text-2xl font-semibold">{formatMoney(inventorySummary.totalValue, lang)}</div>
+                                                </div>
+                                            </div>
+                                            <div className="mt-3 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                                                <div className="text-xs text-[rgb(var(--muted))]">低庫存（依各商品 lowStockThreshold）</div>
+                                                <div className="mt-1 text-2xl font-semibold">{inventorySummary.lowStockCount}</div>
+                                            </div>
+                                            <div className="mt-3 flex flex-wrap gap-2 text-sm">
+                                                <Link href="/dashboard?tab=inventory&inventoryView=stock-in" className="text-[rgb(var(--accent))] hover:underline">
+                                                    前往入庫
+                                                </Link>
+                                                <Link href="/dashboard?tab=inventory&inventoryView=stock-out" className="text-[rgb(var(--accent))] hover:underline">
+                                                    前往出庫
+                                                </Link>
+                                            </div>
+                                        </MerchantSectionCard>
 
-                                <Card>
-                                    <SectionTitle title={`庫存列表（${products.length}）`} />
-                                    {products.length === 0 ? (
-                                        <div className="text-sm text-[rgb(var(--muted))]">目前沒有產品。</div>
-                                    ) : (
-                                        <div className="overflow-x-auto">
-                                            <table className="min-w-full text-sm">
-                                                <thead>
-                                                    <tr className="text-left text-[rgb(var(--muted))]">
-                                                        <th className="px-2 py-2">品名</th>
-                                                        <th className="px-2 py-2">SKU</th>
-                                                        <th className="px-2 py-2">供應商</th>
-                                                        <th className="px-2 py-2">On hand</th>
-                                                        <th className="px-2 py-2">Reserved</th>
-                                                        <th className="px-2 py-2">Available</th>
-                                                        <th className="px-2 py-2">售價</th>
-                                                        <th className="px-2 py-2">成本</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {products.map((product) => (
-                                                        <tr key={product.id} className="border-t border-[rgb(var(--border))]">
-                                                            <td className="px-2 py-2 font-medium">{product.name}</td>
-                                                            <td className="px-2 py-2">{product.sku || "-"}</td>
-                                                            <td className="px-2 py-2">{product.supplier || "-"}</td>
-                                                            <td className="px-2 py-2">{product.onHandQty ?? product.stock}</td>
-                                                            <td className="px-2 py-2">{product.reservedQty ?? 0}</td>
-                                                            <td className="px-2 py-2">{product.availableQty ?? Math.max((product.onHandQty ?? product.stock) - (product.reservedQty ?? 0), 0)}</td>
-                                                            <td className="px-2 py-2">{formatMoney(product.price, lang)}</td>
-                                                            <td className="px-2 py-2">{formatMoney(product.cost, lang)}</td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )}
-                                </Card>
-                            </>
+                                        <MerchantSectionCard title={`庫存列表（${products.length}）`}>
+                                            {products.length === 0 ? (
+                                                <EmptyStateCard
+                                                    icon={Search}
+                                                    title="目前沒有產品"
+                                                    description="可以先到庫存設置或產品管理建立第一筆產品資料。"
+                                                    className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
+                                                />
+                                            ) : (
+                                                <div className="overflow-x-auto">
+                                                    <table className="min-w-full text-sm">
+                                                        <thead>
+                                                            <tr className="text-left text-[rgb(var(--muted))]">
+                                                                <th className="px-2 py-2">品名</th>
+                                                                <th className="px-2 py-2">SKU</th>
+                                                                <th className="px-2 py-2">供應商</th>
+                                                                <th className="px-2 py-2">On hand</th>
+                                                                <th className="px-2 py-2">Reserved</th>
+                                                                <th className="px-2 py-2">Available</th>
+                                                                <th className="px-2 py-2">售價</th>
+                                                                <th className="px-2 py-2">成本</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {products.map((product) => (
+                                                                <tr key={product.id} className="border-t border-[rgb(var(--border))]">
+                                                                    <td className="px-2 py-2 font-medium">{product.name}</td>
+                                                                    <td className="px-2 py-2">{product.sku || "-"}</td>
+                                                                    <td className="px-2 py-2">{product.supplier || "-"}</td>
+                                                                    <td className="px-2 py-2">{product.onHandQty ?? product.stock}</td>
+                                                                    <td className="px-2 py-2">{product.reservedQty ?? 0}</td>
+                                                                    <td className="px-2 py-2">{product.availableQty ?? Math.max((product.onHandQty ?? product.stock) - (product.reservedQty ?? 0), 0)}</td>
+                                                                    <td className="px-2 py-2">{formatMoney(product.price, lang)}</td>
+                                                                    <td className="px-2 py-2">{formatMoney(product.cost, lang)}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            )}
+                                        </MerchantSectionCard>
+                                    </>
+                                }
+                                detailPanel={renderInventoryLogPanel()}
+                            />
                         ) : null}
 
                         {inventoryView === "settings" ? (
-                            <>
-                                <Card>
-                                    <SectionTitle title="庫存設置" hint="新增產品與初始庫存" />
-                                    <form action={createProductAction} className="grid gap-2 md:grid-cols-5">
-                                        <input type="hidden" name="tab" value="inventory" />
-                                        <input type="hidden" name="inventoryView" value={inventoryView} />
-                                        <Input name="name" placeholder="品名" required />
-                                        <Input type="number" min={0} name="price" placeholder="售價" required />
-                                        <Input type="number" min={0} name="cost" placeholder="成本" required />
-                                        <Input name="supplier" placeholder="供應商" list="dashboard-supplier-options" />
-                                        <Input name="sku" placeholder="SKU" />
-                                        <Input type="number" min={0} name="stock" placeholder="庫存" defaultValue={0} className="md:col-span-1" />
-                                        <Button type="submit" className="md:col-span-4">新增產品</Button>
-                                    </form>
-                                </Card>
-
-                                <Card>
-                                    <SectionTitle title={`產品列表（${products.length}）`} />
-                                    <div className="grid gap-2">
-                                        {products.map((product) => (
-                                            <details key={product.id} className="rounded-lg border border-[rgb(var(--border))]">
-                                                <summary className="grid cursor-pointer list-none gap-1 px-3 py-2 text-sm sm:grid-cols-6 [&::-webkit-details-marker]:hidden">
-                                                    <span>{product.name}</span>
-                                                    <span>On hand {product.onHandQty ?? product.stock} / Reserved {product.reservedQty ?? 0}</span>
-                                                    <span>售價 {formatMoney(product.price, lang)}</span>
-                                                    <span>成本 {formatMoney(product.cost, lang)}</span>
-                                                    <span>{product.supplier || "-"}</span>
-                                                    <span>{product.sku || "-"}</span>
-                                                </summary>
-                                                <div className="border-t border-[rgb(var(--border))] p-3">
-                                                    <form action={updateProductAction} className="grid gap-2 md:grid-cols-5">
-                                                        <input type="hidden" name="tab" value="inventory" />
-                                                        <input type="hidden" name="inventoryView" value={inventoryView} />
-                                                        <input type="hidden" name="productId" value={product.id} />
-                                                        <Input name="name" defaultValue={product.name} required />
-                                                        <Input type="number" min={0} name="price" defaultValue={product.price} required />
-                                                        <Input type="number" min={0} name="cost" defaultValue={product.cost} required />
-                                                        <Input name="supplier" defaultValue={product.supplier} list="dashboard-supplier-options" />
-                                                        <Input name="sku" defaultValue={product.sku} />
-                                                        <Input type="number" min={0} name="stock" defaultValue={product.onHandQty ?? product.stock} />
-                                                        <Button type="submit" className="md:col-span-3">更新產品</Button>
-                                                    </form>
-                                                    <form action={deleteProductAction} className="mt-2" onSubmit={guardDeleteWithPassword} data-delete-target={`產品 ${product.name}`}>
-                                                        <input type="hidden" name="tab" value="inventory" />
-                                                        <input type="hidden" name="inventoryView" value={inventoryView} />
-                                                        <input type="hidden" name="productId" value={product.id} />
-                                                        <Button type="submit" variant="ghost">刪除產品</Button>
-                                                    </form>
-                                                </div>
-                                            </details>
-                                        ))}
-                                    </div>
-                                </Card>
-                            </>
+                            <MerchantListShell
+                                toolbar={
+                                    <MerchantSectionCard title="庫存設置" description="新增產品與初始庫存">
+                                        {renderInventoryCreateProductForm("settings")}
+                                    </MerchantSectionCard>
+                                }
+                                list={renderInventoryEditableProductList("settings", "產品列表")}
+                                detailPanel={renderInventoryLogPanel()}
+                            />
                         ) : null}
 
                         {inventoryView === "product-management" ? (
-                            <>
-                                <Card className="rounded-xl p-3">
-                                    <SectionTitle title="搜尋 / 新增" hint="產品管理 CRUD" />
-                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-                                        <form action="/dashboard" method="get" className="flex w-full flex-col gap-2 sm:flex-row sm:items-center">
-                                            <input type="hidden" name="tab" value="inventory" />
-                                            <input type="hidden" name="inventoryView" value="product-management" />
-                                            <div className="relative w-full">
-                                                <MerchantPredictiveSearchInput
-                                                    name="productQ"
-                                                    defaultValue={productKeyword}
-                                                    placeholder="查詢品名、SKU、供應商、分類、品牌、型號"
-                                                    targets={["inventory"]}
-                                                    inputClassName="pr-10"
-                                                />
-                                                <Link
-                                                    href="/dashboard?tab=inventory&inventoryView=product-management"
-                                                    aria-label="清除"
-                                                    className="group absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-[rgb(var(--muted))] hover:bg-[rgb(var(--panel2))] hover:text-[rgb(var(--text))]"
-                                                >
-                                                    <X className="h-4 w-4" aria-hidden="true" />
-                                                </Link>
-                                            </div>
-                                            <Button type="submit" variant="ghost" aria-label="查詢" className="group relative h-10 w-10 shrink-0 !p-0 flex items-center justify-center">
-                                                <Search className="h-6 w-6 transition-transform group-hover:scale-110" aria-hidden="true" />
-                                            </Button>
-                                        </form>
-                                        <Button
-                                            type="button"
-                                            variant={showCreateProductForm ? "solid" : "ghost"}
-                                            aria-label="新增"
-                                            className="group relative h-10 w-10 shrink-0 !p-0 flex items-center justify-center"
-                                            onClick={() => setShowCreateProductForm((prev) => !prev)}
-                                        >
-                                            <Plus className="h-6 w-6 transition-transform group-hover:scale-110" aria-hidden="true" />
-                                        </Button>
-                                    </div>
-
-                                    {showCreateProductForm ? (
-                                        <form action={createProductAction} className="mt-3 grid gap-2 md:grid-cols-5">
-                                            <input type="hidden" name="tab" value="inventory" />
-                                            <input type="hidden" name="inventoryView" value="product-management" />
-                                            <Input name="name" placeholder="品名" required />
-                                            <Input type="number" min={0} name="price" placeholder="售價" required />
-                                            <Input type="number" min={0} name="cost" placeholder="成本" required />
-                                            <Input name="supplier" placeholder="供應商" list="dashboard-supplier-options" />
-                                            <Input name="sku" placeholder="SKU" />
-                                            <Input type="number" min={0} name="stock" placeholder="庫存" defaultValue={0} className="md:col-span-1" />
-                                            <Button type="submit" className="md:col-span-4">新增產品</Button>
-                                        </form>
-                                    ) : null}
-                                </Card>
-
-                                <Card className="rounded-xl p-3">
-                                    <SectionTitle title={`產品列表（${products.length}）`} />
-                                    {products.length === 0 ? (
-                                        <div className="text-sm text-[rgb(var(--muted))]">目前沒有產品資料。</div>
-                                    ) : (
-                                        <div className="grid gap-2">
-                                            {products.map((product) => (
-                                                <details key={product.id} className="rounded-lg border border-[rgb(var(--border))]">
-                                                    <summary className="grid cursor-pointer list-none gap-1 px-3 py-2 text-sm sm:grid-cols-6 [&::-webkit-details-marker]:hidden">
-                                                        <span>{product.name}</span>
-                                                        <span>On hand {product.onHandQty ?? product.stock} / Reserved {product.reservedQty ?? 0}</span>
-                                                        <span>售價 {formatMoney(product.price, lang)}</span>
-                                                        <span>成本 {formatMoney(product.cost, lang)}</span>
-                                                        <span>{product.supplier || "-"}</span>
-                                                        <span>{product.sku || "-"}</span>
-                                                    </summary>
-                                                    <div className="border-t border-[rgb(var(--border))] p-3">
-                                                        <form action={updateProductAction} className="grid gap-2 md:grid-cols-5">
-                                                            <input type="hidden" name="tab" value="inventory" />
-                                                            <input type="hidden" name="inventoryView" value="product-management" />
-                                                            <input type="hidden" name="productId" value={product.id} />
-                                                            <Input name="name" defaultValue={product.name} required />
-                                                            <Input type="number" min={0} name="price" defaultValue={product.price} required />
-                                                            <Input type="number" min={0} name="cost" defaultValue={product.cost} required />
-                                                            <Input name="supplier" defaultValue={product.supplier} list="dashboard-supplier-options" />
-                                                            <Input name="sku" defaultValue={product.sku} />
-                                                            <Input type="number" min={0} name="stock" defaultValue={product.onHandQty ?? product.stock} />
-                                                            <Button type="submit" className="md:col-span-3">更新產品</Button>
-                                                        </form>
-                                                        <form action={deleteProductAction} className="mt-2" onSubmit={guardDeleteWithPassword} data-delete-target={`產品 ${product.name}`}>
-                                                            <input type="hidden" name="tab" value="inventory" />
-                                                            <input type="hidden" name="inventoryView" value="product-management" />
-                                                            <input type="hidden" name="productId" value={product.id} />
-                                                            <Button type="submit" variant="ghost">刪除產品</Button>
-                                                        </form>
+                            <MerchantListShell
+                                toolbar={
+                                    <MerchantSectionCard title="搜尋 / 新增" description="產品管理 CRUD" bodyClassName="space-y-3">
+                                        <SearchToolbar
+                                            searchSlot={
+                                                <form action="/dashboard" method="get" className="flex w-full flex-col gap-2 sm:flex-row sm:items-center">
+                                                    <input type="hidden" name="tab" value="inventory" />
+                                                    <input type="hidden" name="inventoryView" value="product-management" />
+                                                    <div className="relative w-full">
+                                                        <MerchantPredictiveSearchInput
+                                                            name="productQ"
+                                                            defaultValue={productKeyword}
+                                                            placeholder="查詢品名、SKU、供應商、分類、品牌、型號"
+                                                            targets={["inventory"]}
+                                                            inputClassName="pr-10"
+                                                        />
+                                                        <Link
+                                                            href="/dashboard?tab=inventory&inventoryView=product-management"
+                                                            aria-label="清除"
+                                                            className="group absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-[rgb(var(--muted))] hover:bg-[rgb(var(--panel2))] hover:text-[rgb(var(--text))]"
+                                                        >
+                                                            <X className="h-4 w-4" aria-hidden="true" />
+                                                        </Link>
                                                     </div>
-                                                </details>
-                                            ))}
-                                        </div>
-                                    )}
-                                </Card>
-                            </>
+                                                    <Button type="submit" variant="ghost" aria-label="查詢" className="group relative h-10 w-10 shrink-0 !p-0 flex items-center justify-center">
+                                                        <Search className="h-6 w-6 transition-transform group-hover:scale-110" aria-hidden="true" />
+                                                    </Button>
+                                                </form>
+                                            }
+                                            primaryActionSlot={
+                                                <Button
+                                                    type="button"
+                                                    variant={showCreateProductForm ? "solid" : "ghost"}
+                                                    aria-label="新增"
+                                                    className="group relative h-10 w-10 shrink-0 !p-0 flex items-center justify-center"
+                                                    onClick={() => setShowCreateProductForm((prev) => !prev)}
+                                                >
+                                                    <Plus className="h-6 w-6 transition-transform group-hover:scale-110" aria-hidden="true" />
+                                                </Button>
+                                            }
+                                        />
+
+                                        {showCreateProductForm ? (
+                                            renderInventoryCreateProductForm("product-management")
+                                        ) : null}
+                                    </MerchantSectionCard>
+                                }
+                                list={renderInventoryEditableProductList("product-management", "產品列表")}
+                                detailPanel={renderInventoryLogPanel()}
+                            />
                         ) : null}
 
                         {inventoryView === "stock-in" ? (
-                            <Card>
-                                <SectionTitle title={`入庫（${products.length}）`} hint="每次操作只更新一項商品庫存" />
-                                {products.length === 0 ? (
-                                    <div className="text-sm text-[rgb(var(--muted))]">目前沒有產品可入庫。</div>
-                                ) : (
-                                    <div className="grid gap-2">
-                                        {products.map((product) => (
-                                            <form
-                                                key={`stock_in_${product.id}`}
-                                                action={createStockInAction}
-                                                className="grid gap-2 rounded-lg border border-[rgb(var(--border))] p-3 md:grid-cols-[minmax(0,2fr)_120px_140px]"
-                                            >
-                                                <input type="hidden" name="tab" value="inventory" />
-                                                <input type="hidden" name="inventoryView" value={inventoryView} />
-                                                <input type="hidden" name="productId" value={product.id} />
-                                                <div className="text-sm">
-                                                    <div className="font-medium">{product.name}</div>
-                                                    <div className="text-xs text-[rgb(var(--muted))]">
-                                                        SKU: {product.sku || "-"} / On hand: {product.onHandQty ?? product.stock} / Reserved: {product.reservedQty ?? 0}
-                                                    </div>
-                                                </div>
-                                                <Input type="number" min={1} name="qty" defaultValue={1} />
-                                                <Button type="submit">確認入庫</Button>
-                                            </form>
-                                        ))}
-                                    </div>
-                                )}
-                            </Card>
+                            <MerchantListShell
+                                list={
+                                    <MerchantSectionCard title={`入庫（${products.length}）`} description="每次操作只更新一項商品庫存">
+                                        {products.length === 0 ? (
+                                            <EmptyStateCard
+                                                icon={Search}
+                                                title="目前沒有產品可入庫"
+                                                description="先建立產品資料後，這裡才會出現可操作的入庫清單。"
+                                                className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
+                                            />
+                                        ) : (
+                                            <div className="grid gap-2">
+                                                {products.map((product) => (
+                                                    <form
+                                                        key={`stock_in_${product.id}`}
+                                                        action={createStockInAction}
+                                                        className="grid gap-2 rounded-lg border border-[rgb(var(--border))] p-3 md:grid-cols-[minmax(0,2fr)_120px_140px]"
+                                                    >
+                                                        <input type="hidden" name="tab" value="inventory" />
+                                                        <input type="hidden" name="inventoryView" value={inventoryView} />
+                                                        <input type="hidden" name="productId" value={product.id} />
+                                                        <div className="text-sm">
+                                                            <div className="font-medium">{product.name}</div>
+                                                            <div className="text-xs text-[rgb(var(--muted))]">
+                                                                SKU: {product.sku || "-"} / On hand: {product.onHandQty ?? product.stock} / Reserved: {product.reservedQty ?? 0}
+                                                            </div>
+                                                        </div>
+                                                        <Input type="number" min={1} name="qty" defaultValue={1} />
+                                                        <Button type="submit">確認入庫</Button>
+                                                    </form>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </MerchantSectionCard>
+                                }
+                                detailPanel={renderInventoryLogPanel()}
+                            />
                         ) : null}
 
                         {inventoryView === "stock-out" ? (
-                            <Card>
-                                <SectionTitle title={`出庫（${products.length}）`} hint="出庫數量不可超過 available 庫存" />
-                                {products.length === 0 ? (
-                                    <div className="text-sm text-[rgb(var(--muted))]">目前沒有產品可出庫。</div>
-                                ) : (
-                                    <div className="grid gap-2">
-                                        {products.map((product) => (
-                                            <form
-                                                key={`stock_out_${product.id}`}
-                                                action={createStockOutAction}
-                                                className="grid gap-2 rounded-lg border border-[rgb(var(--border))] p-3 md:grid-cols-[minmax(0,2fr)_120px_140px]"
-                                            >
-                                                <input type="hidden" name="tab" value="inventory" />
-                                                <input type="hidden" name="inventoryView" value={inventoryView} />
-                                                <input type="hidden" name="productId" value={product.id} />
-                                                <div className="text-sm">
-                                                    <div className="font-medium">{product.name}</div>
-                                                    <div className="text-xs text-[rgb(var(--muted))]">
-                                                        SKU: {product.sku || "-"} / On hand: {product.onHandQty ?? product.stock} / Reserved: {product.reservedQty ?? 0} / Available: {product.availableQty ?? Math.max((product.onHandQty ?? product.stock) - (product.reservedQty ?? 0), 0)}
-                                                    </div>
-                                                </div>
-                                                <Input
-                                                    type="number"
-                                                    min={1}
-                                                    max={Math.max(1, product.availableQty ?? Math.max((product.onHandQty ?? product.stock) - (product.reservedQty ?? 0), 0))}
-                                                    name="qty"
-                                                    defaultValue={1}
-                                                />
-                                                <Button
-                                                    type="submit"
-                                                    disabled={(product.availableQty ?? Math.max((product.onHandQty ?? product.stock) - (product.reservedQty ?? 0), 0)) <= 0}
-                                                >
-                                                    確認出庫
-                                                </Button>
-                                            </form>
-                                        ))}
-                                    </div>
-                                )}
-                            </Card>
+                            <MerchantListShell
+                                list={
+                                    <MerchantSectionCard title={`出庫（${products.length}）`} description="出庫數量不可超過 available 庫存">
+                                        {products.length === 0 ? (
+                                            <EmptyStateCard
+                                                icon={Search}
+                                                title="目前沒有產品可出庫"
+                                                description="先建立或入庫產品後，這裡才會出現可操作的出庫清單。"
+                                                className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
+                                            />
+                                        ) : (
+                                            <div className="grid gap-2">
+                                                {products.map((product) => (
+                                                    <form
+                                                        key={`stock_out_${product.id}`}
+                                                        action={createStockOutAction}
+                                                        className="grid gap-2 rounded-lg border border-[rgb(var(--border))] p-3 md:grid-cols-[minmax(0,2fr)_120px_140px]"
+                                                    >
+                                                        <input type="hidden" name="tab" value="inventory" />
+                                                        <input type="hidden" name="inventoryView" value={inventoryView} />
+                                                        <input type="hidden" name="productId" value={product.id} />
+                                                        <div className="text-sm">
+                                                            <div className="font-medium">{product.name}</div>
+                                                            <div className="text-xs text-[rgb(var(--muted))]">
+                                                                SKU: {product.sku || "-"} / On hand: {product.onHandQty ?? product.stock} / Reserved: {product.reservedQty ?? 0} / Available: {product.availableQty ?? Math.max((product.onHandQty ?? product.stock) - (product.reservedQty ?? 0), 0)}
+                                                            </div>
+                                                        </div>
+                                                        <Input
+                                                            type="number"
+                                                            min={1}
+                                                            max={Math.max(1, product.availableQty ?? Math.max((product.onHandQty ?? product.stock) - (product.reservedQty ?? 0), 0))}
+                                                            name="qty"
+                                                            defaultValue={1}
+                                                        />
+                                                        <Button
+                                                            type="submit"
+                                                            disabled={(product.availableQty ?? Math.max((product.onHandQty ?? product.stock) - (product.reservedQty ?? 0), 0)) <= 0}
+                                                        >
+                                                            確認出庫
+                                                        </Button>
+                                                    </form>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </MerchantSectionCard>
+                                }
+                                detailPanel={renderInventoryLogPanel()}
+                            />
                         ) : null}
-
-                        <Card>
-                            <SectionTitle title={`操作紀錄（${stockLogs.length}）`} hint="時間、商品、數量、操作者" />
-                            {stockLogs.length === 0 ? (
-                                <div className="text-sm text-[rgb(var(--muted))]">目前還沒有庫存異動紀錄。</div>
-                            ) : (
-                                <div className="overflow-x-auto">
-                                    <table className="min-w-full text-sm">
-                                        <thead>
-                                            <tr className="text-left text-[rgb(var(--muted))]">
-                                                <th className="px-2 py-2">時間</th>
-                                                <th className="px-2 py-2">商品</th>
-                                                <th className="px-2 py-2">動作</th>
-                                                <th className="px-2 py-2">數量</th>
-                                                <th className="px-2 py-2">前庫存</th>
-                                                <th className="px-2 py-2">後庫存</th>
-                                                <th className="px-2 py-2">操作者</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {stockLogs.map((log) => (
-                                                <tr key={log.id} className="border-t border-[rgb(var(--border))]">
-                                                    <td className="px-2 py-2">{formatTime(log.createdAt, lang)}</td>
-                                                    <td className="px-2 py-2">{log.productName}</td>
-                                                    <td className="px-2 py-2">{stockActionText(log.action)}</td>
-                                                    <td className="px-2 py-2">{log.qty}</td>
-                                                    <td className="px-2 py-2">{log.beforeStock}</td>
-                                                    <td className="px-2 py-2">{log.afterStock}</td>
-                                                    <td className="px-2 py-2">
-                                                        <div>{log.operatorName || "-"}</div>
-                                                        <div className="text-xs text-[rgb(var(--muted))]">{log.operatorEmail || "-"}</div>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-                        </Card>
                     </>
                 ) : null}
 
                 {tab === "marketing" ? (
                     <>
-                        <Card>
-                            <SectionTitle title="商店營銷設置" hint="維修品牌型號" />
-                            <form action="/dashboard" method="get" className="flex flex-wrap items-center gap-2">
-                                <input type="hidden" name="tab" value="marketing" />
-                                <MerchantPredictiveSearchInput
-                                    name="brandQ"
-                                    defaultValue={brandKeyword}
-                                    placeholder="品牌 / 型號搜尋"
-                                    localSuggestions={brandSearchSuggestions}
-                                    className="w-full sm:w-80"
-                                />
-                                <IconOnlyButton label="搜尋品牌與型號" type="submit" variant="solid" icon={<Search className="h-4 w-4" aria-hidden="true" />} />
-                            </form>
-                        </Card>
-
-                        <Card>
-                            <SectionTitle title="分類與供應商" hint="供產品新增下拉選單使用，資料由伺服器集中管理" />
+                        <MerchantListShell
+                            toolbar={
+                                <MerchantSectionCard title="商店營銷設置" description="維修品牌型號">
+                                    <SearchToolbar
+                                        searchSlot={
+                                            <form action="/dashboard" method="get" className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                                <input type="hidden" name="tab" value="marketing" />
+                                                <MerchantPredictiveSearchInput
+                                                    name="brandQ"
+                                                    defaultValue={brandKeyword}
+                                                    placeholder="品牌 / 型號搜尋"
+                                                    localSuggestions={brandSearchSuggestions}
+                                                    className="w-full"
+                                                />
+                                                <IconOnlyButton label="搜尋品牌與型號" type="submit" variant="solid" icon={<Search className="h-4 w-4" aria-hidden="true" />} />
+                                            </form>
+                                        }
+                                    />
+                                </MerchantSectionCard>
+                            }
+                            list={
+                                <MerchantSectionCard
+                                    title="分類與供應商"
+                                    description="供產品新增下拉選單使用，資料由伺服器集中管理"
+                                    actions={
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-[rgb(var(--muted))]">清單顯示</span>
+                                            <Select value={marketingLookupListSize} onChange={(event) => setMarketingLookupListSize(event.currentTarget.value)} className="h-9 w-[96px]">
+                                                {LIST_DISPLAY_OPTIONS.map((size) => (
+                                                    <option key={`marketing-lookup-size-${size}`} value={size}>
+                                                        {size}
+                                                    </option>
+                                                ))}
+                                            </Select>
+                                        </div>
+                                    }
+                                >
                             <div className="grid gap-3 lg:grid-cols-2">
-                                <form action={createCategoryAction} className="space-y-3 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-4">
-                                    <input type="hidden" name="tab" value="marketing" />
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                        <FieldLabel htmlFor="marketing-category-name" label="分類名稱" />
-                                        <div className="text-xs text-[rgb(var(--muted))]">集中維護產品分類選單</div>
-                                    </div>
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <Input
-                                            id="marketing-category-name"
-                                            name="categoryName"
-                                            list="marketing-category-search-options"
-                                            placeholder="例如：手機配件"
-                                            value={categorySearchDraft}
-                                            onChange={(event) => setCategorySearchDraft(event.target.value)}
-                                            required
-                                            className="min-w-[220px] flex-1"
-                                        />
-                                        <IconOnlyButton label="搜尋分類" type="button" icon={<Search className="h-4 w-4" aria-hidden="true" />} onClick={() => setCategorySearchTerm(categorySearchDraft.trim())} />
-                                        <IconOnlyButton label="新增分類" type="submit" variant="solid" icon={<Plus className="h-4 w-4" aria-hidden="true" />} />
-                                    </div>
-                                </form>
-                                <form action={createSupplierAction} className="space-y-3 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-4">
-                                    <input type="hidden" name="tab" value="marketing" />
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                        <FieldLabel htmlFor="marketing-supplier-name" label="供應商名稱" />
-                                        <div className="text-xs text-[rgb(var(--muted))]">集中維護進貨來源名單</div>
-                                    </div>
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <Input
-                                            id="marketing-supplier-name"
-                                            name="supplierName"
-                                            list="marketing-supplier-search-options"
-                                            placeholder="例如：Apple 授權經銷"
-                                            value={supplierSearchDraft}
-                                            onChange={(event) => setSupplierSearchDraft(event.target.value)}
-                                            required
-                                            className="min-w-[220px] flex-1"
-                                        />
-                                        <IconOnlyButton label="搜尋供應商" type="button" icon={<Search className="h-4 w-4" aria-hidden="true" />} onClick={() => setSupplierSearchTerm(supplierSearchDraft.trim())} />
-                                        <IconOnlyButton label="新增供應商" type="submit" variant="solid" icon={<Plus className="h-4 w-4" aria-hidden="true" />} />
-                                    </div>
-                                </form>
-                            </div>
-                            <div className="mt-3 flex items-center justify-end gap-2">
-                                <span className="text-xs text-[rgb(var(--muted))]">清單顯示</span>
-                                <Select value={marketingLookupListSize} onChange={(event) => setMarketingLookupListSize(event.currentTarget.value)} className="h-9 w-[96px]">
-                                    {LIST_DISPLAY_OPTIONS.map((size) => (
-                                        <option key={`marketing-lookup-size-${size}`} value={size}>
-                                            {size}
-                                        </option>
-                                    ))}
-                                </Select>
+                                {renderMarketingLookupCreateForm({
+                                    formAction: createCategoryAction,
+                                    inputId: "marketing-category-name",
+                                    inputName: "categoryName",
+                                    inputListId: "marketing-category-search-options",
+                                    label: "分類名稱",
+                                    hint: "集中維護產品分類選單",
+                                    placeholder: "例如：手機配件",
+                                    draftValue: categorySearchDraft,
+                                    onDraftChange: setCategorySearchDraft,
+                                    onSearch: () => setCategorySearchTerm(categorySearchDraft.trim()),
+                                    searchLabel: "搜尋分類",
+                                    createLabel: "新增分類",
+                                })}
+                                {renderMarketingLookupCreateForm({
+                                    formAction: createSupplierAction,
+                                    inputId: "marketing-supplier-name",
+                                    inputName: "supplierName",
+                                    inputListId: "marketing-supplier-search-options",
+                                    label: "供應商名稱",
+                                    hint: "集中維護進貨來源名單",
+                                    placeholder: "例如：Apple 授權經銷",
+                                    draftValue: supplierSearchDraft,
+                                    onDraftChange: setSupplierSearchDraft,
+                                    onSearch: () => setSupplierSearchTerm(supplierSearchDraft.trim()),
+                                    searchLabel: "搜尋供應商",
+                                    createLabel: "新增供應商",
+                                })}
                             </div>
                             <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                                <div className="rounded-lg border border-[rgb(var(--border))] p-3">
-                                    <div className="mb-2 flex items-center justify-between gap-2">
-                                        <div className="text-xs text-[rgb(var(--muted))]">分類（{marketingCategoryRows.length}/{dimensionBundle.categories.length}）</div>
-                                        {categorySearchTerm ? (
-                                            <IconOnlyButton
-                                                label="清除分類搜尋"
-                                                icon={<X className="h-4 w-4" aria-hidden="true" />}
-                                                className="h-8 w-8"
-                                                onClick={() => {
-                                                    setCategorySearchDraft("");
-                                                    setCategorySearchTerm("");
-                                                }}
-                                            />
-                                        ) : null}
-                                    </div>
-                                    {marketingCategoryRows.length === 0 ? (
-                                        <div className="text-xs text-[rgb(var(--muted))]">找不到符合條件的分類。</div>
-                                    ) : (
-                                        <div className="max-h-[560px] overflow-y-auto pr-1">
-                                        <div className="grid gap-2">
-                                            {visibleMarketingCategoryRows.map((category) => (
-                                                (() => {
-                                                    const updateFormId = `update-category-${category.id}`;
-                                                    return (
-                                                <details key={`marketing-category-${category.id}`} className="overflow-hidden rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]">
-                                                    <summary className="cursor-pointer list-none px-3 py-3 [&::-webkit-details-marker]:hidden">
-                                                        <div className="flex items-center justify-between gap-2">
-                                                            <div className="min-w-0">
-                                                                <div className="truncate text-sm font-medium">{category.name}</div>
-                                                                <div className="text-xs text-[rgb(var(--muted))]">點擊展開編輯名稱或刪除</div>
-                                                            </div>
-                                                            <div className="text-xs text-[rgb(var(--muted))]">分類</div>
-                                                        </div>
-                                                    </summary>
-                                                    <div className="space-y-3 border-t border-[rgb(var(--border))] p-3">
-                                                        <form id={updateFormId} action={updateCategoryAction} className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-                                                            <input type="hidden" name="tab" value="marketing" />
-                                                            <input type="hidden" name="categoryId" value={category.id} />
-                                                            <Input name="categoryName" defaultValue={category.name} required className="w-full" />
-                                                        </form>
-                                                        <div className="flex items-center justify-end gap-2 rounded-lg bg-[rgb(var(--panel))] px-2 py-2">
-                                                            <div className="mr-auto text-xs text-[rgb(var(--muted))]">操作</div>
-                                                            <IconOnlyButton label="更新分類" form={updateFormId} type="submit" variant="solid" icon={<Save className="h-4 w-4" aria-hidden="true" />} />
-                                                            <form action={deleteCategoryAction} onSubmit={guardDeleteWithPassword} data-delete-target={`分類 ${category.name}`}>
-                                                                <input type="hidden" name="tab" value="marketing" />
-                                                                <input type="hidden" name="categoryId" value={category.id} />
-                                                                <IconOnlyButton label="移除分類" type="submit" icon={<Trash2 className="h-4 w-4" aria-hidden="true" />} />
-                                                            </form>
-                                                        </div>
-                                                    </div>
-                                                </details>
-                                                    );
-                                                })()
-                                            ))}
-                                        </div>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="rounded-lg border border-[rgb(var(--border))] p-3">
-                                    <div className="mb-2 flex items-center justify-between gap-2">
-                                        <div className="text-xs text-[rgb(var(--muted))]">供應商（{marketingSupplierRows.length}/{supplierItems.length}）</div>
-                                        {supplierSearchTerm ? (
-                                            <IconOnlyButton
-                                                label="清除供應商搜尋"
-                                                icon={<X className="h-4 w-4" aria-hidden="true" />}
-                                                className="h-8 w-8"
-                                                onClick={() => {
-                                                    setSupplierSearchDraft("");
-                                                    setSupplierSearchTerm("");
-                                                }}
-                                            />
-                                        ) : null}
-                                    </div>
-                                    {marketingSupplierRows.length === 0 ? (
-                                        <div className="text-xs text-[rgb(var(--muted))]">找不到符合條件的供應商。</div>
-                                    ) : (
-                                        <div className="max-h-[560px] overflow-y-auto pr-1">
-                                        <div className="grid gap-2">
-                                            {visibleMarketingSupplierRows.map((supplier) => (
-                                                (() => {
-                                                    const updateFormId = `update-supplier-${supplier.id}`;
-                                                    return (
-                                                <details key={`marketing-supplier-${supplier.id}`} className="overflow-hidden rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]">
-                                                    <summary className="cursor-pointer list-none px-3 py-3 [&::-webkit-details-marker]:hidden">
-                                                        <div className="flex items-center justify-between gap-2">
-                                                            <div className="min-w-0">
-                                                                <div className="truncate text-sm font-medium">{supplier.name}</div>
-                                                                <div className="text-xs text-[rgb(var(--muted))]">點擊展開編輯名稱或刪除</div>
-                                                            </div>
-                                                            <div className="text-xs text-[rgb(var(--muted))]">供應商</div>
-                                                        </div>
-                                                    </summary>
-                                                    <div className="space-y-3 border-t border-[rgb(var(--border))] p-3">
-                                                        <form id={updateFormId} action={updateSupplierAction} className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-                                                            <input type="hidden" name="tab" value="marketing" />
-                                                            <input type="hidden" name="supplierId" value={supplier.id} />
-                                                            <Input name="supplierName" defaultValue={supplier.name} required className="w-full" />
-                                                        </form>
-                                                        <div className="flex items-center justify-end gap-2 rounded-lg bg-[rgb(var(--panel))] px-2 py-2">
-                                                            <div className="mr-auto text-xs text-[rgb(var(--muted))]">操作</div>
-                                                            <IconOnlyButton label="更新供應商" form={updateFormId} type="submit" variant="solid" icon={<Save className="h-4 w-4" aria-hidden="true" />} />
-                                                            <form action={deleteSupplierAction} onSubmit={guardDeleteWithPassword} data-delete-target={`供應商 ${supplier.name}`}>
-                                                                <input type="hidden" name="tab" value="marketing" />
-                                                                <input type="hidden" name="supplierId" value={supplier.id} />
-                                                                <IconOnlyButton label="移除供應商" type="submit" icon={<Trash2 className="h-4 w-4" aria-hidden="true" />} />
-                                                            </form>
-                                                        </div>
-                                                    </div>
-                                                </details>
-                                                    );
-                                                })()
-                                            ))}
-                                        </div>
-                                        </div>
-                                    )}
-                                </div>
+                                {renderMarketingLookupListPanel({
+                                    title: `分類（${marketingCategoryRows.length}/${dimensionBundle.categories.length}）`,
+                                    countLabel: "分類",
+                                    searchTerm: categorySearchTerm,
+                                    onClearSearch: () => {
+                                        setCategorySearchDraft("");
+                                        setCategorySearchTerm("");
+                                    },
+                                    emptyTitle: "找不到符合條件的分類",
+                                    emptyDescription: "可以調整搜尋條件，或直接建立新的產品分類。",
+                                    rows: visibleMarketingCategoryRows,
+                                    kindLabel: "category",
+                                    updateAction: updateCategoryAction,
+                                    deleteAction: deleteCategoryAction,
+                                    updateFieldName: "categoryName",
+                                    updateHiddenName: "categoryId",
+                                    deleteTargetPrefix: "分類",
+                                    updateLabel: "更新分類",
+                                    deleteLabel: "移除分類",
+                                })}
+                                {renderMarketingLookupListPanel({
+                                    title: `供應商（${marketingSupplierRows.length}/${supplierItems.length}）`,
+                                    countLabel: "供應商",
+                                    searchTerm: supplierSearchTerm,
+                                    onClearSearch: () => {
+                                        setSupplierSearchDraft("");
+                                        setSupplierSearchTerm("");
+                                    },
+                                    emptyTitle: "找不到符合條件的供應商",
+                                    emptyDescription: "可以調整搜尋條件，或直接建立新的供應商資料。",
+                                    rows: visibleMarketingSupplierRows,
+                                    kindLabel: "supplier",
+                                    updateAction: updateSupplierAction,
+                                    deleteAction: deleteSupplierAction,
+                                    updateFieldName: "supplierName",
+                                    updateHiddenName: "supplierId",
+                                    deleteTargetPrefix: "供應商",
+                                    updateLabel: "更新供應商",
+                                    deleteLabel: "移除供應商",
+                                })}
                             </div>
-                        </Card>
-
-                        <Card>
-                            <SectionTitle title={`品牌與型號（${brands.length} 個品牌）`} hint="新增 / 修改 / 移除品牌，展開後管理型號" />
+                                </MerchantSectionCard>
+                            }
+                            detailPanel={
+                                <MerchantSectionCard
+                                    title={`品牌與型號（${brands.length} 個品牌）`}
+                                    description="新增 / 修改 / 移除品牌，展開後管理型號"
+                                    actions={
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-[rgb(var(--muted))]">品牌顯示</span>
+                                            <Select value={marketingBrandListSize} onChange={(event) => setMarketingBrandListSize(event.currentTarget.value)} className="h-9 w-[96px]">
+                                                {LIST_DISPLAY_OPTIONS.map((size) => (
+                                                    <option key={`marketing-brand-size-${size}`} value={size}>
+                                                        {size}
+                                                    </option>
+                                                ))}
+                                            </Select>
+                                        </div>
+                                    }
+                                >
                             <div className="mb-3 flex flex-wrap items-center gap-2">
                                 <Input
                                     list="marketing-brand-search-options"
@@ -2953,17 +3087,15 @@ export function CompanyDashboardWorkspace({
                                     />
                                 </form>
                             </div>
-                            <div className="mb-3 flex items-center justify-end gap-2">
-                                <span className="text-xs text-[rgb(var(--muted))]">品牌顯示</span>
-                                <Select value={marketingBrandListSize} onChange={(event) => setMarketingBrandListSize(event.currentTarget.value)} className="h-9 w-[96px]">
-                                    {LIST_DISPLAY_OPTIONS.map((size) => (
-                                        <option key={`marketing-brand-size-${size}`} value={size}>
-                                            {size}
-                                        </option>
-                                    ))}
-                                </Select>
-                            </div>
                             <div className={`${brandListViewportClass} overflow-y-auto pr-1`.trim()}>
+                            {brands.length === 0 ? (
+                                <EmptyStateCard
+                                    icon={Search}
+                                    title="目前沒有品牌資料"
+                                    description="可以先新增品牌，再往下管理裝置類型與型號。"
+                                    className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
+                                />
+                            ) : (
                             <div className="grid gap-2">
                                 {brands.map((brand) => (
                                     (() => {
@@ -3262,8 +3394,11 @@ export function CompanyDashboardWorkspace({
                                     })()
                                 ))}
                             </div>
+                            )}
                             </div>
-                        </Card>
+                                </MerchantSectionCard>
+                            }
+                        />
 
                         <UsedProductTypeSettingsCard
                             lang={lang}
