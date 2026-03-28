@@ -12,16 +12,13 @@ import { MerchantPredictiveSearchInput } from "@/components/merchant/search";
 import { TechnicianAutocomplete, UsedProductTypeSettingsCard } from "@/components/used-products";
 import type { MerchantStatItem } from "@/components/merchant/shell";
 import { ArrowLeft, ArrowRight, Pencil, Plus, Save, Search, ShieldCheck, Trash2, X } from "lucide-react";
-import type {
-    Activity,
-    CompanyCustomer,
-    CompanyCustomerListRow,
-    CompanyDashboardStats,
-    InventoryStockLog,
-    Product,
-    RepairBrand,
-} from "@/lib/types/commerce";
 import type { DimensionPickerBundle } from "@/lib/types/catalog";
+import type { CustomerProfile, CustomerProfileListRow } from "@/lib/types/customer";
+import type { InventoryStockLog } from "@/lib/types/inventory";
+import type { Product } from "@/lib/types/merchant-product";
+import type { Activity } from "@/lib/types/promotion";
+import type { RepairBrand } from "@/lib/types/repair-brand";
+import type { CompanyDashboardStats } from "@/lib/types/reporting";
 import type { Sale } from "@/lib/types/sale";
 import type { KnownTicketStatus, QuoteStatus, Ticket } from "@/lib/types/ticket";
 import type { UsedProductTypeSetting } from "@/lib/schema";
@@ -54,7 +51,7 @@ type CompanyDashboardWorkspaceProps = {
     stats: CompanyDashboardStats;
     sales: Sale[];
     tickets: Ticket[];
-    customers: CompanyCustomer[];
+    customers: CustomerProfile[];
     activities: Activity[];
     purchases: ActivityPurchaseRow[];
     products: Product[];
@@ -105,7 +102,7 @@ type CompanyDashboardWorkspaceProps = {
     deleteCategoryAction: (formData: FormData) => Promise<void>;
     updateSupplierAction: (formData: FormData) => Promise<void>;
     deleteSupplierAction: (formData: FormData) => Promise<void>;
-    customerRows: CompanyCustomerListRow[];
+    customerRows: CustomerProfileListRow[];
     customerCaseFilter: CustomerCaseFilter;
     customerOrder: CustomerListOrder;
     customerPageSize: string;

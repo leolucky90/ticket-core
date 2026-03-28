@@ -1,3 +1,4 @@
+// Compatibility barrel for older pluralized imports. Prefer `@/lib/schema/pickupReservation`.
 export type {
     CreatePickupReservationInput,
     InventoryReservationReference,

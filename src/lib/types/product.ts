@@ -1,5 +1,6 @@
 import type { ProductNamingMode, StockDeductionMode } from "@/lib/types/catalog";
 
+// Canonical catalog product shape for focused merchant product/inventory services.
 export interface ProductDoc {
     id: string;
     companyId: string;

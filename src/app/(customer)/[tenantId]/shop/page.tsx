@@ -3,15 +3,9 @@ import { notFound } from "next/navigation";
 import { TenantShopPage } from "@/features/showcase/components/TenantShopPage";
 import { getShowcasePreferences } from "@/features/showcase/services/showcasePreferences.server";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
+import { listPublicProductsByTenant } from "@/lib/services/merchant/inventory-read-model.service";
 import { getCurrentSessionAccountContext } from "@/lib/services/staff.service";
-import { listPublicProductsByTenant } from "@/lib/services/commerce";
-
-function normalizeTenantId(value: string): string | null {
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    if (/[/?#]/.test(trimmed)) return null;
-    return trimmed;
-}
+import { normalizeTenantId } from "@/lib/tenant-scope";
 
 export default async function TenantShopRoutePage({ params }: { params: Promise<{ tenantId: string }> }) {
     const { tenantId: rawTenantId } = await params;

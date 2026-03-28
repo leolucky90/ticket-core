@@ -7,7 +7,8 @@ import {
     type UsedProductSaleStatus,
 } from "@/lib/schema";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { normalizeCompanyId } from "@/lib/tenant-scope";
+import { getUserCompanyId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 
 const memory: { productsByCompany: Record<string, UsedProduct[]> } = { productsByCompany: {} };
 
@@ -20,13 +21,6 @@ function toMoney(value: unknown, fallback = 0): number {
     const raw = typeof value === "number" ? value : Number(value);
     if (!Number.isFinite(raw)) return Math.max(0, Math.round(fallback));
     return Math.max(0, Math.round(raw));
-}
-
-function normalizeCompanyId(value: unknown): string | null {
-    const text = toText(value, 120);
-    if (!text) return null;
-    if (/[/?#]/.test(text)) return null;
-    return text;
 }
 
 function makeId(prefix = "up"): string {
@@ -86,7 +80,7 @@ async function resolveScope(): Promise<{ companyId: string; uid: string } | null
     const user = await getUserDoc(session.uid);
     if (!user || toAccountType(user.role) !== "company") return null;
 
-    const companyId = normalizeCompanyId(getShowcaseTenantId(user, session.uid));
+    const companyId = normalizeCompanyId(getUserCompanyId(user, session.uid));
     if (!companyId) return null;
 
     return {

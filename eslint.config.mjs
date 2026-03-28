@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Firebase emulator / hosting artifacts should not be linted as source files.
+    ".firebase/**",
   ]),
 ]);
 

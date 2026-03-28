@@ -1,7 +1,8 @@
 import "server-only";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
 import { fbAdminDb } from "@/lib/firebase-server";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { normalizeCompanyId } from "@/lib/tenant-scope";
+import { getUserCompanyId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 
 export type OperatorContext = {
     uid: string;
@@ -17,13 +18,6 @@ export type OperatorContext = {
 function toText(value: unknown, max = 240): string {
     if (typeof value !== "string") return "";
     return value.replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, max);
-}
-
-function normalizeCompanyId(value: unknown): string | null {
-    const text = toText(value, 120);
-    if (!text) return null;
-    if (/[/?#]/.test(text)) return null;
-    return text;
 }
 
 function mapRoleToLevel(role: unknown): number {
@@ -69,7 +63,7 @@ export async function resolveOperatorContext(): Promise<OperatorContext | null> 
 
     const userDoc = await getUserDoc(session.uid);
     const accountType = toAccountType(userDoc?.role ?? null);
-    const companyId = normalizeCompanyId(getShowcaseTenantId(userDoc, session.uid));
+    const companyId = normalizeCompanyId(getUserCompanyId(userDoc, session.uid));
     const roleLevel = mapRoleToLevel(userDoc?.role);
     const isOwner = userDoc?.role === "owner" || userDoc?.role === "super_admin";
     const fallbackName = toText(session.email.split("@")[0], 120) || "Operator";
@@ -106,4 +100,3 @@ export async function requireCompanyOperator(): Promise<OperatorContext> {
     }
     return context;
 }
-

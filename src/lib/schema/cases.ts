@@ -1,3 +1,5 @@
+// Legacy Firestore `cases` collection bridge.
+// The business capability is treated as `Ticket`, but the persisted collection path remains `cases`.
 export type CaseType = "refurbish" | "repair" | "warranty" | (string & {});
 
 export type CaseRecord = {
@@ -17,6 +19,9 @@ export type CaseRecord = {
     createdAt: number;
     updatedAt: number;
 };
+
+export type TicketCaseType = CaseType;
+export type TicketCaseRecord = CaseRecord;
 
 function toText(value: unknown, max = 240): string {
     if (typeof value !== "string") return "";
@@ -68,3 +73,5 @@ export function normalizeCaseRecord(input: Partial<CaseRecord> & Pick<CaseRecord
         updatedAt: toMs(input.updatedAt, createdAt),
     };
 }
+
+export const normalizeTicketCaseRecord = normalizeCaseRecord;

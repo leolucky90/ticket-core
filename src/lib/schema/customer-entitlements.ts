@@ -1,3 +1,4 @@
+// Compatibility barrel for older pluralized imports. Prefer `@/lib/schema/customerEntitlement`.
 export type {
     CreateCustomerEntitlementInput,
     CustomerEntitlement,

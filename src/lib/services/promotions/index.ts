@@ -1,7 +1,6 @@
 import "server-only";
-import type { Activity } from "@/lib/types/commerce";
 import type { CheckoutPromotionSelection } from "@/lib/schema";
-import { listActivities } from "@/lib/services/commerce";
+import { listActivities } from "@/lib/services/merchant/activity-read-model.service";
 import {
     applyPromotionToCart,
     evaluateCheckoutPromotions,
@@ -9,6 +8,7 @@ import {
     normalizePromotionEffectType,
 } from "@/lib/services/promotions/engine";
 import type { PromotionCartLine } from "@/lib/services/promotions/engine";
+import type { Activity } from "@/lib/types/promotion";
 
 function toText(value: unknown, max = 160): string {
     if (typeof value !== "string") return "";

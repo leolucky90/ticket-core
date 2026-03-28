@@ -3,26 +3,11 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { EmailAuthForm } from "@/components/auth/EmailAuthForm";
 import { GoogleAuthButton } from "@/components/auth/GoogleAuthButton";
+import { normalizeAuthTenantId, normalizeTenantId } from "@/lib/tenant-scope";
 
 type Labels = Parameters<typeof EmailAuthForm>[0]["labels"];
 type AuthMode = "signIn" | "signUp";
 type SignUpAccountType = "customer" | "company";
-
-function normalizeTenantId(value: string | null | undefined): string | null {
-    if (!value) return null;
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    if (/[/?#]/.test(trimmed)) return null;
-    return trimmed;
-}
-
-function normalizeAuthTenantId(value: string | null | undefined): string | null {
-    if (!value) return null;
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    if (!/^[a-zA-Z0-9-]+$/.test(trimmed)) return null;
-    return trimmed;
-}
 
 function toServerErrorCode(input: unknown, fallback: string): string {
     if (typeof input !== "string") return fallback;

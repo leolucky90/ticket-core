@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { SignOutButton } from "@/components/layout/SignOutButton";
-import type { Product } from "@/lib/types/commerce";
+import type { Product } from "@/lib/types/merchant-product";
 import type { ShowThemeColors, StorefrontSettings } from "@/features/showcase/types/showTheme";
 
 function formatMoney(value: number, lang: "zh" | "en") {

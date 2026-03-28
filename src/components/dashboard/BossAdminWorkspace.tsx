@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import type { BossAdminCompanyRecord, CompanyDashboardStats } from "@/lib/types/commerce";
+import type { BossAdminCompanyRecord, CompanyDashboardStats } from "@/lib/types/reporting";
 import type { BusinessHomepageContentState } from "@/features/business/services/businessHomepageContent";
 import { BossAdminHomepageBuilder } from "@/components/dashboard/BossAdminHomepageBuilder";
 

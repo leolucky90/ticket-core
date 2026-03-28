@@ -18,11 +18,12 @@ import type { CheckoutPromotionSelection, PromotionEffectType } from "@/lib/sche
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
+import { normalizeCompanyId } from "@/lib/tenant-scope";
 import { createEntitlementsFromCheckoutPromotions } from "@/lib/services/entitlements";
 import { adjustInventoryLevels } from "@/lib/services/inventory";
 import { createPickupReservationsFromPromotionDrafts } from "@/lib/services/pickupReservations";
 import { evaluateCheckoutPromotions } from "@/lib/services/promotions";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getUserCompanyId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 import { listTickets, setTicketStatusById } from "@/lib/services/ticket";
 import { attachUsedProductToReceipt, getUsedProductById } from "@/lib/services/used-products.service";
 import type { Ticket } from "@/lib/types/ticket";
@@ -65,14 +66,6 @@ function toStr(v: unknown): string {
 
 function safeText(value: string, max: number): string {
     return value.replace(/[\u0000-\u001F\u007F]/g, "").slice(0, max).trim();
-}
-
-function normalizeCompanyId(value: unknown): string | null {
-    if (typeof value !== "string") return null;
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    if (/[/?#]/.test(trimmed)) return null;
-    return trimmed;
 }
 
 function parseMoney(v: unknown): number {
@@ -459,7 +452,7 @@ async function resolveSessionScope(requireCompany = true): Promise<SessionScope 
     const accountType = toAccountType(user.role);
     if (requireCompany && accountType !== "company") return null;
 
-    const companyId = normalizeCompanyId(getShowcaseTenantId(user, session.uid));
+    const companyId = normalizeCompanyId(getUserCompanyId(user, session.uid));
     if (!companyId) return null;
 
     return { companyId };

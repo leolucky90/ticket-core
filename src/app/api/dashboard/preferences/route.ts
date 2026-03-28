@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getShowcaseTenantId, getUserCompanyId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 import {
     getDashboardPreferences,
     saveDashboardPreferences,
@@ -31,8 +31,8 @@ export async function PUT(req: Request) {
     if (toAccountType(userDoc?.role ?? null) !== "company") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    const tenantId = getShowcaseTenantId(userDoc, session.uid);
-    if (!tenantId) return NextResponse.json({ error: "Missing company tenant id" }, { status: 400 });
+    const companyId = getUserCompanyId(userDoc, session.uid);
+    if (!companyId) return NextResponse.json({ error: "Missing company tenant id" }, { status: 400 });
 
     let body: UpdateDashboardPreferencesBody;
     try {
@@ -46,7 +46,7 @@ export async function PUT(req: Request) {
     }
 
     const preferences = await saveDashboardPreferences({
-        tenantId,
+        tenantId: companyId,
         updatedBy: session.uid,
         theme: body.theme,
     });

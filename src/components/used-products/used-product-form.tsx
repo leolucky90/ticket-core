@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { SpecificationEditor } from "@/components/used-products/specification-editor";
-import type { RepairBrandModelGroup } from "@/lib/types/commerce";
+import type { RepairBrandModelGroup } from "@/lib/types/repair-brand";
 import type { UsedProduct, UsedProductGrade, UsedProductTypeSetting } from "@/lib/schema";
 
 type UsedProductBrandOption = {

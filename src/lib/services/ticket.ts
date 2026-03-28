@@ -4,7 +4,8 @@ import type { KnownTicketStatus, QuoteStatus, Ticket, TicketStatus } from "@/lib
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { normalizeCompanyId } from "@/lib/tenant-scope";
+import { getUserCompanyId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 import { linkUsedProductToCase, syncUsedProductRefurbishmentStatus } from "@/lib/services/used-products.service";
 import {
     DEFAULT_CASE_STATUSES,
@@ -89,14 +90,6 @@ function toFirestoreData<T>(input: T): T {
         return value;
     };
     return walk(input) as T;
-}
-
-function normalizeCompanyId(value: unknown): string | null {
-    if (typeof value !== "string") return null;
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    if (/[/?#]/.test(trimmed)) return null;
-    return trimmed;
 }
 
 function normalizeLowerEmail(value: unknown): string {
@@ -344,7 +337,7 @@ async function resolveSessionScope(requireCompany = true): Promise<SessionScope 
     const accountType = toAccountType(user.role);
     if (requireCompany && accountType !== "company") return null;
 
-    const companyId = normalizeCompanyId(getShowcaseTenantId(user, session.uid));
+    const companyId = normalizeCompanyId(getUserCompanyId(user, session.uid));
     if (!companyId) return null;
 
     return {

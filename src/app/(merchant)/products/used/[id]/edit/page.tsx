@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { MerchantPageShell } from "@/components/merchant/shell";
 import { UsedProductForm } from "@/components/used-products";
 import type { UsedProductTypeSetting } from "@/lib/schema";
-import { listRepairBrands } from "@/lib/services/commerce";
+import { listRepairBrands } from "@/lib/services/merchant/inventory-read-model.service";
 import {
     createRefurbishmentCaseForUsedProduct,
     getUsedProductById,

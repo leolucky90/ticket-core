@@ -1,4 +1,4 @@
-import type { CompanyCustomer } from "@/lib/types/commerce";
+import type { CustomerProfile } from "@/lib/types/customer";
 import type { Sale } from "@/lib/types/sale";
 import type { Ticket } from "@/lib/types/ticket";
 
@@ -33,7 +33,7 @@ export function isCustomerMatchedByIdentity(customer: ComparableRecord, target: 
     return false;
 }
 
-export function isTicketLinkedToCustomer(customer: CompanyCustomer, ticket: Ticket): boolean {
+export function isTicketLinkedToCustomer(customer: CustomerProfile, ticket: Ticket): boolean {
     return isCustomerMatchedByIdentity(customer, {
         id: ticket.customerId,
         name: ticket.customer.name,
@@ -42,7 +42,7 @@ export function isTicketLinkedToCustomer(customer: CompanyCustomer, ticket: Tick
     });
 }
 
-export function isActivityPurchaseLinkedToCustomer(customer: CompanyCustomer, purchase: CustomerLikePurchase): boolean {
+export function isActivityPurchaseLinkedToCustomer(customer: CustomerProfile, purchase: CustomerLikePurchase): boolean {
     return isCustomerMatchedByIdentity(customer, {
         name: purchase.customerName,
         phone: purchase.customerPhone,
@@ -50,7 +50,7 @@ export function isActivityPurchaseLinkedToCustomer(customer: CompanyCustomer, pu
     });
 }
 
-export function isSaleLinkedToCustomer(customer: CompanyCustomer, sale: Sale): boolean {
+export function isSaleLinkedToCustomer(customer: CustomerProfile, sale: Sale): boolean {
     return isCustomerMatchedByIdentity(customer, {
         id: sale.customerId,
         name: sale.customerName,
@@ -59,11 +59,11 @@ export function isSaleLinkedToCustomer(customer: CompanyCustomer, sale: Sale): b
     });
 }
 
-export function listTicketsForCustomer(customer: CompanyCustomer, tickets: Ticket[]): Ticket[] {
+export function listTicketsForCustomer(customer: CustomerProfile, tickets: Ticket[]): Ticket[] {
     return tickets.filter((ticket) => isTicketLinkedToCustomer(customer, ticket));
 }
 
-export function listSalesForCustomer(customer: CompanyCustomer, sales: Sale[]): Sale[] {
+export function listSalesForCustomer(customer: CustomerProfile, sales: Sale[]): Sale[] {
     return sales.filter((sale) => isSaleLinkedToCustomer(customer, sale));
 }
 

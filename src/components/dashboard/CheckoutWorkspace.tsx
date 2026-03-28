@@ -11,12 +11,14 @@ import { IconTextActionButton } from "@/components/ui/icon-text-action-button";
 import { UsedProductStatusBadge } from "@/components/used-products";
 import { MerchantPredictiveSearchInput } from "@/components/merchant/search";
 import { isTicketLinkedToCustomer } from "@/lib/services/customerRelationships";
-import type { Activity, CompanyCustomer, Product } from "@/lib/types/commerce";
+import type { CustomerProfile } from "@/lib/types/customer";
+import type { Product } from "@/lib/types/merchant-product";
+import type { Activity } from "@/lib/types/promotion";
 import type { Ticket } from "@/lib/types/ticket";
 import type { CompanyProfile, UsedProduct } from "@/lib/schema";
 
 type CheckoutWorkspaceProps = {
-    customers: CompanyCustomer[];
+    customers: CustomerProfile[];
     tickets: Ticket[];
     products: Product[];
     usedProducts: UsedProduct[];

@@ -11,6 +11,7 @@ import {
     type CompanyHomeLinkSet,
     type CompanyHomeNavLink,
 } from "@/features/showcase/components/companyHomeDefault/sections";
+import { normalizeTenantId } from "@/lib/tenant-scope";
 import type { ShowContentBlock, ShowContentState } from "@/features/showcase/types/showContent";
 import type { ShowThemeColors, StorefrontSettings } from "@/features/showcase/types/showTheme";
 
@@ -23,14 +24,6 @@ type ShowHomePageProps = {
     homeHref?: string;
     authTenantId?: string | null;
 };
-
-function normalizeTenantId(value: string | null | undefined) {
-    if (!value) return null;
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    if (/[/?#]/.test(trimmed)) return null;
-    return trimmed;
-}
 
 export function ShowHomePage({
     navAccountType,

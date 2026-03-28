@@ -1,7 +1,8 @@
 import "server-only";
 import type { BrandDoc, CategoryDoc, CatalogRecordStatus, DimensionPickerBundle, ModelDoc, ProductNameEntryDoc, SupplierDoc } from "@/lib/types/catalog";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { normalizeCompanyId } from "@/lib/tenant-scope";
+import { getUserCompanyId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 
 const MAX_TEXT = 160;
 const MAX_LONG = 800;
@@ -70,21 +71,13 @@ function toStatus(value: unknown): CatalogRecordStatus {
     return value === "inactive" ? "inactive" : "active";
 }
 
-function normalizeCompanyId(value: unknown): string | null {
-    if (typeof value !== "string") return null;
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    if (/[/?#]/.test(trimmed)) return null;
-    return trimmed;
-}
-
 async function resolveSessionScope(): Promise<SessionScope | null> {
     const session = await getSessionUser();
     if (!session) return null;
     const user = await getUserDoc(session.uid);
     if (!user) return null;
     if (toAccountType(user.role) !== "company") return null;
-    const companyId = normalizeCompanyId(getShowcaseTenantId(user, session.uid));
+    const companyId = normalizeCompanyId(getUserCompanyId(user, session.uid));
     if (!companyId) return null;
     return { companyId };
 }

@@ -2,17 +2,10 @@ import { NextResponse } from "next/server";
 import { fbAdminAuth } from "@/lib/firebase-server";
 import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 import { getStaffLoginGuardByEmail, markStaffLoginSuccess } from "@/lib/services/staff.service";
+import { normalizeTenantId } from "@/lib/tenant-scope";
 
 const SESSION_DAYS = 14;
 const SESSION_EXPIRES_MS = SESSION_DAYS * 24 * 60 * 60 * 1000;
-
-function normalizeTenantId(value: unknown): string | null {
-    if (typeof value !== "string") return null;
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    if (/[/?#]/.test(trimmed)) return null;
-    return trimmed;
-}
 
 export async function POST(req: Request) {
     try {

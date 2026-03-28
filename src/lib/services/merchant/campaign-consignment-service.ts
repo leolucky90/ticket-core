@@ -7,7 +7,8 @@ import type {
 } from "@/lib/types/campaign";
 import type { ConsignmentDoc, ConsignmentRedemptionDoc, ConsignmentStatus } from "@/lib/types/consignment";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { normalizeCompanyId } from "@/lib/tenant-scope";
+import { getUserCompanyId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 
 const MAX_TEXT = 160;
 const MAX_LONG = 800;
@@ -64,14 +65,6 @@ function toInt(value: unknown, fallback = 0): number {
     return Math.max(0, Math.round(parsed));
 }
 
-function normalizeCompanyId(value: unknown): string | null {
-    if (typeof value !== "string") return null;
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    if (/[/?#]/.test(trimmed)) return null;
-    return trimmed;
-}
-
 function toDateMs(value: string | undefined): number | null {
     if (!value) return null;
     const parsed = Date.parse(value);
@@ -120,7 +113,7 @@ async function resolveSessionScope(): Promise<SessionScope | null> {
     const user = await getUserDoc(session.uid);
     if (!user) return null;
     if (toAccountType(user.role) !== "company") return null;
-    const companyId = normalizeCompanyId(getShowcaseTenantId(user, session.uid));
+    const companyId = normalizeCompanyId(getUserCompanyId(user, session.uid));
     if (!companyId) return null;
     return {
         companyId,

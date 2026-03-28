@@ -1,5 +1,5 @@
 import "server-only";
-import { listCompanyCustomers } from "@/lib/services/commerce";
+import { listCompanyCustomers } from "@/lib/services/merchant/customer-read-model.service";
 import { getCustomerRelationshipSnapshot } from "@/lib/services/customer360";
 
 export type MerchantRelationshipRow = {

@@ -20,9 +20,6 @@ import {
     deleteRepairBrand,
     deleteRepairBrandType,
     deleteRepairModel,
-    getDashboardBundle,
-    queryActivitiesPage,
-    queryCompanyCustomersPage,
     updateActivity,
     updateCompanyCustomer,
     updateProduct,
@@ -32,7 +29,10 @@ import {
     renameRepairBrandType,
     updateRepairModel,
 } from "@/lib/services/commerce";
+import { queryActivitiesPage } from "@/lib/services/merchant/activity-read-model.service";
 import { getCatalogDimensionBundle, listCatalogSuppliers } from "@/lib/services/merchant/catalog-service";
+import { getDashboardBundle } from "@/lib/services/merchant/dashboard-read-model.service";
+import { queryCompanyCustomersPage } from "@/lib/services/merchant/customer-read-model.service";
 import { decodeCursorStack, encodeCursorStack, parseListPageSize } from "@/lib/pagination/query-controls";
 import { getTicketAttributePreferences } from "@/lib/services/ticketAttributes";
 import { createTicket, createWarrantyCaseFromExistingCase, queryTicketsPage, updateTicket } from "@/lib/services/ticket";

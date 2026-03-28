@@ -1,5 +1,6 @@
 import "server-only";
 import { fbAdminDb } from "@/lib/firebase-server";
+import { normalizeTenantId } from "@/lib/tenant-scope";
 
 type CompanyDomainDoc = {
     customDomain?: unknown;
@@ -14,13 +15,6 @@ type CompanyDomainDoc = {
 function normalizeText(value: unknown): string {
     if (typeof value !== "string") return "";
     return value.trim();
-}
-
-function normalizeTenantId(value: unknown): string | null {
-    const raw = normalizeText(value);
-    if (!raw) return null;
-    if (/[/?#]/.test(raw)) return null;
-    return raw;
 }
 
 function normalizeDomain(value: unknown): string | null {
@@ -48,6 +42,7 @@ function buildInternalSitePath(tenantId: string): string {
 }
 
 export async function resolveCustomerHomepageUrl(companyId: string | null | undefined): Promise<string | null> {
+    // Public homepage routing still exposes a tenant alias, but it resolves from the internal company scope key.
     const tenantId = normalizeTenantId(companyId);
     if (!tenantId) return null;
 
@@ -75,6 +70,7 @@ export async function resolveCustomerHomepageUrl(companyId: string | null | unde
 }
 
 export async function resolveTenantIdByHost(hostHeader: string | null | undefined): Promise<string | null> {
+    // Host-based tenant resolution returns the public tenant alias, which is currently the same underlying company key.
     const host = normalizeDomain(hostHeader);
     if (!host) return null;
 

@@ -1,7 +1,8 @@
 import "server-only";
 import { fbAdminAuth, fbAdminDb } from "@/lib/firebase-server";
 import { canDelete, hasLevel, hasPermission, type PermissionSubject } from "@/lib/permissions";
-import { getShowcaseTenantId, getUserDoc, toAccountType, type AccountType, type UserDoc } from "@/lib/services/user.service";
+import { normalizeCompanyId } from "@/lib/tenant-scope";
+import { getUserCompanyId, getShowcaseTenantId, getUserDoc, toAccountType, type AccountType, type UserDoc } from "@/lib/services/user.service";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
 import { createDeleteLog, hardDeleteRecord, restoreDeletedRecord } from "@/lib/services/delete-log.service";
 import { createAuditLog } from "@/lib/services/audit-log.service";
@@ -68,13 +69,6 @@ type StaffDeleteInput = {
 function toText(value: unknown, max = 240): string {
     if (typeof value !== "string") return "";
     return value.replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, max);
-}
-
-function normalizeCompanyId(value: unknown): string | null {
-    const text = toText(value, 120);
-    if (!text) return null;
-    if (/[/?#]/.test(text)) return null;
-    return text;
 }
 
 function toBool(value: unknown, fallback: boolean): boolean {
@@ -149,7 +143,7 @@ async function resolveOperator(): Promise<Operator> {
     const session = await getSessionUser();
     if (!session) throw new Error("Unauthorized");
     const userDoc = await getUserDoc(session.uid);
-    const companyId = normalizeCompanyId(getShowcaseTenantId(userDoc, session.uid));
+    const companyId = normalizeCompanyId(getUserCompanyId(userDoc, session.uid));
     if (!companyId || toAccountType(userDoc?.role ?? null) !== "company") {
         throw new Error("Forbidden");
     }
@@ -762,7 +756,7 @@ export async function getCurrentStaffProfile(): Promise<StaffMember | null> {
 
 async function findStaffMembershipForSession(params: { uid: string; email: string; userDoc: UserDoc | null }): Promise<CurrentStaffMembership | null> {
     const normalizedEmail = params.email.toLowerCase();
-    const companyId = normalizeCompanyId(getShowcaseTenantId(params.userDoc, params.uid));
+    const companyId = normalizeCompanyId(getUserCompanyId(params.userDoc, params.uid));
     const byUid =
         companyId !== null ? await fbAdminDb.collection(staffMembersCollectionPath(companyId)).where("uid", "==", params.uid).limit(1).get() : null;
     const byEmail =
@@ -862,7 +856,7 @@ export async function markCurrentStaffPasswordChanged(): Promise<void> {
     const session = await getSessionUser();
     if (!session) throw new Error("Unauthorized");
     const userDoc = await getUserDoc(session.uid);
-    const companyId = normalizeCompanyId(getShowcaseTenantId(userDoc, session.uid));
+    const companyId = normalizeCompanyId(getUserCompanyId(userDoc, session.uid));
     if (!companyId) throw new Error("Company scope missing");
 
     const byUid = await fbAdminDb.collection(staffMembersCollectionPath(companyId)).where("uid", "==", session.uid).limit(1).get();

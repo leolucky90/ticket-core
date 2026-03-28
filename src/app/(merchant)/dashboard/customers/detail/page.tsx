@@ -2,9 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { listActivityPurchases, listCompanyCustomers } from "@/lib/services/commerce";
 import { getCustomerRelationshipSnapshot } from "@/lib/services/customer360";
 import { listCustomerEntitlements, listEntitlementRedemptions } from "@/lib/services/entitlements";
+import { listActivityPurchases, listCompanyCustomers } from "@/lib/services/merchant/customer-read-model.service";
 import { listPickupReservations } from "@/lib/services/pickupReservations";
 import {
     isActivityPurchaseLinkedToCustomer,

@@ -6,8 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { BossAdminWorkspace } from "@/components/dashboard/BossAdminWorkspace";
 import { MerchantAppShell, MerchantPageShell, type MerchantSidebarGroupConfig } from "@/components/merchant/shell";
-import { buildRevenueStatsFromSubscriptions, listBossAdminCompanies } from "@/lib/services/commerce";
 import { getBusinessHomepageContentPreferences } from "@/features/business/services/businessHomepageContent.server";
+import { buildRevenueStatsFromSubscriptions, listBossAdminCompanies } from "@/lib/services/platform/bossadmin-reporting.service";
 import { BOSS_ADMIN_COOKIE, BOSS_ADMIN_EMAIL, BOSS_ADMIN_PASSWORD, isBossAdminAuthed } from "@/lib/services/bossadmin-auth";
 
 function isBossTab(value: string | undefined): value is "dashboard" | "query" {

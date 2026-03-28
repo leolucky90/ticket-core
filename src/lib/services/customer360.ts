@@ -1,5 +1,6 @@
 import "server-only";
-import { listActivities, listActivityPurchases, listCompanyCustomers } from "@/lib/services/commerce";
+import { listActivities } from "@/lib/services/merchant/activity-read-model.service";
+import { listActivityPurchases, listCompanyCustomers } from "@/lib/services/merchant/customer-read-model.service";
 import { listSales } from "@/lib/services/sales";
 import { listTickets } from "@/lib/services/ticket";
 import {

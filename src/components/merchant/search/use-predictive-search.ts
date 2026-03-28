@@ -85,11 +85,7 @@ export function usePredictiveSearch({
     const [suggestions, setSuggestions] = useState<PredictiveSearchSuggestion[]>([]);
 
     const normalizedQuery = query.trim();
-    const normalizedTargets = useMemo(() => Array.from(new Set(targets)), [targets.join("|")]);
-    const staticSuggestionKey = useMemo(
-        () => staticSuggestions.map((item) => `${item.target}:${item.id}:${item.value}:${item.score}`).join("|"),
-        [staticSuggestions],
-    );
+    const normalizedTargets = useMemo(() => Array.from(new Set(targets)), [targets]);
 
     useEffect(() => {
         if (!enabled || !normalizedQuery) {
@@ -159,7 +155,7 @@ export function usePredictiveSearch({
             cancelled = true;
             window.clearTimeout(handle);
         };
-    }, [debounceMs, enabled, limit, normalizedQuery, normalizedTargets, staticSuggestions, staticSuggestionKey]);
+    }, [debounceMs, enabled, limit, normalizedQuery, normalizedTargets, staticSuggestions]);
 
     const selectSuggestion = useCallback(
         (item: PredictiveSearchSuggestion) => {

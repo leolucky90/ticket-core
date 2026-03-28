@@ -1,7 +1,8 @@
 import { ProductManagementWorkspace } from "@/components/dashboard/ProductManagementWorkspace";
 import { MerchantPageShell } from "@/components/merchant/shell";
 import { getCatalogDimensionBundle, listCatalogSuppliers } from "@/lib/services/merchant/catalog-service";
-import { createProduct, deleteProduct, listRepairBrands, queryProductsPage, updateProduct } from "@/lib/services/commerce";
+import { createProduct, deleteProduct, updateProduct } from "@/lib/services/commerce";
+import { listRepairBrands, queryProductsPage } from "@/lib/services/merchant/inventory-read-model.service";
 import type { DimensionOption } from "@/lib/types/catalog";
 
 type ProductManagementPageProps = {

@@ -1,11 +1,15 @@
 import "server-only";
+// Compatibility-heavy merchant CRUD/read-model service.
+// New read-side callers should prefer focused modules under `@/lib/services/merchant/*`
+// or `@/lib/services/platform/*`, while Phase 1 continues shrinking this surface area.
 import { FieldPath } from "firebase-admin/firestore";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
+import { normalizeCompanyId } from "@/lib/tenant-scope";
 import { createDeleteLog } from "@/lib/services/delete-log.service";
 import { syncUsedProductTypeSettings } from "@/lib/services/used-product-type-settings.service";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getUserCompanyId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 import {
     createCatalogBrand,
     createCatalogCategory,
@@ -21,21 +25,12 @@ import {
     updateCatalogSupplier,
 } from "@/lib/services/merchant/catalog-service";
 import type { CursorPageResult } from "@/lib/types/pagination";
-import type {
-    Activity,
-    ActivityItem,
-    ActivityStatus,
-    BossAdminCompanyRecord,
-    CompanyCustomer,
-    CompanyCustomerListRow,
-    CompanyDashboardStats,
-    CustomerCaseState,
-    InventoryStockLog,
-    Product,
-    RepairBrand,
-    RepairBrandModelGroup,
-    RevenuePoint,
-} from "@/lib/types/commerce";
+import type { CompanyCustomer, CompanyCustomerListRow, CustomerCaseState } from "@/lib/types/customer";
+import type { InventoryStockLog } from "@/lib/types/inventory";
+import type { Product } from "@/lib/types/merchant-product";
+import type { Activity, ActivityItem, ActivityStatus } from "@/lib/types/promotion";
+import type { RepairBrand, RepairBrandModelGroup } from "@/lib/types/repair-brand";
+import type { BossAdminCompanyRecord, CompanyDashboardStats, RevenuePoint } from "@/lib/types/reporting";
 import { buildProductNameSuggestion, buildProductNormalizedName, buildProductSearchKeywords, normalizeAliasList, parseProductNamingMode } from "@/lib/services/productNaming";
 import type { Sale } from "@/lib/types/sale";
 import type { Ticket } from "@/lib/types/ticket";
@@ -166,14 +161,6 @@ function toActivityBoundaryTimestamp(value: unknown, mode: "start" | "end", fall
     }
 
     return toTimestamp(text, fallback);
-}
-
-function normalizeCompanyId(value: unknown): string | null {
-    if (typeof value !== "string") return null;
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    if (/[/?#]/.test(trimmed)) return null;
-    return trimmed;
 }
 
 function computeActivityStatus(startAt: number, endAt: number, forced?: ActivityStatus): ActivityStatus {
@@ -586,7 +573,7 @@ async function resolveSessionScope(requireCompany = true): Promise<SessionScope 
     const accountType = toAccountType(user.role);
     if (requireCompany && accountType !== "company") return null;
 
-    const companyId = normalizeCompanyId(getShowcaseTenantId(user, session.uid));
+    const companyId = normalizeCompanyId(getUserCompanyId(user, session.uid));
     if (!companyId) return null;
 
     return {

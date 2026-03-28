@@ -2,30 +2,13 @@ import Link from "next/link";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { ResetPasswordForm } from "@/components/auth/ResetPasswordForm";
 import { AuthPageShell } from "@/components/auth/ui/AuthPageShell";
+import { normalizeAuthTenantId, normalizeTenantId } from "@/lib/tenant-scope";
 
 type ResetPasswordSearchParams = {
     tenant?: string | string[];
     authTenant?: string | string[];
     oobCode?: string | string[];
 };
-
-function normalizeTenantId(value: string | string[] | undefined): string | null {
-    const raw = Array.isArray(value) ? value[0] : value;
-    if (typeof raw !== "string") return null;
-    const trimmed = raw.trim();
-    if (!trimmed) return null;
-    if (/[/?#]/.test(trimmed)) return null;
-    return trimmed;
-}
-
-function normalizeAuthTenantId(value: string | string[] | undefined): string | null {
-    const raw = Array.isArray(value) ? value[0] : value;
-    if (typeof raw !== "string") return null;
-    const trimmed = raw.trim();
-    if (!trimmed) return null;
-    if (!/^[a-zA-Z0-9-]+$/.test(trimmed)) return null;
-    return trimmed;
-}
 
 function normalizeCode(value: string | string[] | undefined): string | null {
     const raw = Array.isArray(value) ? value[0] : value;

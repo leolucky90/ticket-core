@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getUserCompanyId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 import { getPredictiveSearchSuggestions } from "@/lib/services/predictiveSearch";
 import type { PredictiveSearchTarget } from "@/lib/types/search";
 
@@ -20,8 +20,8 @@ export async function GET(req: Request) {
     if (toAccountType(userDoc?.role ?? null) !== "company") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    const tenantId = getShowcaseTenantId(userDoc, session.uid);
-    if (!tenantId) return NextResponse.json({ error: "Missing company tenant id" }, { status: 400 });
+    const companyId = getUserCompanyId(userDoc, session.uid);
+    if (!companyId) return NextResponse.json({ error: "Missing company tenant id" }, { status: 400 });
 
     const url = new URL(req.url);
     const query = url.searchParams.get("q")?.trim() ?? "";
@@ -36,7 +36,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
         ok: true,
-        tenantId,
+        tenantId: companyId,
         ...result,
     });
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
-import { getShowcaseTenantId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { getUserCompanyId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 import {
     getTicketAttributePreferences,
     saveTicketAttributePreferences,
@@ -20,10 +20,10 @@ export async function GET() {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const tenantId = getShowcaseTenantId(userDoc, session.uid);
-    if (!tenantId) return NextResponse.json({ error: "Missing company tenant id" }, { status: 400 });
+    const companyId = getUserCompanyId(userDoc, session.uid);
+    if (!companyId) return NextResponse.json({ error: "Missing company tenant id" }, { status: 400 });
 
-    const preferences = await getTicketAttributePreferences({ tenantId });
+    const preferences = await getTicketAttributePreferences({ tenantId: companyId });
     return NextResponse.json({ ok: true, preferences });
 }
 
@@ -36,8 +36,8 @@ export async function PUT(req: Request) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const tenantId = getShowcaseTenantId(userDoc, session.uid);
-    if (!tenantId) return NextResponse.json({ error: "Missing company tenant id" }, { status: 400 });
+    const companyId = getUserCompanyId(userDoc, session.uid);
+    if (!companyId) return NextResponse.json({ error: "Missing company tenant id" }, { status: 400 });
 
     let body: UpdateTicketAttributePreferencesBody;
     try {
@@ -51,7 +51,7 @@ export async function PUT(req: Request) {
     }
 
     const preferences = await saveTicketAttributePreferences({
-        tenantId,
+        tenantId: companyId,
         updatedBy: session.uid,
         caseStatuses: body.caseStatuses,
         quoteStatuses: body.quoteStatuses,

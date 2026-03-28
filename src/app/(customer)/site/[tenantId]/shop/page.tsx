@@ -1,11 +1,5 @@
 import { redirect } from "next/navigation";
-
-function normalizeTenantId(value: string): string | null {
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    if (/[/?#]/.test(trimmed)) return null;
-    return trimmed;
-}
+import { normalizeTenantId } from "@/lib/tenant-scope";
 
 export default async function LegacyTenantShopPage({ params }: { params: Promise<{ tenantId: string }> }) {
     const { tenantId: rawTenantId } = await params;
