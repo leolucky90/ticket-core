@@ -3,11 +3,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
+import { readDemoPasswordFromRepoRoot } from "./read-demo-password.mjs";
 
-const DEMO_PASSWORD = "123456";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DEMO_PASSWORD = readDemoPasswordFromRepoRoot(path.join(__dirname, ".."));
 const DAY_MS = 24 * 60 * 60 * 1000;
 const ROOT_RESET_COLLECTIONS = ["app_config", "cases", "sales", "users", "companies", "domains"];
 
@@ -538,6 +541,7 @@ function logUsage() {
     console.log("");
     console.log("Reads .env/.env.local, clears demo Firestore data, recreates managed demo auth users,");
     console.log("and seeds stable company/customer baselines under companies/{companyId}.");
+    console.log("Demo passwords come from src/lib/demo-account-password.ts (parsed by scripts/read-demo-password.mjs).");
     console.log("");
     console.log("Requirements:");
     console.log("- Emulator mode: set both FIRESTORE_EMULATOR_HOST and FIREBASE_AUTH_EMULATOR_HOST");

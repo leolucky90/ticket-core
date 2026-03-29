@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
 import { normalizeCompanyId } from "@/lib/tenant-scope";
 import { createDeleteLog } from "@/lib/services/delete-log.service";
+import { getItemNamingSettings } from "@/lib/services/item-naming-settings.service";
 import { syncUsedProductTypeSettings } from "@/lib/services/used-product-type-settings.service";
 import { getUserCompanyId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 import {
@@ -31,7 +32,14 @@ import type { Product } from "@/lib/types/merchant-product";
 import type { Activity, ActivityItem, ActivityStatus } from "@/lib/types/promotion";
 import type { RepairBrand, RepairBrandModelGroup } from "@/lib/types/repair-brand";
 import type { BossAdminCompanyRecord, CompanyDashboardStats, RevenuePoint } from "@/lib/types/reporting";
-import { buildProductNameSuggestion, buildProductNormalizedName, buildProductSearchKeywords, normalizeAliasList, parseProductNamingMode } from "@/lib/services/productNaming";
+import {
+    appendStructuredProductNameSuffix,
+    buildProductNameSuggestion,
+    buildProductNormalizedName,
+    buildProductSearchKeywords,
+    normalizeAliasList,
+    parseProductNamingMode,
+} from "@/lib/services/productNaming";
 import type { Sale } from "@/lib/types/sale";
 import type { Ticket } from "@/lib/types/ticket";
 import { listSales, queryCheckoutSales } from "@/lib/services/sales";
@@ -257,6 +265,8 @@ function normalizeProduct(input: Partial<Product> & { id: string }): Product {
     const namingMode = parseProductNamingMode(input.namingMode);
     const categoryId = safeText(input.categoryId, 120);
     const categoryName = safeText(input.categoryName);
+    const secondaryCategoryId = safeText(input.secondaryCategoryId, 120);
+    const secondaryCategoryName = safeText(input.secondaryCategoryName);
     const brandId = safeText(input.brandId, 120);
     const brandName = safeText(input.brandName);
     const modelId = safeText(input.modelId, 120);
@@ -268,6 +278,7 @@ function normalizeProduct(input: Partial<Product> & { id: string }): Product {
     const suggestedName = buildProductNameSuggestion({
         namingMode,
         categoryName,
+        secondaryCategoryName,
         brandName,
         modelName,
         nameEntryName,
@@ -288,6 +299,8 @@ function normalizeProduct(input: Partial<Product> & { id: string }): Product {
         namingMode,
         categoryId,
         categoryName,
+        secondaryCategoryId,
+        secondaryCategoryName,
         brandId,
         brandName,
         modelId,
@@ -301,6 +314,7 @@ function normalizeProduct(input: Partial<Product> & { id: string }): Product {
                 name: input.normalizedName || safeName,
                 aliases,
                 categoryName,
+                secondaryCategoryName,
                 brandName,
                 modelName,
                 nameEntryName,
@@ -1341,6 +1355,8 @@ type ProductFormFields = {
     namingMode: Product["namingMode"];
     categoryId: string;
     categoryName: string;
+    secondaryCategoryId: string;
+    secondaryCategoryName: string;
     brandId: string;
     brandName: string;
     modelId: string;
@@ -1353,28 +1369,40 @@ type ProductFormFields = {
     status: "active" | "inactive";
 };
 
-function readProductFormFields(formData: FormData): ProductFormFields {
+async function readProductFormFields(formData: FormData, companyId: string): Promise<ProductFormFields> {
     const categoryRef = parseDimensionRef(formData.get("categoryRef"));
+    const secondaryCategoryRef = parseDimensionRef(formData.get("secondaryCategoryRef"));
     const brandRef = parseDimensionRef(formData.get("brandRef"));
     const modelRef = parseDimensionRef(formData.get("modelRef"));
     const categoryId = categoryRef.id || safeText(formData.get("categoryId"), 120);
     const categoryName = categoryRef.name || safeText(formData.get("categoryName"));
+    const secondaryCategoryId = secondaryCategoryRef.id || safeText(formData.get("secondaryCategoryId"), 120);
+    const secondaryCategoryName = secondaryCategoryRef.name || safeText(formData.get("secondaryCategoryName"));
     const brandId = brandRef.id || safeText(formData.get("brandId"), 120);
     const brandName = brandRef.name || safeText(formData.get("brandName"));
     const modelId = modelRef.id || safeText(formData.get("modelId"), 120);
     const modelName = modelRef.name || safeText(formData.get("modelName"));
-    const namingMode: Product["namingMode"] = categoryName || brandName || modelName ? "structured" : "custom";
+    const namingMode: Product["namingMode"] = formData.get("namingMode") === "custom" ? "custom" : "structured";
     const nameEntryId = "";
     const nameEntryName = "";
-    const customLabel = "";
+    const secondaryProductName = namingMode === "structured" ? safeText(formData.get("secondaryProductName")) : "";
+    const customLabel =
+        namingMode === "custom" ? safeText(formData.get("customName")) || safeText(formData.get("name")) : secondaryProductName;
     const aliases: string[] = [];
+    const namingSettings = await getItemNamingSettings(companyId).catch(() => null);
     const suggestedName = buildProductNameSuggestion({
-        namingMode,
+        namingMode: "structured",
         categoryName,
+        secondaryCategoryName,
         brandName,
         modelName,
+        namingOrder: namingSettings?.order,
     });
-    const name = safeText(formData.get("name")) || suggestedName;
+    const structuredBaseName = safeText(formData.get("name")) || suggestedName;
+    const name =
+        namingMode === "custom"
+            ? customLabel
+            : appendStructuredProductNameSuffix(structuredBaseName, secondaryProductName);
 
     const stockDeductionMode: "immediate" | "redeem_only" =
         formData.get("stockDeductionMode") === "redeem_only" ? "redeem_only" : "immediate";
@@ -1385,6 +1413,8 @@ function readProductFormFields(formData: FormData): ProductFormFields {
         namingMode,
         categoryId,
         categoryName,
+        secondaryCategoryId,
+        secondaryCategoryName,
         brandId,
         brandName,
         modelId,
@@ -2346,7 +2376,7 @@ export async function createProduct(formData: FormData): Promise<void> {
     const redirectPath = getProductRedirectPath(formData);
     if (!scope) dashboardRedirect(tab, "invalid", { inventoryView, redirectPath });
 
-    const productDraft = readProductFormFields(formData);
+    const productDraft = await readProductFormFields(formData, scope.companyId);
     const price = toMoney(formData.get("price"));
     const cost = toMoney(formData.get("cost"));
     const supplier = safeText(formData.get("supplier"));
@@ -2362,6 +2392,8 @@ export async function createProduct(formData: FormData): Promise<void> {
         namingMode: productDraft.namingMode,
         categoryId: productDraft.categoryId,
         categoryName: productDraft.categoryName,
+        secondaryCategoryId: productDraft.secondaryCategoryId,
+        secondaryCategoryName: productDraft.secondaryCategoryName,
         brandId: productDraft.brandId,
         brandName: productDraft.brandName,
         modelId: productDraft.modelId,
@@ -2404,7 +2436,7 @@ export async function updateProduct(formData: FormData): Promise<void> {
     if (!scope) dashboardRedirect(tab, "invalid", { inventoryView, redirectPath });
 
     const productId = safeText(formData.get("productId"), 120);
-    const productDraft = readProductFormFields(formData);
+    const productDraft = await readProductFormFields(formData, scope.companyId);
     if (!productId || !productDraft.name) dashboardRedirect(tab, "invalid", { inventoryView, redirectPath });
 
     const current = (await listProducts()).find((product) => product.id === productId);
@@ -2417,6 +2449,8 @@ export async function updateProduct(formData: FormData): Promise<void> {
         namingMode: productDraft.namingMode,
         categoryId: productDraft.categoryId,
         categoryName: productDraft.categoryName,
+        secondaryCategoryId: productDraft.secondaryCategoryId,
+        secondaryCategoryName: productDraft.secondaryCategoryName,
         brandId: productDraft.brandId,
         brandName: productDraft.brandName,
         modelId: productDraft.modelId,
@@ -3154,13 +3188,28 @@ export async function createProductCategory(formData: FormData): Promise<void> {
             fetchedCount: categoryList.length,
         });
 
-        const existingCategory = categoryList.find((item) => item.name.toLowerCase() === categoryName.toLowerCase());
+        const parentCategoryRef = parseDimensionRef(formData.get("parentCategoryRef"));
+        const parentCategoryId = parentCategoryRef.id || safeText(formData.get("parentCategoryId"), 120);
+        const parentCategory = parentCategoryId ? categoryList.find((item) => item.id === parentCategoryId && item.status === "active") ?? null : null;
+        if (parentCategoryId && (!parentCategory || parentCategory.categoryLevel !== 1)) {
+            throw new Error("invalid_category_parent");
+        }
+
+        const existingCategory = categoryList.find(
+            (item) =>
+                item.name.toLowerCase() === categoryName.toLowerCase() &&
+                (item.parentCategoryId ?? "") === (parentCategory?.id ?? ""),
+        );
         let writeResultId = "";
 
         if (!existingCategory) {
             const createdCategory = await createCatalogCategory(
                 {
                     name: categoryName,
+                    parentCategoryId: parentCategory?.id,
+                    parentCategoryName: parentCategory?.name,
+                    categoryLevel: parentCategory ? 2 : 1,
+                    fullPath: parentCategory ? `${parentCategory.name} > ${categoryName}` : categoryName,
                     status: "active",
                 },
                 companyId,
@@ -3172,6 +3221,10 @@ export async function createProductCategory(formData: FormData): Promise<void> {
                 existingCategory.id,
                 {
                     name: categoryName,
+                    parentCategoryId: parentCategory?.id,
+                    parentCategoryName: parentCategory?.name,
+                    categoryLevel: parentCategory ? 2 : 1,
+                    fullPath: parentCategory ? `${parentCategory.name} > ${categoryName}` : categoryName,
                     status: "active",
                 },
                 companyId,
@@ -3214,6 +3267,7 @@ export async function createProductCategory(formData: FormData): Promise<void> {
             error: message,
         });
         if (message === "duplicate_active_category") dashboardRedirect(tab, "invalid");
+        if (message === "invalid_category_parent") dashboardRedirect(tab, "category_invalid_parent");
         dashboardRedirect(tab, "error");
     }
 
@@ -3338,13 +3392,34 @@ export async function updateProductCategory(formData: FormData): Promise<void> {
 
     const companyId = scope.companyId;
     const categoryList = await listCatalogCategories("", companyId);
-    const duplicated = categoryList.some((item) => item.id !== categoryId && item.name.toLowerCase() === categoryName.toLowerCase() && item.status === "active");
+    if (!categoryList.some((item) => item.id === categoryId)) dashboardRedirect(tab, "invalid");
+    const parentCategoryRef = parseDimensionRef(formData.get("parentCategoryRef"));
+    const parentCategoryId = parentCategoryRef.id || safeText(formData.get("parentCategoryId"), 120);
+    const parentCategory = parentCategoryId ? categoryList.find((item) => item.id === parentCategoryId && item.status === "active") ?? null : null;
+    const hasChildren = categoryList.some((item) => item.parentCategoryId === categoryId && item.status === "active");
+    if (parentCategoryId && (!parentCategory || parentCategory.categoryLevel !== 1 || parentCategory.id === categoryId)) {
+        dashboardRedirect(tab, "category_invalid_parent");
+    }
+    if (hasChildren && parentCategory) {
+        dashboardRedirect(tab, "category_has_children");
+    }
+    const duplicated = categoryList.some(
+        (item) =>
+            item.id !== categoryId &&
+            item.name.toLowerCase() === categoryName.toLowerCase() &&
+            item.status === "active" &&
+            (item.parentCategoryId ?? "") === (parentCategory?.id ?? ""),
+    );
     if (duplicated) dashboardRedirect(tab, "invalid");
 
     const updated = await updateCatalogCategory(
         categoryId,
         {
             name: categoryName,
+            parentCategoryId: parentCategory?.id,
+            parentCategoryName: parentCategory?.name,
+            categoryLevel: parentCategory ? 2 : 1,
+            fullPath: parentCategory ? `${parentCategory.name} > ${categoryName}` : categoryName,
             status: "active",
         },
         companyId,
@@ -3369,6 +3444,8 @@ export async function deleteProductCategory(formData: FormData): Promise<void> {
     const categories = await listCatalogCategories("", scope.companyId);
     const target = categories.find((item) => item.id === categoryId);
     if (!target) dashboardRedirect(tab, "invalid");
+    const hasChildren = categories.some((item) => item.parentCategoryId === categoryId && item.status === "active");
+    if (hasChildren) dashboardRedirect(tab, "category_has_children");
 
     const updated = await updateCatalogCategory(
         categoryId,

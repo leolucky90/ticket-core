@@ -1,26 +1,30 @@
 import "server-only";
 import { listProducts } from "@/lib/services/merchant/inventory-read-model.service";
 import { buildProductNameSuggestion, buildProductNormalizedName, normalizeAliasList, parseProductNamingMode } from "@/lib/services/productNaming";
-import type { DimensionPickerBundle, ProductNamingMode, StockDeductionMode } from "@/lib/types/catalog";
+import type { DimensionPickerBundle, ItemNamingToken, ProductNamingMode, StockDeductionMode } from "@/lib/types/catalog";
 import type { Product } from "@/lib/types/merchant-product";
 import type { ProductDoc } from "@/lib/types/product";
 
 type ProductNameSuggestionInput = {
     namingMode?: unknown;
     categoryName?: unknown;
+    secondaryCategoryName?: unknown;
     brandName?: unknown;
     modelName?: unknown;
     nameEntryName?: unknown;
     customLabel?: unknown;
+    namingOrder?: unknown;
 };
 
 type ProductDraftInput = Partial<ProductDoc> & {
     name?: string;
     categoryName?: string;
+    secondaryCategoryName?: string;
     brandName?: string;
     modelName?: string;
     nameEntryName?: string;
     customLabel?: string;
+    namingOrder?: ItemNamingToken[];
 };
 
 function toIso(value: unknown, fallback: string): string {
@@ -60,6 +64,8 @@ function toProductDoc(legacy: Product): ProductDoc {
         namingMode: parseProductNamingMode(legacy.namingMode),
         categoryId: legacy.categoryId || undefined,
         categoryName: legacy.categoryName || undefined,
+        secondaryCategoryId: legacy.secondaryCategoryId || undefined,
+        secondaryCategoryName: legacy.secondaryCategoryName || undefined,
         brandId: legacy.brandId || undefined,
         brandName: legacy.brandName || undefined,
         modelId: legacy.modelId || undefined,
@@ -90,10 +96,12 @@ export function buildProductDraft(input: ProductDraftInput): ProductDoc {
     const suggestedName = buildProductNameSuggestion({
         namingMode,
         categoryName: input.categoryName,
+        secondaryCategoryName: input.secondaryCategoryName,
         brandName: input.brandName,
         modelName: input.modelName,
         nameEntryName: input.nameEntryName,
         customLabel: input.customLabel,
+        namingOrder: input.namingOrder,
     });
     const aliases = normalizeAliasList(input.aliases);
     const name = toText(input.name) || suggestedName || "未命名產品";
@@ -106,6 +114,7 @@ export function buildProductDraft(input: ProductDraftInput): ProductDoc {
             name,
             aliases,
             categoryName: input.categoryName,
+            secondaryCategoryName: input.secondaryCategoryName,
             brandName: input.brandName,
             modelName: input.modelName,
             nameEntryName: input.nameEntryName,
@@ -115,6 +124,8 @@ export function buildProductDraft(input: ProductDraftInput): ProductDoc {
         namingMode,
         categoryId: toText(input.categoryId) || undefined,
         categoryName: toText(input.categoryName) || undefined,
+        secondaryCategoryId: toText(input.secondaryCategoryId) || undefined,
+        secondaryCategoryName: toText(input.secondaryCategoryName) || undefined,
         brandId: toText(input.brandId) || undefined,
         brandName: toText(input.brandName) || undefined,
         modelId: toText(input.modelId) || undefined,

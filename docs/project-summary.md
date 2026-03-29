@@ -54,6 +54,14 @@
 - shared shell / processing / settings / delete logs / boss admin builder 已開始共用同一套 bilingual UI keys，減少 page-local hard-coded framework text
 - Phase 8 builder template baseline 已開始收斂到 showcase block registry、instance order model 與 variant-aware preview renderer
 - storefront builder 不再只綁死固定 block map；已支援 template insertion / remove / reorder 與 hero / ad variants
+- merchant catalog 已支援主分類 / 第二分類階層與 `fullPath` 顯示基線，marketing / item management 共用同一套分類語意
+- 商店營銷分類設定已改為左側樹狀清單（主分類可展開第二分類）+ 右側新增／編輯／刪除面板；品項自動命名支援選填「副品名」接在自動帶入名稱後（`customLabel` 在 structured 模式下僅存副品名）；品項快速命名設置預設以 `<details>` 收起
+- 儀表板「商店營銷設定」分頁已改為頂部區塊選單（分類／供應來源／品牌／二手商品）+ `MerchantBuilderShell` 左清單右編輯區；已移除重複的「商店營銷設置 · 維修品牌型號」搜尋工具列；品牌編輯與型號邏輯收斂至 `MarketingBrandEditor` + `src/lib/marketing/brand-catalog-helpers.ts`
+- 「二手商品」子區塊與供應來源／品牌對齊：`UsedProductTypeSettingsCard` 使用 `MerchantBuilderShell`，左欄為啟用中的二手類型清單（搜尋、清單顯示筆數、可點選列），右欄為該類型之規格模板列表與新增／編輯規格表單（不再用整頁 `<details>` 摺疊列表）
+- merchant item naming baseline 已集中到 `companies/{companyId}/settings/itemNaming` 與 shared helper，支援品牌 / 型號 / 主分類 / 第二分類排序
+- dashboard inventory `settings` / `product-management` 與 `/dashboard/products` 已共用同一套 `ItemFormFields`，避免第二分類與自動命名只存在單一路徑
+- merchant item management UI 中文已統一用「品項」，英文用 `Item`；canonical data model 仍維持 `Product`
+- shared processing state spinner 已對齊真正置中，staff 帳號登入也會正確回補 `staffProfile`
 - iteration guardrails 已文件化到 canonical docs，之後 phase 收斂與 docs 更新應只回到 `project-rules.md` / `project-summary.md`
 - `lint` / `tsc` / `build` / `verify` 已通過
 - 目前沒有 lint warning
@@ -110,11 +118,12 @@
   - search / suggestions / filters / sort / pagination / empty state / list-detail consistency
 - 已完成:
   - shared pagination / result bar 已進入 receipts / products / delete logs 與 dashboard customers / cases / activities
-  - inventory / marketing / dashboard activity sections 已開始共用 shared empty state baseline
-  - inventory search、product-management search/create、marketing brand search 已開始共用 `SearchToolbar` + `MerchantSectionCard`
-  - inventory `product-management`、marketing lookup / brand blocks 已開始共用 `MerchantListShell`
-  - inventory `settings` 與 `product-management` 已共用 product create / edit list helper
-  - marketing category / supplier 已共用 create form 與 editable lookup list helper
+- inventory / marketing / dashboard activity sections 已開始共用 shared empty state baseline
+- inventory search、product-management search/create、marketing brand search 已開始共用 `SearchToolbar` + `MerchantSectionCard`
+- inventory `product-management`、marketing lookup / brand blocks 已開始共用 `MerchantListShell`
+- inventory `settings` 與 `product-management` 已共用 product create / edit list helper
+- inventory `settings` / `product-management` 與 `/dashboard/products` 已進一步共用 `ItemFormFields`，主分類 / 第二分類 / 自動命名欄位不再雙軌
+- marketing category / supplier 已共用 create form 與 editable lookup list helper
 - 目前基線:
   - operational list/index UX 新 work 應優先回到 shared toolbar / list shell / empty state / pagination pattern
 
@@ -125,9 +134,11 @@
   - duplicated relationship read flow 收斂
   - catalog read caching / invalidation baseline
 - 已完成:
-  - merchant catalog categories / brands / models / name entries / suppliers 已開始共用 service-level warm cache，降低 repeated Firestore reads
-  - `getCatalogDimensionBundle(companyId)` 已對齊同一個 company override，不再混用 session scope
-  - customer relationship snapshot 已抽成 shared read-model，集中 customer / ticket / sale / activity / purchase 載入
+- merchant catalog categories / brands / models / name entries / suppliers 已開始共用 service-level warm cache，降低 repeated Firestore reads
+- `getCatalogDimensionBundle(companyId)` 已對齊同一個 company override，不再混用 session scope
+- category schema 已支援 `parentCategoryId` / `categoryLevel` / `fullPath`，主分類 rename 會同步維護第二分類顯示路徑
+- `src/lib/schema/itemNamingSettings.ts` 與 `src/lib/services/item-naming-settings.service.ts` 已成為 merchant item naming 設定的 focused baseline
+- customer relationship snapshot 已抽成 shared read-model，集中 customer / ticket / sale / activity / purchase 載入
   - `dashboard/relationships` 不再對每位 customer 各自重跑 `getCustomerRelationshipSnapshot`
   - customer detail page 已改為直接消費 shared relationship record，減少 route-load duplicated fetches
   - customer list page 已改為 shared summary read-model，customer/ticket/sale linkage 規則開始一致
@@ -142,6 +153,7 @@
   - customer list / detail / relationship overview 應共用同一套 customer linkage helper，不要各自定義關聯規則
   - dashboard / workspace route 應優先收斂到 focused route-data service，再把結果交給 page / workspace
 - route action import 應優先走 `merchant/*-write.service.ts` wrappers，不要新增對 `commerce.ts` action 的直接依賴
+- item naming / catalog hierarchy 這類 merchant lookup 設定，應優先走 focused schema / service helper，不要回退成 page-local 字串拼接規則
 
 ### Phase 6
 
@@ -224,6 +236,14 @@
 - `src/lib/schema/cases.ts` 是 legacy Firestore bridge
 - 目前保留 `TicketCaseRecord` 與相容 alias
 
+### Product / Item
+
+- business record canonical name 是 `Product`
+- Firestore collection path 維持 `products`
+- merchant UI 中文顯示為「品項」
+- merchant UI 英文顯示為 `Item`
+- `product*` route / service / type naming 目前可保留作為 compatibility naming，不需要為了 UI 文案改動核心資料模型名稱
+
 ### Focused Service Wrappers
 
 - `src/lib/services/merchant/activity-read-model.service.ts`
@@ -235,12 +255,32 @@
 - `src/lib/services/merchant/customer-read-model.service.ts`
 - `src/lib/services/merchant/inventory-read-model.service.ts`
 - `src/lib/services/merchant/dashboard-read-model.service.ts`
+- `src/lib/services/item-naming-settings.service.ts`
 - `src/lib/services/platform/bossadmin-reporting.service.ts`
 
 規則:
 
 - 新的 read-side caller 優先從這些檔案 import
 - 不要讓新 route / page / feature 直接依賴 `src/lib/services/commerce.ts`
+
+## Merchant Catalog / Item Naming Baseline
+
+- `src/lib/types/catalog.ts`
+  - category 已支援 `categoryLevel`、`parentCategoryId`、`parentCategoryName`、`fullPath`
+  - product naming token 已集中成 `brand` / `model` / `category` / `secondaryCategory`
+
+- `src/lib/services/merchant/catalog-service.ts`
+  - catalog category normalize / list / update 以階層分類為基線
+  - 主分類與第二分類 display/search 應優先使用 `fullPath`
+
+- `src/lib/services/productNaming.ts`
+  - shared item auto-naming helper
+  - 預設排序為 `brand -> model -> secondaryCategory`
+
+- `src/lib/schema/itemNamingSettings.ts`
+- `src/lib/services/item-naming-settings.service.ts`
+  - merchant item naming settings canonical path 是 `companies/{companyId}/settings/itemNaming`
+  - 品項快速命名排序應集中讀寫這裡，不要在多個 workspace 各自保存一份 page-local 規則
 
 ### Focused Write Wrappers
 
@@ -427,11 +467,11 @@
 如果下一輪繼續做，優先順序應該是:
 
 1. 繼續把剩餘 merchant routes 的 action imports 切到 focused write wrappers，完成 route-layer boundary 收斂
-2. 視需要把 customer summary / activity purchases / consignments 下沉成更穩定的 aggregate doc 或 projection，進一步降低高流量頁面的即時計算成本
-3. 把 `src/lib/services/commerce.ts` 內仍在被 wrapper 承接的 product / catalog / marketing write-side 實作真正內移到 focused service
-4. 視需要把 `src/components/dashboard/CompanyDashboardWorkspace.tsx` 內的大型 tab 拆成 focused workspace，降低 shared list UX 後續維護成本
+2. 把 `src/lib/services/commerce.ts` 內仍在被 wrapper 承接的 product / catalog / marketing write-side 實作真正內移到 focused service，讓 item/category flow 脫離 compatibility 層
+3. 視需要把 customer summary / activity purchases / consignments 下沉成更穩定的 aggregate doc 或 projection，進一步降低高流量頁面的即時計算成本
+4. 視需要把 `src/components/dashboard/CompanyDashboardWorkspace.tsx` 內的大型 tab 拆成 focused workspace，降低 shared list UX 與 item form 後續維護成本
 5. 繼續把剩餘 shared settings / list / builder framework text 收斂到 `ui-text.ts`，完成 Phase 7 邊角補漏
-6. 把 showcase builder 的 template registry 再往 block-level editor / richer CTA assets / drag-in inserter UX 擴展，完成 Phase 8 後續收斂
+6. 視需要把 checkout / 活動 / 庫存報表 等 downstream flow 一起接上第二分類與 item naming settings，完成 merchant item baseline 擴散
 
 ## Validation Commands
 

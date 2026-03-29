@@ -34,14 +34,14 @@ export function InventoryTopNav({ lang }: InventoryTopNavProps) {
                   settings: "庫存設置",
                   stockIn: "入庫",
                   stockOut: "出庫",
-                  productManagement: "產品管理",
+                  productManagement: "品項管理",
               }
             : {
                   stock: "Stock",
                   settings: "Stock Setup",
                   stockIn: "Stock In",
                   stockOut: "Stock Out",
-                  productManagement: "Product Management",
+                  productManagement: "Item Management",
               };
 
     const links: Array<{ id: InventoryNavItemId; label: string; desc: string; href: string }> = [
@@ -72,7 +72,7 @@ export function InventoryTopNav({ lang }: InventoryTopNavProps) {
         {
             id: "product-management",
             label: labels.productManagement,
-            desc: lang === "zh" ? "完整產品 CRUD" : "Dedicated CRUD page",
+            desc: lang === "zh" ? "完整品項 CRUD" : "Dedicated ITEM CRUD page",
             href: "/dashboard/products",
         },
     ];

@@ -1,6 +1,7 @@
 import { ProductManagementWorkspace } from "@/components/dashboard/ProductManagementWorkspace";
 import { MerchantPageShell } from "@/components/merchant/shell";
 import { decodeCursorStack, encodeCursorStack, parseListPageSize } from "@/lib/pagination/query-controls";
+import { getItemNamingSettings } from "@/lib/services/item-naming-settings.service";
 import { getCatalogDimensionBundle, listCatalogSuppliers } from "@/lib/services/merchant/catalog-service";
 import { listRepairBrands, queryProductsPage } from "@/lib/services/merchant/inventory-read-model.service";
 import { createProduct, deleteProduct, updateProduct } from "@/lib/services/merchant/product-write.service";
@@ -84,7 +85,7 @@ export default async function ProductManagementPage({ searchParams }: ProductMan
     const minPrice = parseOptionalNumber(minPriceInput);
     const maxPrice = parseOptionalNumber(maxPriceInput);
 
-    const [productPage, catalogBundle, supplierRecords] = await Promise.all([
+    const [productPage, catalogBundle, supplierRecords, namingSettings] = await Promise.all([
         queryProductsPage({
             keyword: productKeyword,
             supplier: supplierFilter || undefined,
@@ -101,6 +102,7 @@ export default async function ProductManagementPage({ searchParams }: ProductMan
         }),
         getCatalogDimensionBundle(),
         listCatalogSuppliers(),
+        getItemNamingSettings(),
     ]);
     const needsRepairFallback = catalogBundle.brands.length === 0 || catalogBundle.models.length === 0;
     const repairBrands = needsRepairFallback ? await listRepairBrands() : [];
@@ -126,15 +128,15 @@ export default async function ProductManagementPage({ searchParams }: ProductMan
 
     return (
         <MerchantPageShell
-            title="產品管理"
-            subtitle="營運型清單頁，集中處理搜尋、篩選與產品維護。"
+            title="品項管理"
+            subtitle="營運型清單頁，集中處理搜尋、篩選與品項維護。"
             width="index"
             tabs={[
                 { id: "inventory-stock", label: "庫存", href: "/dashboard?tab=inventory&inventoryView=stock" },
                 { id: "inventory-settings", label: "庫存設置", href: "/dashboard?tab=inventory&inventoryView=settings" },
                 { id: "inventory-stock-in", label: "入庫", href: "/dashboard?tab=inventory&inventoryView=stock-in" },
                 { id: "inventory-stock-out", label: "出庫", href: "/dashboard?tab=inventory&inventoryView=stock-out" },
-                { id: "inventory-products", label: "產品管理", href: "/dashboard/products" },
+                { id: "inventory-products", label: "品項管理", href: "/dashboard/products" },
             ]}
         >
             <ProductManagementWorkspace
@@ -151,6 +153,7 @@ export default async function ProductManagementPage({ searchParams }: ProductMan
                 minPrice={minPriceInput}
                 maxPrice={maxPriceInput}
                 dimensionBundle={dimensionBundle}
+                namingSettings={namingSettings}
                 flash={(sp.flash ?? "").trim()}
                 actionTs={(sp.ts ?? "").trim()}
                 pageSize={String(productPage.pageSize)}

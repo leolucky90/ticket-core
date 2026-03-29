@@ -194,12 +194,22 @@ function stripUndefinedFields(input: object): Record<string, unknown> {
 
 function normalizeCategory(input: Partial<CategoryDoc> & { id: string; companyId: string }): CategoryDoc {
     const name = safeText(input.name) || "未命名分類";
+    const parentCategoryId = safeText(input.parentCategoryId, 120) || undefined;
+    const parentCategoryName = safeText(input.parentCategoryName) || undefined;
     const createdAt = safeText(input.createdAt, 40) || nowIso();
+    const categoryLevel: 1 | 2 = parentCategoryId || parentCategoryName || Number(input.categoryLevel) >= 2 ? 2 : 1;
+    const fullPath =
+        safeText(input.fullPath, MAX_LONG) ||
+        (categoryLevel === 2 && parentCategoryName ? `${parentCategoryName} > ${name}` : name);
     return {
         id: safeText(input.id, 120) || id("category"),
         companyId: safeText(input.companyId, 120),
         name,
         slug: safeText(input.slug, 120) || slugify(name),
+        parentCategoryId,
+        parentCategoryName,
+        categoryLevel,
+        fullPath,
         description: safeText(input.description, MAX_LONG) || undefined,
         sortOrder: Number.isFinite(Number(input.sortOrder)) ? Math.round(Number(input.sortOrder)) : 0,
         status: toStatus(input.status),
@@ -422,9 +432,17 @@ export async function listCatalogCategories(keyword = "", companyIdOverride?: st
         }
     }
     return queryByKeyword(
-        list.map((item) => normalizeCategory(item)).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "zh-Hant")),
+        list
+            .map((item) => normalizeCategory(item))
+            .sort(
+                (a, b) =>
+                    a.sortOrder - b.sortOrder ||
+                    a.categoryLevel - b.categoryLevel ||
+                    a.fullPath.localeCompare(b.fullPath, "zh-Hant") ||
+                    a.name.localeCompare(b.name, "zh-Hant"),
+            ),
         keyword,
-        (item) => [item.name, item.slug, item.description ?? ""],
+        (item) => [item.name, item.fullPath, item.parentCategoryName ?? "", item.slug, item.description ?? ""],
     );
 }
 
@@ -572,7 +590,8 @@ export async function createCatalogCategory(input: Partial<CategoryDoc>, company
 export async function updateCatalogCategory(categoryId: string, input: Partial<CategoryDoc>, companyIdOverride?: string): Promise<CategoryDoc | null> {
     const companyId = await resolveCompanyIdOrThrow(companyIdOverride, "updateCatalogCategory");
     const path = catalogCollectionPath(companyId, "categories");
-    const current = (await listCatalogCategories("", companyId)).find((item) => item.id === safeText(categoryId, 120));
+    const categoryList = await listCatalogCategories("", companyId);
+    const current = categoryList.find((item) => item.id === safeText(categoryId, 120));
     if (!current) return null;
     const next = normalizeCategory({ ...current, ...input, id: current.id, companyId, updatedAt: nowIso() });
     debugCatalogLog("update_category:start", {
@@ -592,6 +611,25 @@ export async function updateCatalogCategory(categoryId: string, input: Partial<C
         return null;
     }
     upsertMemory(memory.categoriesByCompany, companyId, next);
+    if (current.categoryLevel === 1 && current.name !== next.name) {
+        const childCategories = categoryList.filter((item) => item.parentCategoryId === current.id);
+        for (const child of childCategories) {
+            const childNext = normalizeCategory({
+                ...child,
+                id: child.id,
+                companyId,
+                parentCategoryName: next.name,
+                fullPath: `${next.name} > ${child.name}`,
+                updatedAt: next.updatedAt,
+            });
+            try {
+                await setCategoryToFirestore(companyId, childNext);
+            } catch {
+                // fall back to memory if Firestore is temporarily unavailable
+            }
+            upsertMemory(memory.categoriesByCompany, companyId, childNext);
+        }
+    }
     touchReadCache(readCacheTouchedAt.categoriesByCompany, companyId);
     debugCatalogLog("update_category:success", { companyId, path, recordId: next.id });
     return next;
@@ -840,10 +878,14 @@ export async function getCatalogDimensionBundle(companyIdOverride?: string): Pro
         listCatalogModels("", companyIdOverride),
     ]);
 
-    const toOption = (item: { id: string; name: string; slug: string; status: CatalogRecordStatus }) => ({
+    const toCategoryOption = (item: CategoryDoc) => ({
         id: item.id,
         name: item.name,
         slug: item.slug,
+        parentCategoryId: item.parentCategoryId,
+        parentCategoryName: item.parentCategoryName,
+        categoryLevel: item.categoryLevel,
+        fullPath: item.fullPath,
     });
     const toBrandOption = (item: BrandDoc) => ({
         id: item.id,
@@ -862,7 +904,7 @@ export async function getCatalogDimensionBundle(companyIdOverride?: string): Pro
     });
 
     return {
-        categories: categories.filter((item) => item.status === "active").map(toOption),
+        categories: categories.filter((item) => item.status === "active").map(toCategoryOption),
         brands: brands.filter((item) => item.status === "active").map(toBrandOption),
         models: models.filter((item) => item.status === "active").map(toModelOption),
     };

@@ -9,6 +9,8 @@ export type ProductDoc = {
     namingMode: ProductNamingMode;
     categoryId: string;
     categoryName: string;
+    secondaryCategoryId: string;
+    secondaryCategoryName: string;
     brandId: string;
     brandName: string;
     modelId: string;

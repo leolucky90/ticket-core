@@ -8,6 +8,7 @@
     "dev:fullclean": "rm -rf .next ../.next && next dev --webpack --port 3000",
     "dev:turbo": "next dev",
     "reset:firebase": "node scripts/reset-firebase-data.mjs",
+    "sync:demo-auth-passwords": "node scripts/sync-demo-auth-passwords.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

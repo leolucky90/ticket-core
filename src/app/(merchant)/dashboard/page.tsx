@@ -8,6 +8,7 @@ import {
     deleteActivity,
     updateActivity,
 } from "@/lib/services/merchant/activity-write.service";
+import { getItemNamingSettings, updateItemNamingSettings } from "@/lib/services/item-naming-settings.service";
 import { decodeCursorStack, encodeCursorStack, parseListPageSize } from "@/lib/pagination/query-controls";
 import { createProductCategory, createProductSupplier, deleteProductCategory, deleteProductSupplier, updateProductCategory, updateProductSupplier } from "@/lib/services/merchant/catalog-write.service";
 import { createCompanyCustomer, updateCompanyCustomer } from "@/lib/services/merchant/customer-write.service";
@@ -20,6 +21,7 @@ import {
     listUsedProductTypeSettings,
     updateUsedProductTypeSetting,
 } from "@/lib/services/used-product-type-settings.service";
+import type { ItemNamingToken } from "@/lib/types/catalog";
 
 type DashboardSearchParams = {
     tab?: string;
@@ -195,6 +197,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         activityPageSize,
         activityCursor: activityCursor || undefined,
     });
+    const itemNamingSettings = await getItemNamingSettings();
     const parsedActionTs = Number.parseInt(actionTs, 10);
     const derivedSnapshotTs = [
         ...(needsCaseSupport ? casePage.items : bundle.tickets).map((ticket) => ticket.updatedAt),
@@ -315,6 +318,21 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         return redirect(`/dashboard?tab=marketing&flash=${encodeURIComponent("二手規格模板已更新")}&ts=${Date.now()}`);
     }
 
+    async function updateItemNamingSettingsAction(formData: FormData): Promise<void> {
+        "use server";
+
+        try {
+            const order = String(formData.get("order") ?? "")
+                .split(",")
+                .map((item) => item.trim())
+                .filter((item) => item.length > 0);
+            await updateItemNamingSettings({ patch: { order: order as ItemNamingToken[] } });
+            redirect(`/dashboard?tab=marketing&flash=${encodeURIComponent("item_naming_saved")}&ts=${Date.now()}`);
+        } catch {
+            redirect(`/dashboard?tab=marketing&flash=${encodeURIComponent("error")}&ts=${Date.now()}`);
+        }
+    }
+
     return (
         <MerchantPageShell title={currentTabLabel.title} subtitle={currentTabLabel.subtitle} width={tab === "dashboard" ? "overview" : "index"}>
             <CompanyDashboardWorkspace
@@ -333,6 +351,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 products={bundle.products}
                 brands={bundle.brands}
                 dimensionBundle={dimensionBundle}
+                itemNamingSettings={itemNamingSettings}
                 supplierItems={supplierRecords.map((item) => ({ id: item.id, name: item.name, status: item.status }))}
                 stockLogs={bundle.stockLogs}
                 caseKeyword={(sp.caseQ ?? "").trim()}
@@ -343,7 +362,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 customerKeyword={(sp.customerQ ?? "").trim()}
                 activityKeyword={(sp.activityQ ?? "").trim()}
                 productKeyword={(sp.productQ ?? "").trim()}
-                brandKeyword={(sp.brandQ ?? "").trim()}
                 createCaseAction={createTicket}
                 createWarrantyCaseAction={async (formData: FormData) => {
                     "use server";
@@ -415,6 +433,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 activityHasNextPage={activityPage.hasNextPage}
                 usedProductTypeSettings={usedProductTypeSettings}
                 updateUsedProductTypeSettingAction={updateUsedProductTypeSettingAction}
+                updateItemNamingSettingsAction={updateItemNamingSettingsAction}
             />
         </MerchantPageShell>
     );

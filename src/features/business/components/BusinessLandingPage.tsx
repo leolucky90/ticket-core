@@ -28,6 +28,7 @@ import type {
     BusinessHomepageEditableContent,
     BusinessHomepageThemePreset,
 } from "@/features/business/services/businessHomepageContent";
+import { DEMO_ACCOUNT_PASSWORD } from "@/lib/demo-account-password";
 
 type BusinessLandingPageProps = {
     lang: "zh" | "en";
@@ -377,7 +378,7 @@ const copyByLang: Record<"zh" | "en", LandingCopy> = {
         demoEntryLabel: "用戶登入入口",
         demoEntryValue: "http://localhost:3000",
         demoPasswordLabel: "測試密碼",
-        demoPasswordValue: "123456",
+        demoPasswordValue: DEMO_ACCOUNT_PASSWORD,
         demoGroups: [
             {
                 title: "A 組租戶",
@@ -695,7 +696,7 @@ const copyByLang: Record<"zh" | "en", LandingCopy> = {
         demoEntryLabel: "Login entry",
         demoEntryValue: "http://localhost:3000",
         demoPasswordLabel: "Test password",
-        demoPasswordValue: "123456",
+        demoPasswordValue: DEMO_ACCOUNT_PASSWORD,
         demoGroups: [
             {
                 title: "Tenant Group A",

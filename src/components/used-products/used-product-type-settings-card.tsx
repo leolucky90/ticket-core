@@ -3,7 +3,7 @@
 import { Plus, RotateCcw, Save, Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { MerchantPredictiveSearchInput } from "@/components/merchant/search";
-import { Card } from "@/components/ui/card";
+import { EmptyStateCard, MerchantBuilderShell } from "@/components/merchant/shell";
 import { IconActionButton } from "@/components/ui/icon-action-button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -23,6 +23,8 @@ type UsedProductTypeSettingsCardProps = {
 type UsedProductTypeSettingsText = {
     cardTitle: string;
     cardHint: string;
+    typeListLabel: string;
+    pickTypeHint: string;
     templates: string;
     noTemplates: string;
     specName: string;
@@ -65,6 +67,13 @@ type TemplateOptionEditorProps = {
     onChange: (value: string[]) => void;
     text: UsedProductTypeSettingsText;
 };
+
+function limitRows<T>(rows: T[], size: string): T[] {
+    if (size === "all") return rows;
+    const limit = Number(size);
+    if (!Number.isFinite(limit) || limit <= 0) return rows;
+    return rows.slice(0, limit);
+}
 
 function templateName(template: UsedProductTypeSpecificationTemplate): string {
     return template.label || template.labelZh || template.labelEn || template.key;
@@ -219,6 +228,97 @@ function TemplateEditorForm({ lang, text, settingId, actionMode, updateTypeActio
     );
 }
 
+function TypeSpecificationEditorPanel({
+    lang,
+    text,
+    setting,
+    updateTypeAction,
+}: {
+    lang: "zh" | "en";
+    text: UsedProductTypeSettingsText;
+    setting: UsedProductTypeSetting;
+    updateTypeAction: (formData: FormData) => Promise<void>;
+}) {
+    return (
+        <div className="grid min-h-0 min-w-0 gap-4">
+            <div className="text-sm font-semibold text-[rgb(var(--text))]">{setting.name}</div>
+
+            <div className="grid gap-2 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                <div className="text-xs text-[rgb(var(--muted))]">
+                    {text.templates}（{setting.specificationTemplates.length}）
+                </div>
+                <div className="text-xs text-[rgb(var(--muted))]">
+                    {lang === "en"
+                        ? "Product create/edit pages will only fill these template values."
+                        : "商品新增 / 編輯頁只會填寫這些模板值，不會再自由新增規格欄位。"}
+                </div>
+
+                {setting.specificationTemplates.length === 0 ? (
+                    <div className="text-xs text-[rgb(var(--muted))]">{text.noTemplates}</div>
+                ) : (
+                    <div className="grid gap-2">
+                        {setting.specificationTemplates.map((template) => {
+                            const currentType = templateInputType(template);
+                            const currentOptions = templateOptions(template);
+
+                            return (
+                                <div
+                                    key={`${setting.id}_${template.key}`}
+                                    className="grid gap-2 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-3 py-3"
+                                >
+                                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className="font-medium text-[rgb(var(--text))]">{templateName(template)}</span>
+                                            <span className="rounded-full border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-2 py-0.5">
+                                                {currentType === "select" ? text.typeSummarySelect : text.typeSummaryText}
+                                            </span>
+                                            <span className="rounded-full border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-2 py-0.5">
+                                                {template.isRequired ? text.required : text.optional}
+                                            </span>
+                                            {currentType === "select" ? (
+                                                <span className="rounded-full border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-2 py-0.5">
+                                                    {currentOptions.length} {text.optionCount}
+                                                </span>
+                                            ) : null}
+                                        </div>
+                                        <form action={updateTypeAction}>
+                                            <input type="hidden" name="id" value={setting.id} />
+                                            <input type="hidden" name="actionMode" value="removeSpec" />
+                                            <input type="hidden" name="specKey" value={template.key} />
+                                            <IconActionButton icon={Trash2} type="submit" label={text.removeSpec} tooltip={text.removeSpecTooltip} />
+                                        </form>
+                                    </div>
+
+                                    {currentType === "select" && currentOptions.length > 0 ? (
+                                        <div className="flex flex-wrap gap-2 text-xs text-[rgb(var(--muted))]">
+                                            {currentOptions.map((option) => (
+                                                <span key={`${template.key}-${option}`} className="rounded-full border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-2 py-0.5">
+                                                    {option}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    ) : null}
+
+                                    <TemplateEditorForm
+                                        lang={lang}
+                                        text={text}
+                                        settingId={setting.id}
+                                        actionMode="updateSpec"
+                                        updateTypeAction={updateTypeAction}
+                                        template={template}
+                                    />
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+
+                <TemplateEditorForm lang={lang} text={text} settingId={setting.id} actionMode="addSpec" updateTypeAction={updateTypeAction} />
+            </div>
+        </div>
+    );
+}
+
 export function UsedProductTypeSettingsCard({
     lang,
     settings,
@@ -227,11 +327,15 @@ export function UsedProductTypeSettingsCard({
     const [displaySize, setDisplaySize] = useState("5");
     const [searchDraft, setSearchDraft] = useState("");
     const [searchTerm, setSearchTerm] = useState("");
+    const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null);
+
     const text: UsedProductTypeSettingsText =
         lang === "en"
             ? {
                   cardTitle: "Used Product Settings",
-                  cardHint: "Used-product type list now comes from brand settings. Only types enabled there appear here for specification templates.",
+                  cardHint: "Used-product type list comes from brand settings. Only types enabled there appear here for specification templates.",
+                  typeListLabel: "Type list",
+                  pickTypeHint: "Select a type on the left to edit its specification templates.",
                   templates: "Specification Templates",
                   noTemplates: "No specification template yet.",
                   specName: "Specification Name",
@@ -261,6 +365,8 @@ export function UsedProductTypeSettingsCard({
             : {
                   cardTitle: "二手商品設定",
                   cardHint: "二手商品類型改由品牌設定中的「啟用二手商品設定」控制；這裡只管理規格模板。",
+                  typeListLabel: "類型清單",
+                  pickTypeHint: "請從左側選擇類型，以編輯該類型的規格模板。",
                   templates: "規格模板",
                   noTemplates: "尚未設定規格欄位。",
                   specName: "規格名稱",
@@ -287,6 +393,7 @@ export function UsedProductTypeSettingsCard({
                   typeSummarySelect: "下拉選單",
                   optionCount: "個選項",
               };
+
     const filteredSettings = useMemo(() => {
         const q = searchTerm.trim().toLowerCase();
         if (!q) return settings;
@@ -306,19 +413,21 @@ export function UsedProductTypeSettingsCard({
             return haystacks.includes(q);
         });
     }, [searchTerm, settings]);
-    const visibleSettings = useMemo(() => {
-        const limit = Number(displaySize);
-        if (!Number.isFinite(limit) || limit <= 0) return filteredSettings;
-        return filteredSettings.slice(0, limit);
-    }, [displaySize, filteredSettings]);
-    const listViewportClass =
-        displaySize === "5"
-            ? "max-h-[820px]"
-            : displaySize === "10"
-              ? "max-h-[1180px]"
-              : displaySize === "15"
-                ? "max-h-[1540px]"
-                : "max-h-[1900px]";
+
+    const visibleSettings = useMemo(() => limitRows(filteredSettings, displaySize), [displaySize, filteredSettings]);
+
+    const resolvedSelectedTypeId = useMemo(() => {
+        if (filteredSettings.length === 0) return null;
+        if (selectedTypeId && filteredSettings.some((s) => s.id === selectedTypeId)) {
+            return selectedTypeId;
+        }
+        return filteredSettings[0].id;
+    }, [filteredSettings, selectedTypeId]);
+
+    const selectedSetting = resolvedSelectedTypeId
+        ? filteredSettings.find((s) => s.id === resolvedSelectedTypeId)
+        : undefined;
+
     const searchSuggestions = useMemo(
         () =>
             settings.flatMap((setting) => [
@@ -347,155 +456,121 @@ export function UsedProductTypeSettingsCard({
         [settings, text.templates],
     );
 
-    return (
-        <Card>
-            <div className="mb-3 text-sm font-semibold">{text.cardTitle}</div>
-            <div className="mb-3 text-xs text-[rgb(var(--muted))]">{text.cardHint}</div>
-
-            <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex flex-1 flex-wrap items-center gap-2">
-                    <MerchantPredictiveSearchInput
-                        defaultValue={searchDraft}
-                        placeholder={text.searchPlaceholder}
-                        localSuggestions={searchSuggestions}
-                        className="min-w-[240px] flex-1"
-                        onValueChange={setSearchDraft}
-                        onSelect={(item) => {
-                            setSearchDraft(item.value);
-                            setSearchTerm(item.value.trim());
-                        }}
-                    />
-                    <IconActionButton icon={Search} label={lang === "en" ? "Search used product settings" : "搜尋二手商品設定"} tooltip={lang === "en" ? "Search" : "搜尋"} onClick={() => setSearchTerm(searchDraft.trim())} />
-                    <IconActionButton
-                        icon={RotateCcw}
-                        label={lang === "en" ? "Clear used product setting search" : "清除二手商品設定搜尋"}
-                        tooltip={lang === "en" ? "Clear" : "清除"}
-                        onClick={() => {
-                            setSearchDraft("");
-                            setSearchTerm("");
-                        }}
-                    />
-                </div>
-                <div className="flex items-center justify-end gap-2">
-                    <span className="text-xs text-[rgb(var(--muted))]">清單顯示</span>
-                    <Select value={displaySize} onChange={(event) => setDisplaySize(event.currentTarget.value)} className="h-9 w-[96px]">
-                        {LIST_DISPLAY_OPTIONS.map((size) => (
-                            <option key={`used-type-display-${size}`} value={size}>
-                                {size}
-                            </option>
-                        ))}
-                    </Select>
-                </div>
+    const typeListShell = (
+        <div className="flex min-h-0 min-w-0 flex-col gap-3">
+            <div className="text-sm font-semibold text-[rgb(var(--text))]">{text.cardTitle}</div>
+            <p className="text-xs text-[rgb(var(--muted))]">{text.cardHint}</p>
+            <div className="text-xs font-medium text-[rgb(var(--muted))]">
+                {text.typeListLabel}（{filteredSettings.length}）
             </div>
-
-            <div className={`${listViewportClass} overflow-y-auto pr-1`}>
-                <div className="grid gap-3">
-                    {visibleSettings.map((setting) => (
-                        <details key={setting.id} className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                            <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+            <div className="flex flex-1 flex-wrap items-center gap-2">
+                <MerchantPredictiveSearchInput
+                    defaultValue={searchDraft}
+                    placeholder={text.searchPlaceholder}
+                    localSuggestions={searchSuggestions}
+                    className="min-w-[200px] flex-1"
+                    onValueChange={setSearchDraft}
+                    onSelect={(item) => {
+                        setSearchDraft(item.value);
+                        setSearchTerm(item.value.trim());
+                        if (item.id.startsWith("type-")) {
+                            setSelectedTypeId(item.id.slice("type-".length));
+                        } else if (item.id.startsWith("spec-")) {
+                            const rest = item.id.slice("spec-".length);
+                            const owning = settings.find((s) => rest.startsWith(`${s.id}-`));
+                            if (owning) setSelectedTypeId(owning.id);
+                        }
+                    }}
+                />
+                <IconActionButton
+                    icon={Search}
+                    label={lang === "en" ? "Search used product settings" : "搜尋二手商品設定"}
+                    tooltip={lang === "en" ? "Search" : "搜尋"}
+                    onClick={() => setSearchTerm(searchDraft.trim())}
+                />
+                <IconActionButton
+                    icon={RotateCcw}
+                    label={lang === "en" ? "Clear used product setting search" : "清除二手商品設定搜尋"}
+                    tooltip={lang === "en" ? "Clear" : "清除"}
+                    onClick={() => {
+                        setSearchDraft("");
+                        setSearchTerm("");
+                    }}
+                />
+            </div>
+            {searchTerm ? (
+                <button
+                    type="button"
+                    className="w-fit text-xs text-[rgb(var(--accent))] underline"
+                    onClick={() => {
+                        setSearchDraft("");
+                        setSearchTerm("");
+                    }}
+                >
+                    {lang === "en" ? "Clear search" : "清除搜尋"}
+                </button>
+            ) : null}
+            <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-[rgb(var(--muted))]">{lang === "en" ? "List display" : "清單顯示"}</span>
+                <Select value={displaySize} onChange={(event) => setDisplaySize(event.currentTarget.value)} className="h-9 w-[96px]">
+                    {LIST_DISPLAY_OPTIONS.map((size) => (
+                        <option key={`used-type-display-${size}`} value={size}>
+                            {size}
+                        </option>
+                    ))}
+                </Select>
+            </div>
+            <div className="max-h-[min(520px,65vh)] min-w-0 overflow-y-auto pr-1">
+                {visibleSettings.length === 0 ? (
+                    <EmptyStateCard
+                        icon={Search}
+                        title={lang === "en" ? "No matching types" : "沒有符合的類型"}
+                        description={lang === "en" ? "Adjust search or clear filters." : "可調整搜尋或清除篩選。"}
+                        className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
+                    />
+                ) : (
+                    <div className="grid gap-1">
+                        {visibleSettings.map((setting) => (
+                            <button
+                                key={setting.id}
+                                type="button"
+                                onClick={() => setSelectedTypeId(setting.id)}
+                                className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
+                                    resolvedSelectedTypeId === setting.id
+                                        ? "border-[rgb(var(--accent))] bg-[rgb(var(--accent))]/10 font-medium"
+                                        : "border-[rgb(var(--border))] bg-[rgb(var(--panel2))] hover:bg-[rgb(var(--panel))]"
+                                }`}
+                            >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <span className="text-sm font-medium">{setting.name}</span>
-                                    </div>
-                                    <span className="text-xs text-[rgb(var(--muted))]">
-                                        {text.templates} {setting.specificationTemplates.length}
+                                    <span className="truncate">{setting.name}</span>
+                                    <span className="shrink-0 text-xs text-[rgb(var(--muted))]">
+                                        {setting.specificationTemplates.length}
                                     </span>
                                 </div>
-                            </summary>
-
-                            <div className="mt-3 grid gap-3">
-                                <div className="grid gap-2 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-3">
-                                    <div className="text-xs text-[rgb(var(--muted))]">
-                                        {text.templates}（{setting.specificationTemplates.length}）
-                                    </div>
-                                    <div className="text-xs text-[rgb(var(--muted))]">
-                                        {lang === "en"
-                                            ? "Product create/edit pages will only fill these template values."
-                                            : "商品新增 / 編輯頁只會填寫這些模板值，不會再自由新增規格欄位。"}
-                                    </div>
-
-                                    {setting.specificationTemplates.length === 0 ? (
-                                        <div className="text-xs text-[rgb(var(--muted))]">{text.noTemplates}</div>
-                                    ) : (
-                                        <div className="grid gap-2">
-                                            {setting.specificationTemplates.map((template) => {
-                                                const currentType = templateInputType(template);
-                                                const currentOptions = templateOptions(template);
-
-                                                return (
-                                                    <div
-                                                        key={`${setting.id}_${template.key}`}
-                                                        className="grid gap-2 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-3"
-                                                    >
-                                                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                                                            <div className="flex flex-wrap items-center gap-2">
-                                                                <span className="font-medium text-[rgb(var(--text))]">{templateName(template)}</span>
-                                                                <span className="rounded-full border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-0.5">
-                                                                    {currentType === "select" ? text.typeSummarySelect : text.typeSummaryText}
-                                                                </span>
-                                                                <span className="rounded-full border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-0.5">
-                                                                    {template.isRequired ? text.required : text.optional}
-                                                                </span>
-                                                                {currentType === "select" ? (
-                                                                    <span className="rounded-full border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-0.5">
-                                                                        {currentOptions.length} {text.optionCount}
-                                                                    </span>
-                                                                ) : null}
-                                                            </div>
-                                                            <form action={updateTypeAction}>
-                                                                <input type="hidden" name="id" value={setting.id} />
-                                                                <input type="hidden" name="actionMode" value="removeSpec" />
-                                                                <input type="hidden" name="specKey" value={template.key} />
-                                                                <IconActionButton icon={Trash2} type="submit" label={text.removeSpec} tooltip={text.removeSpecTooltip} />
-                                                            </form>
-                                                        </div>
-
-                                                        {currentType === "select" && currentOptions.length > 0 ? (
-                                                            <div className="flex flex-wrap gap-2 text-xs text-[rgb(var(--muted))]">
-                                                                {currentOptions.map((option) => (
-                                                                    <span key={`${template.key}-${option}`} className="rounded-full border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-0.5">
-                                                                        {option}
-                                                                    </span>
-                                                                ))}
-                                                            </div>
-                                                        ) : null}
-
-                                                        <TemplateEditorForm
-                                                            lang={lang}
-                                                            text={text}
-                                                            settingId={setting.id}
-                                                            actionMode="updateSpec"
-                                                            updateTypeAction={updateTypeAction}
-                                                            template={template}
-                                                        />
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-
-                                    <TemplateEditorForm
-                                        lang={lang}
-                                        text={text}
-                                        settingId={setting.id}
-                                        actionMode="addSpec"
-                                        updateTypeAction={updateTypeAction}
-                                    />
-                                </div>
-                            </div>
-                        </details>
-                    ))}
-                    {filteredSettings.length === 0 ? (
-                        <div className="text-xs text-[rgb(var(--muted))]">
-                            {settings.length === 0
-                                ? text.noTypes
-                                : lang === "en"
-                                  ? "No matching used product settings."
-                                  : "找不到符合條件的二手商品設定。"}
-                        </div>
-                    ) : null}
-                </div>
+                            </button>
+                        ))}
+                    </div>
+                )}
             </div>
-        </Card>
+        </div>
     );
+
+    const editorShell =
+        settings.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-4 py-10 text-center text-sm text-[rgb(var(--muted))]">
+                {text.noTypes}
+            </div>
+        ) : filteredSettings.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-4 py-10 text-center text-sm text-[rgb(var(--muted))]">
+                {lang === "en" ? "No matching used product settings." : "找不到符合條件的二手商品設定。"}
+            </div>
+        ) : !selectedSetting ? (
+            <div className="rounded-xl border border-dashed border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-4 py-10 text-center text-sm text-[rgb(var(--muted))]">
+                {text.pickTypeHint}
+            </div>
+        ) : (
+            <TypeSpecificationEditorPanel lang={lang} text={text} setting={selectedSetting} updateTypeAction={updateTypeAction} />
+        );
+
+    return <MerchantBuilderShell sectionList={typeListShell} editor={editorShell} />;
 }

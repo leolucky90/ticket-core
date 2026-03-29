@@ -43,6 +43,8 @@ Run:
 pnpm reset:firebase
 ```
 
+Demo merchant/customer passwords always match `src/lib/demo-account-password.ts` (`DEMO_ACCOUNT_PASSWORD`). If sign-in fails because Auth passwords no longer match that constant (for example after manual changes), run `pnpm sync:demo-auth-passwords` to update only the four seeded Firebase Auth users, or run `pnpm reset:firebase` for a full Firestore + Auth baseline.
+
 This script clears demo Firestore baseline and recreates:
 
 - official homepage baseline at `app_config/business_homepage`

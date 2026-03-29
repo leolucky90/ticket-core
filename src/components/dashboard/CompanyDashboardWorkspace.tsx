@@ -1,7 +1,9 @@
 "use client";
 
-import { type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type FormEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { ItemFormFields } from "@/components/dashboard/ItemFormFields";
+import { MarketingSettingsWorkspace } from "@/components/dashboard/marketing-settings-workspace";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,9 +11,9 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyStateCard, MerchantListPagination, MerchantListShell, MerchantSectionCard, MerchantStatGrid, SearchToolbar } from "@/components/merchant/shell";
 import { MerchantPredictiveSearchInput } from "@/components/merchant/search";
-import { TechnicianAutocomplete, UsedProductTypeSettingsCard } from "@/components/used-products";
+import { TechnicianAutocomplete } from "@/components/used-products";
 import type { MerchantStatItem } from "@/components/merchant/shell";
-import { ArrowLeft, ArrowRight, Pencil, Plus, Save, Search, ShieldCheck, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Pencil, Plus, Save, Search, ShieldCheck, X } from "lucide-react";
 import type { DimensionPickerBundle } from "@/lib/types/catalog";
 import type { CustomerProfile, CustomerProfileListRow } from "@/lib/types/customer";
 import type { InventoryStockLog } from "@/lib/types/inventory";
@@ -22,6 +24,7 @@ import type { CompanyDashboardStats } from "@/lib/types/reporting";
 import type { Sale } from "@/lib/types/sale";
 import type { KnownTicketStatus, QuoteStatus, Ticket } from "@/lib/types/ticket";
 import type { UsedProductTypeSetting } from "@/lib/schema";
+import type { ItemNamingSettings } from "@/lib/schema/itemNamingSettings";
 import { LIST_DISPLAY_OPTIONS } from "@/lib/ui/list-display";
 
 export type DashboardTab = "dashboard" | "customers" | "cases" | "activities" | "inventory" | "marketing";
@@ -58,6 +61,7 @@ type CompanyDashboardWorkspaceProps = {
     stockLogs: InventoryStockLog[];
     brands: RepairBrand[];
     dimensionBundle: DimensionPickerBundle;
+    itemNamingSettings: ItemNamingSettings;
     supplierItems: { id: string; name: string; status?: string }[];
     caseKeyword: string;
     caseStatus: string;
@@ -73,7 +77,6 @@ type CompanyDashboardWorkspaceProps = {
     customerKeyword: string;
     activityKeyword: string;
     productKeyword: string;
-    brandKeyword: string;
     createCaseAction: (formData: FormData) => Promise<void>;
     createWarrantyCaseAction: (formData: FormData) => Promise<void>;
     updateCaseAction: (formData: FormData) => Promise<void>;
@@ -130,6 +133,7 @@ type CompanyDashboardWorkspaceProps = {
     activityHasNextPage: boolean;
     usedProductTypeSettings: UsedProductTypeSetting[];
     updateUsedProductTypeSettingAction: (formData: FormData) => Promise<void>;
+    updateItemNamingSettingsAction: (formData: FormData) => Promise<void>;
 };
 
 type ActivityDraftItem = {
@@ -138,11 +142,6 @@ type ActivityDraftItem = {
     qty: number;
     price: number;
     cost: number;
-};
-
-type MarketingLookupRow = {
-    id: string;
-    name: string;
 };
 
 type CustomerCaseFilter = "all" | "active_case" | "closed_case" | "no_case";
@@ -161,9 +160,9 @@ const FLASH_LABELS: Record<string, string> = {
     activity_updated: "活動已更新",
     activity_cancelled: "活動已取消",
     activity_deleted: "活動已刪除",
-    product_created: "產品已建立",
-    product_updated: "產品已更新",
-    product_deleted: "產品已刪除",
+    product_created: "品項已建立",
+    product_updated: "品項已更新",
+    product_deleted: "品項已刪除",
     product_stock_in: "入庫完成",
     product_stock_out: "出庫完成",
     brand_created: "品牌已建立",
@@ -177,32 +176,15 @@ const FLASH_LABELS: Record<string, string> = {
     category_created: "分類已新增",
     category_updated: "分類已更新",
     category_deleted: "分類已移除",
+    category_invalid_parent: "第二分類只能掛在主分類底下，請重新選擇。",
+    category_has_children: "此主分類底下仍有第二分類，請先處理下層分類。",
     supplier_created: "供應商已新增",
     supplier_updated: "供應商已更新",
     supplier_deleted: "供應商已移除",
+    item_naming_saved: "品項快速命名設定已儲存",
     customer_created: "客戶已新增",
     customer_updated: "客戶資料已更新",
 };
-
-const COMMON_BRAND_TYPE_SUGGESTIONS = [
-    "手機配件",
-    "車用配件",
-    "充電線",
-    "充電器",
-    "無線充電器",
-    "車用充電器",
-    "行動電源",
-    "保護貼",
-    "保護殼",
-    "支架",
-    "轉接器",
-    "傳輸線",
-    "耳機",
-    "喇叭",
-    "筆電配件",
-    "平板配件",
-    "手錶配件",
-];
 
 function flashTone(flash: string): "success" | "error" {
     if (flash === "invalid" || flash === "error" || flash === "delete_auth_required" || flash === "delete_auth_failed") return "error";
@@ -460,132 +442,6 @@ function guardDeleteWithPassword(event: FormEvent<HTMLFormElement>) {
     input.value = password;
 }
 
-function submitBrandRename(event: MouseEvent<HTMLButtonElement>, currentName: string) {
-    event.preventDefault();
-    event.stopPropagation();
-    const form = event.currentTarget.form;
-    if (!form) return;
-    const nextName = window.prompt("請輸入品牌新名稱：", currentName)?.trim() ?? "";
-    if (!nextName || nextName === currentName) return;
-    const brandNameInput = form.querySelector('input[name="brandName"]') as HTMLInputElement | null;
-    if (!brandNameInput) return;
-    brandNameInput.value = nextName;
-    form.requestSubmit();
-}
-
-function setFormHiddenValue(form: HTMLFormElement, name: string, value: string) {
-    let input = form.querySelector(`input[name="${name}"]`) as HTMLInputElement | null;
-    if (!input) {
-        input = document.createElement("input");
-        input.type = "hidden";
-        input.name = name;
-        form.appendChild(input);
-    }
-    input.value = value;
-}
-
-function prepareBrandTypeRename(event: MouseEvent<HTMLButtonElement>, currentName: string) {
-    event.stopPropagation();
-    const form = event.currentTarget.form;
-    if (!form) {
-        event.preventDefault();
-        return;
-    }
-    const nextName = window.prompt("請輸入新的品牌類型名稱：", currentName)?.trim() ?? "";
-    if (!nextName || nextName.toLowerCase() === currentName.toLowerCase()) {
-        event.preventDefault();
-        return;
-    }
-    setFormHiddenValue(form, "oldTypeName", currentName);
-    setFormHiddenValue(form, "nextTypeName", nextName);
-}
-
-function prepareBrandTypeDelete(event: MouseEvent<HTMLButtonElement>, currentName: string) {
-    event.stopPropagation();
-    const form = event.currentTarget.form;
-    if (!form) {
-        event.preventDefault();
-        return;
-    }
-    const confirmed = window.confirm(`確定要移除品牌類型「${currentName}」嗎？該類型底下的型號也會一起停用。`);
-    if (!confirmed) {
-        event.preventDefault();
-        return;
-    }
-    setFormHiddenValue(form, "oldTypeName", currentName);
-    setFormHiddenValue(form, "nextTypeName", "");
-}
-
-function normalizeBrandTypeNames(typeNames: string[]): string[] {
-    return typeNames
-        .map((typeName) => typeName.trim())
-        .filter((typeName, index, all) => typeName.length > 0 && all.findIndex((item) => item.toLowerCase() === typeName.toLowerCase()) === index)
-        .sort((a, b) => a.localeCompare(b, "zh-Hant"));
-}
-
-function getBrandTypeNames(brand: Pick<RepairBrand, "productTypes" | "modelsByType" | "usedProductTypes">): string[] {
-    return normalizeBrandTypeNames([
-        ...(brand.productTypes ?? []),
-        ...((brand.modelsByType ?? []).map((group) => group.typeName) ?? []),
-        ...(brand.usedProductTypes ?? []),
-    ]);
-}
-
-function getBrandCategoryNames(brand: Pick<RepairBrand, "linkedCategoryNames">): string[] {
-    return normalizeBrandTypeNames(brand.linkedCategoryNames ?? []);
-}
-
-function buildBrandTypeSuggestionPool(brands: RepairBrand[], categoryNames: string[]): string[] {
-    return normalizeBrandTypeNames([
-        ...COMMON_BRAND_TYPE_SUGGESTIONS,
-        ...categoryNames,
-        ...brands.flatMap((brand) => getBrandTypeNames(brand)),
-    ]);
-}
-
-function rankBrandTypeSuggestions(items: string[], keyword: string, excluded: string[]): string[] {
-    const q = keyword.trim().toLowerCase();
-    const excludedSet = new Set(excluded.map((item) => item.trim().toLowerCase()));
-    return items
-        .filter((item) => {
-            const normalized = item.trim().toLowerCase();
-            if (!normalized || excludedSet.has(normalized)) return false;
-            if (!q) return true;
-            return normalized.includes(q);
-        })
-        .sort((a, b) => {
-            const aText = a.toLowerCase();
-            const bText = b.toLowerCase();
-            const aStarts = q ? aText.startsWith(q) : false;
-            const bStarts = q ? bText.startsWith(q) : false;
-            if (aStarts !== bStarts) return aStarts ? -1 : 1;
-            const aIndex = q ? aText.indexOf(q) : 0;
-            const bIndex = q ? bText.indexOf(q) : 0;
-            if (aIndex !== bIndex) return aIndex - bIndex;
-            if (a.length !== b.length) return a.length - b.length;
-            return a.localeCompare(b, "zh-Hant");
-        })
-        .slice(0, 6);
-}
-
-function getBrandModelsForType(brand: RepairBrand, typeName: string): string[] {
-    const requestedTypeName = typeName.trim().toLowerCase();
-    if (!requestedTypeName) return brand.models;
-
-    const matchedGroup = (brand.modelsByType ?? []).find((group) => group.typeName.trim().toLowerCase() === requestedTypeName) ?? null;
-    if (matchedGroup) return matchedGroup.models;
-    if ((brand.modelsByType ?? []).length === 0) return brand.models;
-    if (getBrandTypeNames(brand).length <= 1) return brand.models;
-    return [];
-}
-
-function limitRows<T>(rows: T[], size: string): T[] {
-    if (size === "all") return rows;
-    const limit = Number(size);
-    if (!Number.isFinite(limit) || limit <= 0) return rows;
-    return rows.slice(0, limit);
-}
-
 function CaseCardList({
     tickets,
     lang,
@@ -788,6 +644,7 @@ export function CompanyDashboardWorkspace({
     stockLogs,
     brands,
     dimensionBundle,
+    itemNamingSettings,
     supplierItems,
     caseKeyword,
     caseStatus,
@@ -798,7 +655,6 @@ export function CompanyDashboardWorkspace({
     customerKeyword,
     activityKeyword,
     productKeyword,
-    brandKeyword,
     createCaseAction,
     createWarrantyCaseAction,
     updateCaseAction,
@@ -855,6 +711,7 @@ export function CompanyDashboardWorkspace({
     activityHasNextPage,
     usedProductTypeSettings,
     updateUsedProductTypeSettingAction,
+    updateItemNamingSettingsAction,
 }: CompanyDashboardWorkspaceProps) {
     const [range, setRange] = useState<"day" | "month">("day");
     const [showCreateCustomerForm, setShowCreateCustomerForm] = useState(false);
@@ -866,16 +723,7 @@ export function CompanyDashboardWorkspace({
     const [draftItems, setDraftItems] = useState<ActivityDraftItem[]>([
         { id: "draft-1", itemName: "", qty: 1, price: 0, cost: 0 },
     ]);
-    const [categorySearchDraft, setCategorySearchDraft] = useState("");
-    const [supplierSearchDraft, setSupplierSearchDraft] = useState("");
-    const [brandNameDraft, setBrandNameDraft] = useState(brandKeyword);
-    const [categorySearchTerm, setCategorySearchTerm] = useState("");
-    const [supplierSearchTerm, setSupplierSearchTerm] = useState("");
     const [dismissedFlashKey, setDismissedFlashKey] = useState<string | null>(null);
-    const [brandModelTypeById, setBrandModelTypeById] = useState<Record<string, string>>({});
-    const [brandTypeDraftById, setBrandTypeDraftById] = useState<Record<string, string>>({});
-    const [marketingLookupListSize, setMarketingLookupListSize] = useState("5");
-    const [marketingBrandListSize, setMarketingBrandListSize] = useState("5");
     const normalizedCaseStatusOptions = useMemo(
         () => dedupeStatuses(caseStatusOptions.length > 0 ? caseStatusOptions : DEFAULT_CASE_STATUS_OPTIONS),
         [caseStatusOptions],
@@ -893,22 +741,6 @@ export function CompanyDashboardWorkspace({
     const currentFlashKey = `${flash}:${actionTs || "no-ts"}`;
     const currentFlashText = FLASH_LABELS[flash] ?? "";
     const showFlashNotice = Boolean(currentFlashText) && dismissedFlashKey !== currentFlashKey;
-    const marketingCategoryRows = useMemo(() => {
-        const q = categorySearchTerm.trim().toLowerCase();
-        if (!q) return dimensionBundle.categories;
-        return dimensionBundle.categories.filter((item) => item.name.toLowerCase().includes(q));
-    }, [categorySearchTerm, dimensionBundle.categories]);
-    const marketingSupplierRows = useMemo(() => {
-        const q = supplierSearchTerm.trim().toLowerCase();
-        if (!q) return supplierItems;
-        return supplierItems.filter((item) => item.name.toLowerCase().includes(q));
-    }, [supplierItems, supplierSearchTerm]);
-    const brandTypeSuggestionPool = useMemo(
-        () => buildBrandTypeSuggestionPool(brands, dimensionBundle.categories.map((item) => item.name)),
-        [brands, dimensionBundle.categories],
-    );
-    const visibleMarketingCategoryRows = useMemo(() => limitRows(marketingCategoryRows, marketingLookupListSize), [marketingCategoryRows, marketingLookupListSize]);
-    const visibleMarketingSupplierRows = useMemo(() => limitRows(marketingSupplierRows, marketingLookupListSize), [marketingSupplierRows, marketingLookupListSize]);
     const supplierNames = useMemo(
         () =>
             Array.from(new Set([...supplierItems.map((item) => item.name.trim()), ...products.map((product) => product.supplier.trim())]))
@@ -966,44 +798,6 @@ export function CompanyDashboardWorkspace({
             }),
         [activities],
     );
-    const brandSearchSuggestions = useMemo(
-        () =>
-            [
-                ...brands.map((brand) => ({
-                    id: `brand-${brand.id}`,
-                    value: brand.name,
-                    title: brand.name,
-                    subtitle: brand.linkedCategoryNames.join(" / ") || undefined,
-                    keywords: [brand.name, ...brand.linkedCategoryNames, ...brand.productTypes, ...brand.models].filter((value): value is string => Boolean(value)),
-                })),
-                ...brands.flatMap((brand) =>
-                    brand.models.map((model) => ({
-                        id: `model-${brand.id}-${model}`,
-                        value: model,
-                        title: model,
-                        subtitle: brand.name,
-                        keywords: [model, brand.name, ...brand.linkedCategoryNames, ...brand.productTypes].filter((value): value is string => Boolean(value)),
-                    })),
-                ),
-            ],
-        [brands],
-    );
-    const categorySearchSuggestions = useMemo(
-        () =>
-            dimensionBundle.categories.map((item) => ({
-                id: item.id,
-                value: item.name,
-            })),
-        [dimensionBundle.categories],
-    );
-    const supplierSearchSuggestions = useMemo(
-        () =>
-            supplierNames.map((name) => ({
-                id: `supplier-${name}`,
-                value: name,
-            })),
-        [supplierNames],
-    );
     useEffect(() => {
         if (!flash) return;
         const url = new URL(window.location.href);
@@ -1011,23 +805,6 @@ export function CompanyDashboardWorkspace({
         url.searchParams.delete("ts");
         window.history.replaceState({}, "", url.toString());
     }, [flash]);
-
-    const brandListViewportClass =
-        marketingBrandListSize === "5"
-            ? "h-[408px]"
-            : marketingBrandListSize === "10"
-              ? "h-[816px]"
-              : marketingBrandListSize === "15"
-                ? "h-[1224px]"
-                : "h-[1632px]";
-
-    const handleBrandNameDraftKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-        if (event.key !== "Enter") return;
-        const form = document.getElementById("marketing-brand-search-form") as HTMLFormElement | null;
-        if (!form) return;
-        event.preventDefault();
-        form.requestSubmit();
-    };
 
     useEffect(() => {
         if (tab !== "inventory") return;
@@ -1134,16 +911,18 @@ export function CompanyDashboardWorkspace({
         </MerchantSectionCard>
     );
     const renderInventoryCreateProductForm = (view: InventoryView) => (
-        <form action={createProductAction} className="grid gap-2 md:grid-cols-5">
+        <form action={createProductAction} className="space-y-3">
             <input type="hidden" name="tab" value="inventory" />
             <input type="hidden" name="inventoryView" value={view} />
-            <Input name="name" placeholder="品名" required />
-            <Input type="number" min={0} name="price" placeholder="售價" required />
-            <Input type="number" min={0} name="cost" placeholder="成本" required />
-            <Input name="supplier" placeholder="供應商" list="dashboard-supplier-options" />
-            <Input name="sku" placeholder="SKU" />
-            <Input type="number" min={0} name="stock" placeholder="庫存" defaultValue={0} className="md:col-span-1" />
-            <Button type="submit" className="md:col-span-4">新增產品</Button>
+            <ItemFormFields
+                bundle={dimensionBundle}
+                namingSettings={itemNamingSettings}
+                idPrefix={`inventory-create-${view}`}
+                supplierListId="dashboard-supplier-options"
+            />
+            <div className="flex justify-end">
+                <Button type="submit">新增品項</Button>
+            </div>
         </form>
     );
     const renderInventoryEditableProductList = (view: InventoryView, title: string) => (
@@ -1151,8 +930,8 @@ export function CompanyDashboardWorkspace({
             {products.length === 0 ? (
                 <EmptyStateCard
                     icon={Search}
-                    title="目前沒有產品資料"
-                    description="可以先新增產品，或切回庫存設置建立基本商品清單。"
+                    title="目前沒有品項資料"
+                    description="可以先新增品項，或切回庫存設置建立基本品項清單。"
                     className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
                 />
             ) : (
@@ -1168,23 +947,26 @@ export function CompanyDashboardWorkspace({
                                 <span>{product.sku || "-"}</span>
                             </summary>
                             <div className="border-t border-[rgb(var(--border))] p-3">
-                                <form action={updateProductAction} className="grid gap-2 md:grid-cols-5">
+                                <form action={updateProductAction} className="space-y-3">
                                     <input type="hidden" name="tab" value="inventory" />
                                     <input type="hidden" name="inventoryView" value={view} />
                                     <input type="hidden" name="productId" value={product.id} />
-                                    <Input name="name" defaultValue={product.name} required />
-                                    <Input type="number" min={0} name="price" defaultValue={product.price} required />
-                                    <Input type="number" min={0} name="cost" defaultValue={product.cost} required />
-                                    <Input name="supplier" defaultValue={product.supplier} list="dashboard-supplier-options" />
-                                    <Input name="sku" defaultValue={product.sku} />
-                                    <Input type="number" min={0} name="stock" defaultValue={product.onHandQty ?? product.stock} />
-                                    <Button type="submit" className="md:col-span-3">更新產品</Button>
+                                    <ItemFormFields
+                                        bundle={dimensionBundle}
+                                        namingSettings={itemNamingSettings}
+                                        idPrefix={`inventory-update-${view}-${product.id}`}
+                                        supplierListId="dashboard-supplier-options"
+                                        product={product}
+                                    />
+                                    <div className="flex justify-end">
+                                        <Button type="submit">更新品項</Button>
+                                    </div>
                                 </form>
-                                <form action={deleteProductAction} className="mt-2" onSubmit={guardDeleteWithPassword} data-delete-target={`產品 ${product.name}`}>
+                                <form action={deleteProductAction} className="mt-2" onSubmit={guardDeleteWithPassword} data-delete-target={`品項 ${product.name}`}>
                                     <input type="hidden" name="tab" value="inventory" />
                                     <input type="hidden" name="inventoryView" value={view} />
                                     <input type="hidden" name="productId" value={product.id} />
-                                    <Button type="submit" variant="ghost">刪除產品</Button>
+                                    <Button type="submit" variant="ghost">刪除品項</Button>
                                 </form>
                             </div>
                         </details>
@@ -1192,147 +974,6 @@ export function CompanyDashboardWorkspace({
                 </div>
             )}
         </MerchantSectionCard>
-    );
-    const renderMarketingLookupCreateForm = ({
-        formAction,
-        inputId,
-        inputName,
-        inputListId,
-        label,
-        hint,
-        placeholder,
-        draftValue,
-        onDraftChange,
-        onSearch,
-        searchLabel,
-        createLabel,
-    }: {
-        formAction: (formData: FormData) => Promise<void>;
-        inputId: string;
-        inputName: string;
-        inputListId: string;
-        label: string;
-        hint: string;
-        placeholder: string;
-        draftValue: string;
-        onDraftChange: (value: string) => void;
-        onSearch: () => void;
-        searchLabel: string;
-        createLabel: string;
-    }) => (
-        <form action={formAction} className="space-y-3 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-4">
-            <input type="hidden" name="tab" value="marketing" />
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                <FieldLabel htmlFor={inputId} label={label} />
-                <div className="text-xs text-[rgb(var(--muted))]">{hint}</div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-                <Input
-                    id={inputId}
-                    name={inputName}
-                    list={inputListId}
-                    placeholder={placeholder}
-                    value={draftValue}
-                    onChange={(event) => onDraftChange(event.target.value)}
-                    required
-                    className="min-w-[220px] flex-1"
-                />
-                <IconOnlyButton label={searchLabel} type="button" icon={<Search className="h-4 w-4" aria-hidden="true" />} onClick={onSearch} />
-                <IconOnlyButton label={createLabel} type="submit" variant="solid" icon={<Plus className="h-4 w-4" aria-hidden="true" />} />
-            </div>
-        </form>
-    );
-    const renderMarketingLookupListPanel = ({
-        title,
-        countLabel,
-        searchTerm,
-        onClearSearch,
-        emptyTitle,
-        emptyDescription,
-        rows,
-        kindLabel,
-        updateAction,
-        deleteAction,
-        updateFieldName,
-        updateHiddenName,
-        deleteTargetPrefix,
-        updateLabel,
-        deleteLabel,
-    }: {
-        title: string;
-        countLabel: string;
-        searchTerm: string;
-        onClearSearch: () => void;
-        emptyTitle: string;
-        emptyDescription: string;
-        rows: MarketingLookupRow[];
-        kindLabel: string;
-        updateAction: (formData: FormData) => Promise<void>;
-        deleteAction: (formData: FormData) => Promise<void>;
-        updateFieldName: string;
-        updateHiddenName: string;
-        deleteTargetPrefix: string;
-        updateLabel: string;
-        deleteLabel: string;
-    }) => (
-        <div className="rounded-lg border border-[rgb(var(--border))] p-3">
-            <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="text-xs text-[rgb(var(--muted))]">{title}</div>
-                {searchTerm ? (
-                    <IconOnlyButton
-                        label={`清除${kindLabel}搜尋`}
-                        icon={<X className="h-4 w-4" aria-hidden="true" />}
-                        className="h-8 w-8"
-                        onClick={onClearSearch}
-                    />
-                ) : null}
-            </div>
-            {rows.length === 0 ? (
-                <EmptyStateCard
-                    icon={Search}
-                    title={emptyTitle}
-                    description={emptyDescription}
-                    className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
-                />
-            ) : (
-                <div className="max-h-[560px] overflow-y-auto pr-1">
-                    <div className="grid gap-2">
-                        {rows.map((row) => {
-                            const updateFormId = `update-${kindLabel}-${row.id}`;
-                            return (
-                                <details key={`${kindLabel}-${row.id}`} className="overflow-hidden rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]">
-                                    <summary className="cursor-pointer list-none px-3 py-3 [&::-webkit-details-marker]:hidden">
-                                        <div className="flex items-center justify-between gap-2">
-                                            <div className="min-w-0">
-                                                <div className="truncate text-sm font-medium">{row.name}</div>
-                                                <div className="text-xs text-[rgb(var(--muted))]">點擊展開編輯名稱或刪除</div>
-                                            </div>
-                                            <div className="text-xs text-[rgb(var(--muted))]">{countLabel}</div>
-                                        </div>
-                                    </summary>
-                                    <div className="space-y-3 border-t border-[rgb(var(--border))] p-3">
-                                        <form id={updateFormId} action={updateAction} className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-                                            <input type="hidden" name="tab" value="marketing" />
-                                            <input type="hidden" name={updateHiddenName} value={row.id} />
-                                            <Input name={updateFieldName} defaultValue={row.name} required className="w-full" />
-                                        </form>
-                                        <div className="flex items-center justify-end gap-2 rounded-lg bg-[rgb(var(--panel))] px-2 py-2">
-                                            <div className="mr-auto text-xs text-[rgb(var(--muted))]">操作</div>
-                                            <IconOnlyButton label={updateLabel} form={updateFormId} type="submit" variant="solid" icon={<Save className="h-4 w-4" aria-hidden="true" />} />
-                                            <form action={deleteAction} onSubmit={guardDeleteWithPassword} data-delete-target={`${deleteTargetPrefix} ${row.name}`}>
-                                                <input type="hidden" name="tab" value="marketing" />
-                                                <input type="hidden" name={updateHiddenName} value={row.id} />
-                                                <IconOnlyButton label={deleteLabel} type="submit" icon={<Trash2 className="h-4 w-4" aria-hidden="true" />} />
-                                            </form>
-                                        </div>
-                                    </div>
-                                </details>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
-        </div>
     );
 
     return (
@@ -1359,21 +1000,6 @@ export function CompanyDashboardWorkspace({
                 <datalist id="dashboard-supplier-options">
                     {supplierNames.map((supplier) => (
                         <option key={`supplier-option-${supplier}`} value={supplier} />
-                    ))}
-                </datalist>
-                <datalist id="marketing-category-search-options">
-                    {categorySearchSuggestions.map((item) => (
-                        <option key={`marketing-category-search-${item.id}`} value={item.value} />
-                    ))}
-                </datalist>
-                <datalist id="marketing-supplier-search-options">
-                    {supplierSearchSuggestions.map((item) => (
-                        <option key={`marketing-supplier-search-${item.id}`} value={item.value} />
-                    ))}
-                </datalist>
-                <datalist id="marketing-brand-search-options">
-                    {brandSearchSuggestions.map((item) => (
-                        <option key={`marketing-brand-search-${item.id}`} value={item.value} />
                     ))}
                 </datalist>
                 {/* Operational tabs keep fixed list/table workflows; sortable behavior is intentionally limited to dashboard/storefront builder contexts. */}
@@ -2015,7 +1641,7 @@ export function CompanyDashboardWorkspace({
                                     </div>
                                     <div className="grid gap-2 md:grid-cols-3">
                                         <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-gift-product-id" label="贈品產品 ID" />
+                                            <FieldLabel htmlFor="create-activity-gift-product-id" label="贈品品項 ID" />
                                             <Input id="create-activity-gift-product-id" name="activityGiftProductId" placeholder="gift_item 使用" />
                                         </div>
                                         <div className="grid gap-1">
@@ -2041,7 +1667,7 @@ export function CompanyDashboardWorkspace({
                                             <FieldLabel htmlFor="create-activity-scope-type" label="權益範圍" />
                                             <Select id="create-activity-scope-type" name="activityScopeType" defaultValue="category">
                                                 <option value="category">分類</option>
-                                                <option value="product">產品</option>
+                                                <option value="product">品項</option>
                                             </Select>
                                         </div>
                                         <div className="grid gap-1">
@@ -2059,12 +1685,12 @@ export function CompanyDashboardWorkspace({
                                             <Input id="create-activity-category-name" name="activityCategoryName" placeholder="分類名稱（分類型權益）" />
                                         </div>
                                         <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-product-id" label="產品 ID" />
-                                            <Input id="create-activity-product-id" name="activityProductId" placeholder="產品 ID（產品型權益/留貨）" />
+                                            <FieldLabel htmlFor="create-activity-product-id" label="品項 ID" />
+                                            <Input id="create-activity-product-id" name="activityProductId" placeholder="品項 ID（品項型權益/留貨）" />
                                         </div>
                                         <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-product-name" label="產品名稱" />
-                                            <Input id="create-activity-product-name" name="activityProductName" placeholder="產品名稱（產品型權益/留貨）" />
+                                            <FieldLabel htmlFor="create-activity-product-name" label="品項名稱" />
+                                            <Input id="create-activity-product-name" name="activityProductName" placeholder="品項名稱（品項型權益/留貨）" />
                                         </div>
                                     </div>
                                     <div className="grid gap-2 md:grid-cols-4">
@@ -2373,7 +1999,7 @@ export function CompanyDashboardWorkspace({
                                                     </div>
                                                     <div className="grid gap-2 md:grid-cols-3">
                                                         <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-gift-product-id-${activity.id}`} label="贈品產品 ID" />
+                                                            <FieldLabel htmlFor={`update-activity-gift-product-id-${activity.id}`} label="贈品品項 ID" />
                                                             <Input
                                                                 id={`update-activity-gift-product-id-${activity.id}`}
                                                                 name="activityGiftProductId"
@@ -2421,7 +2047,7 @@ export function CompanyDashboardWorkspace({
                                                                 defaultValue={activity.scopeType === "product" ? "product" : "category"}
                                                             >
                                                                 <option value="category">分類</option>
-                                                                <option value="product">產品</option>
+                                                                <option value="product">品項</option>
                                                             </Select>
                                                         </div>
                                                         <div className="grid gap-1">
@@ -2449,11 +2075,11 @@ export function CompanyDashboardWorkspace({
                                                             />
                                                         </div>
                                                         <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-product-id-${activity.id}`} label="產品 ID" />
+                                                            <FieldLabel htmlFor={`update-activity-product-id-${activity.id}`} label="品項 ID" />
                                                             <Input id={`update-activity-product-id-${activity.id}`} name="activityProductId" defaultValue={activity.productId ?? ""} />
                                                         </div>
                                                         <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-product-name-${activity.id}`} label="產品名稱" />
+                                                            <FieldLabel htmlFor={`update-activity-product-name-${activity.id}`} label="品項名稱" />
                                                             <Input id={`update-activity-product-name-${activity.id}`} name="activityProductName" defaultValue={activity.productName ?? ""} />
                                                         </div>
                                                     </div>
@@ -2630,7 +2256,7 @@ export function CompanyDashboardWorkspace({
                                             ? "目前檢視：入庫作業"
                                             : inventoryView === "stock-out"
                                               ? "目前檢視：出庫作業"
-                                              : "目前檢視：產品管理"
+                                              : "目前檢視：品項管理"
                                 }
                             />
                             <div className="mb-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
@@ -2639,7 +2265,7 @@ export function CompanyDashboardWorkspace({
                                     { id: "settings", title: "庫存設置", hint: "庫存參數與資料" },
                                     { id: "stock-in", title: "入庫", hint: "增加商品數量" },
                                     { id: "stock-out", title: "出庫", hint: "扣減商品數量" },
-                                    { id: "product-management", title: "產品管理", hint: "完整 CRUD" },
+                                    { id: "product-management", title: "品項管理", hint: "完整 CRUD" },
                                 ].map((entry) => {
                                     const active = inventoryView === entry.id;
                                     return (
@@ -2726,8 +2352,8 @@ export function CompanyDashboardWorkspace({
                                             {products.length === 0 ? (
                                                 <EmptyStateCard
                                                     icon={Search}
-                                                    title="目前沒有產品"
-                                                    description="可以先到庫存設置或產品管理建立第一筆產品資料。"
+                                                    title="目前沒有品項"
+                                                    description="可以先到庫存設置或品項管理建立第一筆品項資料。"
                                                     className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
                                                 />
                                             ) : (
@@ -2772,11 +2398,11 @@ export function CompanyDashboardWorkspace({
                         {inventoryView === "settings" ? (
                             <MerchantListShell
                                 toolbar={
-                                    <MerchantSectionCard title="庫存設置" description="新增產品與初始庫存">
+                                    <MerchantSectionCard title="庫存設置" description="新增品項與初始庫存">
                                         {renderInventoryCreateProductForm("settings")}
                                     </MerchantSectionCard>
                                 }
-                                list={renderInventoryEditableProductList("settings", "產品列表")}
+                                list={renderInventoryEditableProductList("settings", "品項列表")}
                                 detailPanel={renderInventoryLogPanel()}
                             />
                         ) : null}
@@ -2784,7 +2410,7 @@ export function CompanyDashboardWorkspace({
                         {inventoryView === "product-management" ? (
                             <MerchantListShell
                                 toolbar={
-                                    <MerchantSectionCard title="搜尋 / 新增" description="產品管理 CRUD" bodyClassName="space-y-3">
+                                    <MerchantSectionCard title="搜尋 / 新增" description="品項管理 CRUD" bodyClassName="space-y-3">
                                         <SearchToolbar
                                             searchSlot={
                                                 <form action="/dashboard" method="get" className="flex w-full flex-col gap-2 sm:flex-row sm:items-center">
@@ -2829,7 +2455,7 @@ export function CompanyDashboardWorkspace({
                                         ) : null}
                                     </MerchantSectionCard>
                                 }
-                                list={renderInventoryEditableProductList("product-management", "產品列表")}
+                                list={renderInventoryEditableProductList("product-management", "品項列表")}
                                 detailPanel={renderInventoryLogPanel()}
                             />
                         ) : null}
@@ -2841,8 +2467,8 @@ export function CompanyDashboardWorkspace({
                                         {products.length === 0 ? (
                                             <EmptyStateCard
                                                 icon={Search}
-                                                title="目前沒有產品可入庫"
-                                                description="先建立產品資料後，這裡才會出現可操作的入庫清單。"
+                                                title="目前沒有品項可入庫"
+                                                description="先建立品項資料後，這裡才會出現可操作的入庫清單。"
                                                 className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
                                             />
                                         ) : (
@@ -2881,8 +2507,8 @@ export function CompanyDashboardWorkspace({
                                         {products.length === 0 ? (
                                             <EmptyStateCard
                                                 icon={Search}
-                                                title="目前沒有產品可出庫"
-                                                description="先建立或入庫產品後，這裡才會出現可操作的出庫清單。"
+                                                title="目前沒有品項可出庫"
+                                                description="先建立或入庫品項後，這裡才會出現可操作的出庫清單。"
                                                 className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
                                             />
                                         ) : (
@@ -2928,484 +2554,31 @@ export function CompanyDashboardWorkspace({
                 ) : null}
 
                 {tab === "marketing" ? (
-                    <>
-                        <MerchantListShell
-                            toolbar={
-                                <MerchantSectionCard title="商店營銷設置" description="維修品牌型號">
-                                    <SearchToolbar
-                                        searchSlot={
-                                            <form action="/dashboard" method="get" className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                                                <input type="hidden" name="tab" value="marketing" />
-                                                <MerchantPredictiveSearchInput
-                                                    name="brandQ"
-                                                    defaultValue={brandKeyword}
-                                                    placeholder="品牌 / 型號搜尋"
-                                                    localSuggestions={brandSearchSuggestions}
-                                                    className="w-full"
-                                                />
-                                                <IconOnlyButton label="搜尋品牌與型號" type="submit" variant="solid" icon={<Search className="h-4 w-4" aria-hidden="true" />} />
-                                            </form>
-                                        }
-                                    />
-                                </MerchantSectionCard>
-                            }
-                            list={
-                                <MerchantSectionCard
-                                    title="分類與供應商"
-                                    description="供產品新增下拉選單使用，資料由伺服器集中管理"
-                                    actions={
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs text-[rgb(var(--muted))]">清單顯示</span>
-                                            <Select value={marketingLookupListSize} onChange={(event) => setMarketingLookupListSize(event.currentTarget.value)} className="h-9 w-[96px]">
-                                                {LIST_DISPLAY_OPTIONS.map((size) => (
-                                                    <option key={`marketing-lookup-size-${size}`} value={size}>
-                                                        {size}
-                                                    </option>
-                                                ))}
-                                            </Select>
-                                        </div>
-                                    }
-                                >
-                            <div className="grid gap-3 lg:grid-cols-2">
-                                {renderMarketingLookupCreateForm({
-                                    formAction: createCategoryAction,
-                                    inputId: "marketing-category-name",
-                                    inputName: "categoryName",
-                                    inputListId: "marketing-category-search-options",
-                                    label: "分類名稱",
-                                    hint: "集中維護產品分類選單",
-                                    placeholder: "例如：手機配件",
-                                    draftValue: categorySearchDraft,
-                                    onDraftChange: setCategorySearchDraft,
-                                    onSearch: () => setCategorySearchTerm(categorySearchDraft.trim()),
-                                    searchLabel: "搜尋分類",
-                                    createLabel: "新增分類",
-                                })}
-                                {renderMarketingLookupCreateForm({
-                                    formAction: createSupplierAction,
-                                    inputId: "marketing-supplier-name",
-                                    inputName: "supplierName",
-                                    inputListId: "marketing-supplier-search-options",
-                                    label: "供應商名稱",
-                                    hint: "集中維護進貨來源名單",
-                                    placeholder: "例如：Apple 授權經銷",
-                                    draftValue: supplierSearchDraft,
-                                    onDraftChange: setSupplierSearchDraft,
-                                    onSearch: () => setSupplierSearchTerm(supplierSearchDraft.trim()),
-                                    searchLabel: "搜尋供應商",
-                                    createLabel: "新增供應商",
-                                })}
-                            </div>
-                            <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                                {renderMarketingLookupListPanel({
-                                    title: `分類（${marketingCategoryRows.length}/${dimensionBundle.categories.length}）`,
-                                    countLabel: "分類",
-                                    searchTerm: categorySearchTerm,
-                                    onClearSearch: () => {
-                                        setCategorySearchDraft("");
-                                        setCategorySearchTerm("");
-                                    },
-                                    emptyTitle: "找不到符合條件的分類",
-                                    emptyDescription: "可以調整搜尋條件，或直接建立新的產品分類。",
-                                    rows: visibleMarketingCategoryRows,
-                                    kindLabel: "category",
-                                    updateAction: updateCategoryAction,
-                                    deleteAction: deleteCategoryAction,
-                                    updateFieldName: "categoryName",
-                                    updateHiddenName: "categoryId",
-                                    deleteTargetPrefix: "分類",
-                                    updateLabel: "更新分類",
-                                    deleteLabel: "移除分類",
-                                })}
-                                {renderMarketingLookupListPanel({
-                                    title: `供應商（${marketingSupplierRows.length}/${supplierItems.length}）`,
-                                    countLabel: "供應商",
-                                    searchTerm: supplierSearchTerm,
-                                    onClearSearch: () => {
-                                        setSupplierSearchDraft("");
-                                        setSupplierSearchTerm("");
-                                    },
-                                    emptyTitle: "找不到符合條件的供應商",
-                                    emptyDescription: "可以調整搜尋條件，或直接建立新的供應商資料。",
-                                    rows: visibleMarketingSupplierRows,
-                                    kindLabel: "supplier",
-                                    updateAction: updateSupplierAction,
-                                    deleteAction: deleteSupplierAction,
-                                    updateFieldName: "supplierName",
-                                    updateHiddenName: "supplierId",
-                                    deleteTargetPrefix: "供應商",
-                                    updateLabel: "更新供應商",
-                                    deleteLabel: "移除供應商",
-                                })}
-                            </div>
-                                </MerchantSectionCard>
-                            }
-                            detailPanel={
-                                <MerchantSectionCard
-                                    title={`品牌與型號（${brands.length} 個品牌）`}
-                                    description="新增 / 修改 / 移除品牌，展開後管理型號"
-                                    actions={
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs text-[rgb(var(--muted))]">品牌顯示</span>
-                                            <Select value={marketingBrandListSize} onChange={(event) => setMarketingBrandListSize(event.currentTarget.value)} className="h-9 w-[96px]">
-                                                {LIST_DISPLAY_OPTIONS.map((size) => (
-                                                    <option key={`marketing-brand-size-${size}`} value={size}>
-                                                        {size}
-                                                    </option>
-                                                ))}
-                                            </Select>
-                                        </div>
-                                    }
-                                >
-                            <div className="mb-3 flex flex-wrap items-center gap-2">
-                                <Input
-                                    list="marketing-brand-search-options"
-                                    placeholder="品牌名稱"
-                                    value={brandNameDraft}
-                                    onChange={(event) => setBrandNameDraft(event.currentTarget.value)}
-                                    onKeyDown={handleBrandNameDraftKeyDown}
-                                    className="w-full sm:w-80"
-                                />
-                                <form id="marketing-brand-search-form" action="/dashboard" method="get">
-                                    <input type="hidden" name="tab" value="marketing" />
-                                    <input type="hidden" name="brandQ" value={brandNameDraft.trim()} />
-                                    <IconOnlyButton
-                                        label="搜尋品牌"
-                                        type="submit"
-                                        icon={<Search className="h-4 w-4" aria-hidden="true" />}
-                                    />
-                                </form>
-                                <form id="marketing-brand-create-form" action={createBrandAction}>
-                                    <input type="hidden" name="tab" value="marketing" />
-                                    <input type="hidden" name="brandName" value={brandNameDraft} />
-                                    <IconOnlyButton
-                                        label="新增品牌"
-                                        type="submit"
-                                        variant="solid"
-                                        disabled={brandNameDraft.trim().length === 0}
-                                        icon={<Plus className="h-4 w-4" aria-hidden="true" />}
-                                    />
-                                </form>
-                            </div>
-                            <div className={`${brandListViewportClass} overflow-y-auto pr-1`.trim()}>
-                            {brands.length === 0 ? (
-                                <EmptyStateCard
-                                    icon={Search}
-                                    title="目前沒有品牌資料"
-                                    description="可以先新增品牌，再往下管理裝置類型與型號。"
-                                    className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
-                                />
-                            ) : (
-                            <div className="grid gap-2">
-                                {brands.map((brand) => (
-                                    (() => {
-                                        const brandCategoryOptions = getBrandCategoryNames(brand);
-                                        const brandTypeOptions = getBrandTypeNames(brand);
-                                        const selectedModelType = brandModelTypeById[brand.id] ?? brandTypeOptions[0] ?? "";
-                                        const visibleModels = getBrandModelsForType(brand, selectedModelType).sort((a, b) => a.localeCompare(b, "zh-Hant"));
-                                        const brandTypeDraft = brandTypeDraftById[brand.id] ?? "";
-                                        const brandTypeSuggestions = rankBrandTypeSuggestions(brandTypeSuggestionPool, brandTypeDraft, brandTypeOptions);
-
-                                        return (
-                                            <details key={brand.id} className="rounded-lg border border-[rgb(var(--border))]">
-                                                <summary className="list-none px-3 py-2 [&::-webkit-details-marker]:hidden">
-                                                    <div className="flex items-center justify-between gap-2">
-                                                        <div className="grid gap-1">
-                                                            <span className="cursor-pointer text-sm font-medium">{brand.name}</span>
-                                                            {brandCategoryOptions.length > 0 ? (
-                                                                <div className="flex flex-wrap items-center gap-1 text-xs text-[rgb(var(--muted))]">
-                                                                    <span className="text-[10px] uppercase tracking-[0.14em]">分類</span>
-                                                                    {brandCategoryOptions.map((categoryName) => (
-                                                                        <span key={`${brand.id}-category-${categoryName}`} className="rounded border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-1.5 py-0.5">
-                                                                            {categoryName}
-                                                                        </span>
-                                                                    ))}
-                                                                </div>
-                                                            ) : null}
-                                                            <div className="flex flex-wrap gap-1 text-xs text-[rgb(var(--muted))]">
-                                                                {brandTypeOptions.length > 0 ? (
-                                                                    brandTypeOptions.map((typeName) => (
-                                                                        <span key={`${brand.id}-${typeName}`} className="rounded border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-1.5 py-0.5">
-                                                                            {typeName}
-                                                                        </span>
-                                                                    ))
-                                                                ) : (
-                                                                    <span>{brandCategoryOptions.length > 0 ? "未設定裝置類型" : "未指定商品類型"}</span>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex items-center gap-2">
-                                                            <form action={updateBrandAction} onClick={(event) => event.stopPropagation()}>
-                                                                <input type="hidden" name="tab" value="marketing" />
-                                                                <input type="hidden" name="brandId" value={brand.id} />
-                                                                <input type="hidden" name="brandName" value={brand.name} />
-                                                                <IconOnlyButton
-                                                                    label="修改品牌"
-                                                                    type="button"
-                                                                    variant="solid"
-                                                                    icon={<Pencil className="h-4 w-4" aria-hidden="true" />}
-                                                                    onClick={(event) => submitBrandRename(event, brand.name)}
-                                                                />
-                                                            </form>
-                                                            <form
-                                                                action={deleteBrandAction}
-                                                                onSubmit={guardDeleteWithPassword}
-                                                                data-delete-target={`品牌 ${brand.name}`}
-                                                                onClick={(event) => event.stopPropagation()}
-                                                            >
-                                                                <input type="hidden" name="tab" value="marketing" />
-                                                                <input type="hidden" name="brandId" value={brand.id} />
-                                                                <IconOnlyButton label="移除品牌" type="submit" icon={<Trash2 className="h-4 w-4" aria-hidden="true" />} />
-                                                            </form>
-                                                        </div>
-                                                    </div>
-                                                </summary>
-                                                <div className="border-t border-[rgb(var(--border))] p-3">
-                                                    <form action={updateBrandAction} className="mb-2 grid gap-2 rounded-lg border border-[rgb(var(--border))] p-3">
-                                                        <input type="hidden" name="tab" value="marketing" />
-                                                        <input type="hidden" name="brandId" value={brand.id} />
-                                                        <input type="hidden" name="brandName" value={brand.name} />
-                                                        <input type="hidden" name="brandTypesMode" value="sync" />
-                                                        <input type="hidden" name="oldTypeName" value="" />
-                                                        <input type="hidden" name="nextTypeName" value="" />
-                                                        <div className="grid gap-3 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-3">
-                                                            <div className="grid gap-1">
-                                                                <div className="text-sm font-medium">店內商品分類</div>
-                                                                <div className="text-xs text-[rgb(var(--muted))]">通用商品、維修零件、配件品牌都可以勾選；Apple、Samsung 這種品牌也能同時勾這裡，再另外管理裝置類型與型號。</div>
-                                                            </div>
-                                                            <div className="flex flex-wrap gap-2">
-                                                                {dimensionBundle.categories.length > 0 ? (
-                                                                    dimensionBundle.categories.map((category) => (
-                                                                        <label key={`${brand.id}-linked-category-${category.id}`} className="inline-flex items-center gap-2 rounded-full border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-1.5 text-xs">
-                                                                            <input
-                                                                                type="checkbox"
-                                                                                name="brandCategoryNames"
-                                                                                value={category.name}
-                                                                                defaultChecked={brandCategoryOptions.some((item) => item.toLowerCase() === category.name.toLowerCase())}
-                                                                                className="h-4 w-4 accent-[rgb(var(--accent))]"
-                                                                            />
-                                                                            {category.name}
-                                                                        </label>
-                                                                    ))
-                                                                ) : (
-                                                                    <div className="text-xs text-[rgb(var(--muted))]">尚未建立商品分類，請先到上方分類設定新增。</div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        <div className="text-xs text-[rgb(var(--muted))]">裝置類型由這裡集中管理；適合 Apple / Samsung 這類品牌的 iPhone、iPad、Galaxy 等系列。勾選「啟用二手商品設定」後，該類型才會出現在下方二手商品規格模板。</div>
-                                                        <div className="grid gap-2">
-                                                            {brandTypeOptions.length > 0 ? (
-                                                                brandTypeOptions.map((typeName) => (
-                                                                    <div
-                                                                        key={`${brand.id}_type_${typeName}`}
-                                                                        className="flex flex-col gap-2 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2 text-xs sm:flex-row sm:items-center sm:justify-between"
-                                                                    >
-                                                                        <div className="flex items-center gap-2">
-                                                                            <div className="font-medium text-[rgb(var(--text))]">{typeName}</div>
-                                                                            <IconOnlyButton
-                                                                                label={`修改品牌類型：${typeName}`}
-                                                                                type="submit"
-                                                                                formAction={renameBrandTypeAction}
-                                                                                className="h-8 w-8"
-                                                                                icon={<Pencil className="h-3.5 w-3.5" aria-hidden="true" />}
-                                                                                onClick={(event) => prepareBrandTypeRename(event, typeName)}
-                                                                            />
-                                                                            <IconOnlyButton
-                                                                                label={`移除品牌類型：${typeName}`}
-                                                                                type="submit"
-                                                                                formAction={deleteBrandTypeAction}
-                                                                                className="h-8 w-8"
-                                                                                icon={<Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
-                                                                                onClick={(event) => prepareBrandTypeDelete(event, typeName)}
-                                                                            />
-                                                                        </div>
-                                                                        <div className="flex flex-wrap items-center gap-3">
-                                                                            <input type="hidden" name="brandTypeNames" value={typeName} />
-                                                                            <label className="inline-flex items-center gap-2">
-                                                                                <input
-                                                                                    type="checkbox"
-                                                                                    name="usedProductTypeNames"
-                                                                                    value={typeName}
-                                                                                    defaultChecked={(brand.usedProductTypes ?? []).some((row) => row.toLowerCase() === typeName.toLowerCase())}
-                                                                                    className="h-4 w-4 accent-[rgb(var(--accent))]"
-                                                                                />
-                                                                                啟用二手商品設定
-                                                                            </label>
-                                                                        </div>
-                                                                    </div>
-                                                                ))
-                                                            ) : (
-                                                                <div className="text-xs text-[rgb(var(--muted))]">尚未建立任何裝置類型；如果這個品牌只做配件或維修零件，可以只勾上面的店內商品分類。</div>
-                                                            )}
-                                                        </div>
-                                                        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-                                                            <label className="grid gap-1">
-                                                                <span className="text-xs text-[rgb(var(--muted))]">新增類型</span>
-                                                                <Input
-                                                                    name="newBrandTypeName"
-                                                                    list={`brand-type-suggestions-${brand.id}`}
-                                                                    placeholder="例如：手機配件 / 車用配件 / iPhone"
-                                                                    value={brandTypeDraft}
-                                                                    onChange={(event) => {
-                                                                        const nextValue = event.currentTarget.value;
-                                                                        setBrandTypeDraftById((current) => ({
-                                                                            ...current,
-                                                                            [brand.id]: nextValue,
-                                                                        }));
-                                                                    }}
-                                                                    className="w-full"
-                                                                />
-                                                                <datalist id={`brand-type-suggestions-${brand.id}`}>
-                                                                    {brandTypeSuggestions.map((suggestion) => (
-                                                                        <option key={`${brand.id}-suggestion-option-${suggestion}`} value={suggestion} />
-                                                                    ))}
-                                                                </datalist>
-                                                            </label>
-                                                            <div className="flex justify-end">
-                                                                <IconOnlyButton label="儲存品牌類型設定" type="submit" variant="solid" icon={<Save className="h-4 w-4" aria-hidden="true" />} />
-                                                            </div>
-                                                        </div>
-                                                        {brandTypeSuggestions.length > 0 ? (
-                                                            <div className="flex flex-wrap items-center gap-2">
-                                                                <span className="text-xs text-[rgb(var(--muted))]">建議：</span>
-                                                                {brandTypeSuggestions.map((suggestion) => (
-                                                                    <button
-                                                                        key={`${brand.id}-suggestion-chip-${suggestion}`}
-                                                                        type="button"
-                                                                        className="rounded-full border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2.5 py-1 text-xs text-[rgb(var(--muted))] transition hover:border-[rgb(var(--accent))] hover:text-[rgb(var(--accent))]"
-                                                                        onClick={() =>
-                                                                            setBrandTypeDraftById((current) => ({
-                                                                                ...current,
-                                                                                [brand.id]: suggestion,
-                                                                            }))
-                                                                        }
-                                                                    >
-                                                                        {suggestion}
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                        ) : null}
-                                                    </form>
-                                                    <div className="grid gap-2 rounded-lg border border-[rgb(var(--border))] p-3">
-                                                        <div className="grid gap-2 sm:grid-cols-[minmax(0,220px)_1fr] sm:items-end">
-                                                            <label className="grid gap-1">
-                                                                <span className="text-xs text-[rgb(var(--muted))]">型號類型</span>
-                                                                <Select
-                                                                    value={selectedModelType}
-                                                                    onChange={(event) => {
-                                                                        const nextModelType = event.currentTarget.value;
-                                                                        setBrandModelTypeById((current) => ({
-                                                                            ...current,
-                                                                            [brand.id]: nextModelType,
-                                                                        }));
-                                                                    }}
-                                                                    disabled={brandTypeOptions.length === 0}
-                                                                >
-                                                                    <option value="">{brandTypeOptions.length > 0 ? "請選擇商品類型" : "請先新增商品類型"}</option>
-                                                                    {brandTypeOptions.map((typeName) => (
-                                                                        <option key={`${brand.id}-model-type-${typeName}`} value={typeName}>
-                                                                            {typeName}
-                                                                        </option>
-                                                                    ))}
-                                                                </Select>
-                                                            </label>
-                                                            <div className="text-xs text-[rgb(var(--muted))]">
-                                                                {selectedModelType ? `目前只顯示「${selectedModelType}」的型號，新增時也會存到這個類型。` : "請先選擇品牌類型，再管理該類型的型號。"}
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="text-xs text-[rgb(var(--muted))]">目前型號</div>
-                                                        {selectedModelType ? (
-                                                            <div className="flex flex-wrap gap-2">
-                                                                {visibleModels.map((model) => (
-                                                                    (() => {
-                                                                        const updateFormId = `update-model-${brand.id}-${selectedModelType}-${model}`.replace(/\s+/g, "-");
-                                                                        return (
-                                                                    <details
-                                                                        key={`${brand.id}-${selectedModelType}-${model}`}
-                                                                        className="min-w-[180px] rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-2 py-1.5 text-xs shadow-sm transition-colors hover:border-[rgb(var(--accent))]/30"
-                                                                    >
-                                                                        <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">{model}</summary>
-                                                                        <div className="mt-2 space-y-2">
-                                                                            <form id={updateFormId} action={updateModelAction} className="grid gap-2">
-                                                                                <input type="hidden" name="tab" value="marketing" />
-                                                                                <input type="hidden" name="brandId" value={brand.id} />
-                                                                                <input type="hidden" name="modelTypeName" value={selectedModelType} />
-                                                                                <input type="hidden" name="oldModel" value={model} />
-                                                                                <Input name="modelName" defaultValue={model} required className="min-w-[160px]" />
-                                                                            </form>
-                                                                            <div className="flex items-center justify-end gap-2 rounded-lg bg-[rgb(var(--panel))] px-2 py-2">
-                                                                                <div className="text-[11px] text-[rgb(var(--muted))]">操作</div>
-                                                                                <IconOnlyButton
-                                                                                    label="修改型號"
-                                                                                    form={updateFormId}
-                                                                                    type="submit"
-                                                                                    variant="solid"
-                                                                                    className="h-9 w-9"
-                                                                                    icon={<Save className="h-4 w-4" aria-hidden="true" />}
-                                                                                />
-                                                                                <form action={deleteModelAction} onSubmit={guardDeleteWithPassword} data-delete-target={`型號 ${model}`}>
-                                                                                    <input type="hidden" name="tab" value="marketing" />
-                                                                                    <input type="hidden" name="brandId" value={brand.id} />
-                                                                                    <input type="hidden" name="modelTypeName" value={selectedModelType} />
-                                                                                    <input type="hidden" name="modelName" value={model} />
-                                                                                    <IconOnlyButton
-                                                                                        label="移除型號"
-                                                                                        type="submit"
-                                                                                        className="h-9 w-9 border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
-                                                                                        icon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
-                                                                                    />
-                                                                                </form>
-                                                                            </div>
-                                                                        </div>
-                                                                    </details>
-                                                                        );
-                                                                    })()
-                                                                ))}
-                                                                {visibleModels.length === 0 ? <div className="text-xs text-[rgb(var(--muted))]">這個類型目前還沒有型號。</div> : null}
-                                                            </div>
-                                                        ) : (
-                                                            <div className="text-xs text-[rgb(var(--muted))]">請先新增並儲存品牌類型，再選擇要管理的類型。</div>
-                                                        )}
-
-                                                        <form action={createModelAction} className="flex flex-wrap items-center gap-2">
-                                                            <input type="hidden" name="tab" value="marketing" />
-                                                            <input type="hidden" name="brandId" value={brand.id} />
-                                                            <input type="hidden" name="modelTypeName" value={selectedModelType} />
-                                                            <Input
-                                                                name="modelName"
-                                                                placeholder={selectedModelType ? `新增 ${selectedModelType} 型號` : "請先選擇商品類型"}
-                                                                required
-                                                                disabled={!selectedModelType}
-                                                                className="w-full sm:w-80"
-                                                            />
-                                                            <IconOnlyButton
-                                                                label="新增型號"
-                                                                type="submit"
-                                                                variant="solid"
-                                                                disabled={!selectedModelType}
-                                                                icon={<Plus className="h-4 w-4" aria-hidden="true" />}
-                                                            />
-                                                        </form>
-                                                    </div>
-                                                </div>
-                                            </details>
-                                        );
-                                    })()
-                                ))}
-                            </div>
-                            )}
-                            </div>
-                                </MerchantSectionCard>
-                            }
-                        />
-
-                        <UsedProductTypeSettingsCard
-                            lang={lang}
-                            settings={usedProductTypeSettings}
-                            updateTypeAction={updateUsedProductTypeSettingAction}
-                        />
-                    </>
+                    <MarketingSettingsWorkspace
+                        lang={lang}
+                        dimensionBundle={dimensionBundle}
+                        itemNamingSettings={itemNamingSettings}
+                        supplierItems={supplierItems}
+                        brands={brands}
+                        usedProductTypeSettings={usedProductTypeSettings}
+                        updateItemNamingSettingsAction={updateItemNamingSettingsAction}
+                        createCategoryAction={createCategoryAction}
+                        updateCategoryAction={updateCategoryAction}
+                        deleteCategoryAction={deleteCategoryAction}
+                        createSupplierAction={createSupplierAction}
+                        updateSupplierAction={updateSupplierAction}
+                        deleteSupplierAction={deleteSupplierAction}
+                        createBrandAction={createBrandAction}
+                        updateBrandAction={updateBrandAction}
+                        deleteBrandAction={deleteBrandAction}
+                        renameBrandTypeAction={renameBrandTypeAction}
+                        deleteBrandTypeAction={deleteBrandTypeAction}
+                        createModelAction={createModelAction}
+                        updateModelAction={updateModelAction}
+                        deleteModelAction={deleteModelAction}
+                        updateUsedProductTypeSettingAction={updateUsedProductTypeSettingAction}
+                        onDeleteGuard={guardDeleteWithPassword}
+                    />
                 ) : null}
             </div>
         </div>

@@ -1,6 +1,7 @@
 export type CatalogRecordStatus = "active" | "inactive";
 export type ProductNamingMode = "structured" | "custom" | "hybrid";
 export type StockDeductionMode = "immediate" | "redeem_only";
+export type ItemNamingToken = "brand" | "model" | "category" | "secondaryCategory";
 
 type CatalogAuditDoc = {
     id: string;
@@ -12,6 +13,10 @@ type CatalogAuditDoc = {
 export interface CategoryDoc extends CatalogAuditDoc {
     name: string;
     slug: string;
+    parentCategoryId?: string;
+    parentCategoryName?: string;
+    categoryLevel: 1 | 2;
+    fullPath: string;
     description?: string;
     sortOrder: number;
     status: CatalogRecordStatus;
@@ -67,6 +72,10 @@ export type DimensionOption = {
     id: string;
     name: string;
     slug?: string;
+    parentCategoryId?: string;
+    parentCategoryName?: string;
+    categoryLevel?: 1 | 2;
+    fullPath?: string;
     brandId?: string;
     brandName?: string;
     categoryId?: string;

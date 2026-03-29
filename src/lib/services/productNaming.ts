@@ -1,4 +1,4 @@
-import type { ProductNamingMode } from "@/lib/types/catalog";
+import type { ItemNamingToken, ProductNamingMode } from "@/lib/types/catalog";
 
 type ProductSearchKeywordSource = {
     name: string;
@@ -6,6 +6,7 @@ type ProductSearchKeywordSource = {
     aliases?: string[];
     sku?: string | undefined;
     categoryName?: string | undefined;
+    secondaryCategoryName?: string | undefined;
     brandName?: string | undefined;
     modelName?: string | undefined;
     nameEntryName?: string | undefined;
@@ -15,6 +16,8 @@ type ProductSearchKeywordSource = {
 
 const SPLIT_ALIAS_RE = /[\n,;|、]+/;
 const MAX_ALIAS_COUNT = 24;
+export const DEFAULT_ITEM_NAMING_ORDER: ItemNamingToken[] = ["brand", "model", "secondaryCategory"];
+const ITEM_NAMING_TOKEN_SET: ReadonlySet<ItemNamingToken> = new Set(["brand", "model", "category", "secondaryCategory"]);
 
 function toText(value: unknown): string {
     return typeof value === "string" ? value.trim() : "";
@@ -40,6 +43,24 @@ export function parseProductNamingMode(value: unknown): ProductNamingMode {
     return "custom";
 }
 
+export function normalizeItemNamingOrder(value: unknown): ItemNamingToken[] {
+    const source = Array.isArray(value)
+        ? value
+        : typeof value === "string"
+          ? value.split(/[\s,|>]+/)
+          : [];
+    const out: ItemNamingToken[] = [];
+    const seen = new Set<ItemNamingToken>();
+    for (const item of source) {
+        const token = toText(item) as ItemNamingToken;
+        if (!ITEM_NAMING_TOKEN_SET.has(token)) continue;
+        if (seen.has(token)) continue;
+        seen.add(token);
+        out.push(token);
+    }
+    return out.length > 0 ? out : [...DEFAULT_ITEM_NAMING_ORDER];
+}
+
 export function normalizeSearchText(value: unknown): string {
     return toText(value)
         .replace(/[\u0000-\u001F\u007F]/g, "")
@@ -63,34 +84,70 @@ function joinNameParts(values: Array<string | null | undefined>): string {
     ).join(" ");
 }
 
+/** Appends optional supplementary label after structured auto-name (自動命名 + 副品名). */
+export function appendStructuredProductNameSuffix(base: unknown, suffix: unknown): string {
+    const b = toText(base);
+    const s = toText(suffix);
+    if (!s) return b;
+    return b ? `${b} ${s}` : s;
+}
+
 export type ProductNameSuggestionInput = {
     namingMode?: unknown;
     categoryName?: unknown;
+    secondaryCategoryName?: unknown;
     brandName?: unknown;
     modelName?: unknown;
     nameEntryName?: unknown;
     customLabel?: unknown;
+    namingOrder?: unknown;
 };
+
+export function buildConfiguredProductName(input: {
+    categoryName?: unknown;
+    secondaryCategoryName?: unknown;
+    brandName?: unknown;
+    modelName?: unknown;
+    namingOrder?: unknown;
+}): string {
+    const partsByToken: Record<ItemNamingToken, string> = {
+        brand: toText(input.brandName),
+        model: toText(input.modelName),
+        category: toText(input.categoryName),
+        secondaryCategory: toText(input.secondaryCategoryName),
+    };
+    const order = normalizeItemNamingOrder(input.namingOrder);
+    const orderedParts = order.map((token) => partsByToken[token]);
+    return joinNameParts(orderedParts);
+}
 
 export function buildProductNameSuggestion(input: ProductNameSuggestionInput): string {
     const namingMode = parseProductNamingMode(input.namingMode);
     const categoryName = toText(input.categoryName);
+    const secondaryCategoryName = toText(input.secondaryCategoryName);
     const brandName = toText(input.brandName);
     const modelName = toText(input.modelName);
     const nameEntryName = toText(input.nameEntryName);
     const customLabel = toText(input.customLabel);
 
-    const structuredName = joinNameParts([categoryName, brandName, modelName]);
+    const structuredName =
+        buildConfiguredProductName({
+            categoryName,
+            secondaryCategoryName,
+            brandName,
+            modelName,
+            namingOrder: input.namingOrder,
+        }) || joinNameParts([categoryName, brandName, modelName, secondaryCategoryName]);
     const customName = customLabel || nameEntryName;
 
     // `hybrid` keeps structured dimensions plus a reusable/custom label for mixed naming needs.
     if (namingMode === "hybrid") {
-        return joinNameParts([brandName, modelName, customName || categoryName]);
+        return joinNameParts([brandName, modelName, customName || secondaryCategoryName || categoryName]);
     }
     if (namingMode === "structured") {
-        return structuredName || joinNameParts([brandName, modelName, nameEntryName, customLabel]);
+        return structuredName || joinNameParts([brandName, modelName, secondaryCategoryName, nameEntryName, customLabel]);
     }
-    return customName || joinNameParts([categoryName, brandName, modelName]);
+    return customName || structuredName || joinNameParts([categoryName, brandName, modelName, secondaryCategoryName]);
 }
 
 export function buildProductSearchKeywords(product: ProductSearchKeywordSource): string[] {
@@ -100,6 +157,7 @@ export function buildProductSearchKeywords(product: ProductSearchKeywordSource):
             product.normalizedName,
             product.sku,
             product.categoryName,
+            product.secondaryCategoryName,
             product.brandName,
             product.modelName,
             product.nameEntryName,
@@ -114,6 +172,7 @@ export function buildProductNormalizedName(input: {
     name?: unknown;
     aliases?: unknown;
     categoryName?: unknown;
+    secondaryCategoryName?: unknown;
     brandName?: unknown;
     modelName?: unknown;
     nameEntryName?: unknown;
@@ -123,6 +182,7 @@ export function buildProductNormalizedName(input: {
     const merged = dedupeText([
         toText(input.name),
         toText(input.categoryName),
+        toText(input.secondaryCategoryName),
         toText(input.brandName),
         toText(input.modelName),
         toText(input.nameEntryName),

@@ -229,6 +229,14 @@ Company B customer:
 - `users/{uid}` 保存登入身分與租戶關聯
 - `companies/{companyId}/customers/{customerId}` 保存客戶商業資料
 
+### Product / Item
+
+- business record canonical name 是 `Product`
+- Firestore collection path 維持 `products`
+- merchant UI 中文顯示為「品項」
+- merchant UI 英文顯示為 `Item`
+- 既有 `product*` route / service / type naming 可為 compatibility 保留，不需要為了 UI 文案改動資料模型命名
+
 ### Marketing
 
 - merchant 管理主體長期 canonical name 是 `Campaign`
@@ -251,8 +259,10 @@ Company B customer:
 - `companies/{companyId}/customers/{customerId}`
 - `companies/{companyId}/cases/{caseId}`
 - `companies/{companyId}/sales/{saleId}`
+- `companies/{companyId}/products/{productId}`
 - `companies/{companyId}/staffMembers/{staffMemberId}`
 - `companies/{companyId}/settings/*`
+- `companies/{companyId}/settings/itemNaming`
 - `companies/{companyId}/app_config/*`
 
 現況主要問題不是沒有模型，而是同一概念在不同層被叫成不同名字:
@@ -579,6 +589,13 @@ merchant zone 要重構成 unified page shell system。
 
 - reuse existing components when possible
 - do not duplicate shell markup
+
+### Dashboard「商店營銷設定」workspace
+
+- 路徑：`src/components/dashboard/marketing-settings-workspace.tsx`
+- 頂部為區塊選單：分類、供應來源、品牌、二手商品。
+- **供應來源**、**品牌**、**二手商品** 三區皆應使用 `MerchantBuilderShell`（左清單／右編輯），與既有 Builder 雙欄語意一致。
+- **二手商品**：`src/components/used-products/used-product-type-settings-card.tsx`（`UsedProductTypeSettingsCard`）左欄為「類型清單」（來自品牌設定中已啟用之二手類型），右欄為該類型之規格模板與表單；類型啟用與否仍由品牌設定側控制，此區只維護規格模板。
 
 ## Shared Page Rules
 

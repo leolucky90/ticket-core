@@ -13,6 +13,8 @@ export interface ProductDoc {
 
     categoryId?: string;
     categoryName?: string;
+    secondaryCategoryId?: string;
+    secondaryCategoryName?: string;
 
     brandId?: string;
     brandName?: string;

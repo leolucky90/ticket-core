@@ -813,7 +813,8 @@ export async function getCurrentSessionAccountContext(): Promise<CurrentSessionA
     let userDoc = await getUserDoc(session.uid);
     const rawAccountType = toAccountType(userDoc?.role ?? null);
     const rawTenantId = normalizeCompanyId(getShowcaseTenantId(userDoc, session.uid));
-    if (rawAccountType === "company") {
+    const shouldResolveStaffMembership = rawAccountType === "company" && userDoc?.role !== "owner" && userDoc?.role !== "super_admin";
+    if (rawAccountType === "company" && !shouldResolveStaffMembership) {
         return {
             userDoc,
             accountType: "company",

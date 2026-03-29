@@ -17,7 +17,7 @@ export function ProcessingState({
     return (
         <div
             className={cn(
-                "flex items-start gap-3 rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))] shadow-xl",
+                "flex items-center gap-3 rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))] shadow-xl",
                 compact ? "px-4 py-3" : "px-5 py-4",
                 className,
             )}

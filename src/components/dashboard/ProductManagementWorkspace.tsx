@@ -2,6 +2,7 @@
 
 import { ArrowLeft, ArrowRight, Filter, PackagePlus, PackageSearch, Plus, RotateCcw, Save, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { ItemFormFields } from "@/components/dashboard/ItemFormFields";
 import {
     FilterCard,
     MerchantListPagination,
@@ -9,13 +10,13 @@ import {
     MerchantSectionCard,
     SearchToolbar,
 } from "@/components/merchant/shell";
-import { DimensionPicker } from "@/components/merchant/catalog";
 import { MerchantPredictiveSearchInput } from "@/components/merchant/search";
 import { FormField } from "@/components/ui/form-field";
 import { IconActionButton } from "@/components/ui/icon-action-button";
 import { IconTextActionButton } from "@/components/ui/icon-text-action-button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import type { ItemNamingSettings } from "@/lib/schema/itemNamingSettings";
 import type { DimensionPickerBundle } from "@/lib/types/catalog";
 import type { Product } from "@/lib/types/merchant-product";
 import { LIST_DISPLAY_OPTIONS } from "@/lib/ui/list-display";
@@ -34,6 +35,7 @@ type ProductManagementWorkspaceProps = {
     minPrice: string;
     maxPrice: string;
     dimensionBundle: DimensionPickerBundle;
+    namingSettings: ItemNamingSettings;
     flash: string;
     actionTs: string;
     pageSize: string;
@@ -54,9 +56,9 @@ const FLASH_LABELS: Record<string, string> = {
     error: "操作失敗，請稍後再試",
     delete_auth_required: "請先輸入帳戶密碼才能刪除",
     delete_auth_failed: "密碼驗證失敗，刪除已取消",
-    product_created: "產品已建立",
-    product_updated: "產品已更新",
-    product_deleted: "產品已刪除",
+    product_created: "品項已建立",
+    product_updated: "品項已更新",
+    product_deleted: "品項已刪除",
 };
 
 function flashTone(flash: string): "success" | "error" {
@@ -66,7 +68,7 @@ function flashTone(flash: string): "success" | "error" {
 
 function guardDeleteWithPassword(event: FormEvent<HTMLFormElement>) {
     const form = event.currentTarget;
-    const targetText = (form.dataset.deleteTarget ?? "此產品").trim();
+    const targetText = (form.dataset.deleteTarget ?? "此品項").trim();
     const confirmed = window.confirm(`確定要刪除「${targetText}」嗎？此操作無法復原。`);
     if (!confirmed) {
         event.preventDefault();
@@ -89,13 +91,6 @@ function guardDeleteWithPassword(event: FormEvent<HTMLFormElement>) {
 
 function formatMoney(value: number): string {
     return new Intl.NumberFormat("zh-TW").format(Math.max(0, value));
-}
-
-function toRefValue(id: string | undefined, name: string | undefined): string {
-    const idText = (id ?? "").trim();
-    const nameText = (name ?? "").trim();
-    if (!idText && !nameText) return "";
-    return `${idText || nameText}::${nameText || idText}`;
 }
 
 function filterModelsByBrand(bundle: DimensionPickerBundle, brandId: string): DimensionPickerBundle["models"] {
@@ -127,6 +122,7 @@ export function ProductManagementWorkspace({
     minPrice,
     maxPrice,
     dimensionBundle,
+    namingSettings,
     flash,
     actionTs,
     pageSize,
@@ -173,9 +169,16 @@ export function ProductManagementWorkspace({
                 value: product.name,
                 title: product.name,
                 subtitle: [product.sku, product.brandName, product.modelName].filter(Boolean).join(" / ") || undefined,
-                keywords: [product.name, product.sku, product.categoryName, product.brandName, product.modelName, product.supplier, ...(product.aliases ?? [])].filter(
-                    (value): value is string => Boolean(value),
-                ),
+                keywords: [
+                    product.name,
+                    product.sku,
+                    product.categoryName,
+                    product.secondaryCategoryName,
+                    product.brandName,
+                    product.modelName,
+                    product.supplier,
+                    ...(product.aliases ?? []),
+                ].filter((value): value is string => Boolean(value)),
             })),
         [products],
     );
@@ -253,20 +256,20 @@ export function ProductManagementWorkspace({
                     <input type="hidden" name="maxPrice" value={maxPrice} />
                     <input type="hidden" name="pageSize" value={pageSize} />
                     <label htmlFor="product-management-search" className="sr-only">
-                        搜尋產品關鍵字
+                        搜尋品項關鍵字
                     </label>
                     <MerchantPredictiveSearchInput
                         id="product-management-search"
                         name="productQ"
                         defaultValue={productKeyword}
-                        placeholder="查詢品名、SKU、分類、品牌、型號"
+                        placeholder="查詢品項、SKU、分類、品牌、型號"
                         targets={["products", "inventory"]}
                         localSuggestions={productSearchSuggestions}
                         className="min-w-0 flex-1"
                         inputClassName={controlClass}
                     />
                     <div className="flex items-center gap-2">
-                        <IconActionButton icon={Search} label="搜尋產品" tooltip="搜尋" type="submit" />
+                        <IconActionButton icon={Search} label="搜尋品項" tooltip="搜尋" type="submit" />
                         <IconActionButton href="/dashboard/products" icon={RotateCcw} label="清除查詢與篩選" tooltip="清除" />
                         <IconActionButton
                             icon={SlidersHorizontal}
@@ -282,12 +285,12 @@ export function ProductManagementWorkspace({
                 <IconTextActionButton
                     type="button"
                     icon={showCreateForm ? X : PackagePlus}
-                    label={showCreateForm ? "收合新增產品表單" : "展開新增產品表單"}
-                    tooltip={showCreateForm ? "收合新增產品表單" : "展開新增產品表單"}
+                    label={showCreateForm ? "收合新增品項表單" : "展開新增品項表單"}
+                    tooltip={showCreateForm ? "收合新增品項表單" : "展開新增品項表單"}
                     onClick={() => setShowCreateForm((prev) => !prev)}
                     className={showCreateForm ? "h-10 px-4 border-[rgb(var(--accent))] text-[rgb(var(--accent))]" : "h-10 px-4"}
                 >
-                    新增產品
+                    新增品項
                 </IconTextActionButton>
             }
         />
@@ -302,11 +305,13 @@ export function ProductManagementWorkspace({
                 <FormField label="分類" htmlFor="filter-category">
                     <Select id="filter-category" name="categoryId" defaultValue={categoryFilter} className={controlClass}>
                         <option value="">全部分類</option>
-                        {dimensionBundle.categories.map((category) => (
+                        {dimensionBundle.categories
+                            .filter((category) => (category.categoryLevel ?? 1) === 1)
+                            .map((category) => (
                             <option key={`category-${category.id}`} value={category.id}>
-                                {category.name}
+                                {category.fullPath || category.name}
                             </option>
-                        ))}
+                            ))}
                     </Select>
                 </FormField>
 
@@ -411,62 +416,23 @@ export function ProductManagementWorkspace({
     ) : null;
 
     const createForm = showCreateForm ? (
-        <FilterCard title="新增產品" description="以分類、品牌、型號建立產品主資料；產品名稱可手動覆寫，其他命名欄位已整合移除。">
+        <FilterCard title="新增品項" description="可選主分類、第二分類、品牌與型號；名稱可自訂，或依商店命名規則自動帶入。">
             <form action={createProductAction} className="grid gap-3">
                 <input type="hidden" name="tab" value="inventory" />
                 <input type="hidden" name="inventoryView" value="settings" />
                 <input type="hidden" name="redirectPath" value={createRedirectPath} />
+                <ItemFormFields
+                    bundle={dimensionBundle}
+                    namingSettings={namingSettings}
+                    idPrefix="create-item"
+                    supplierListId="product-supplier-options"
+                    controlClass={controlClass}
+                />
 
-                <DimensionPicker bundle={dimensionBundle} idPrefix="create-product" />
-
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    <FormField label="產品名稱" htmlFor="create-name" hint="可留空，系統會依分類 / 品牌 / 型號自動組合。">
-                        <Input id="create-name" name="name" placeholder="例如：iPhone 16 Pro" className={controlClass} />
-                    </FormField>
-
-                    <FormField label="SKU" htmlFor="create-sku">
-                        <Input id="create-sku" name="sku" placeholder="例如：IP16P-256-BLK" className={controlClass} />
-                    </FormField>
-
-                    <FormField label="供應商" htmlFor="create-supplier">
-                        <Input id="create-supplier" name="supplier" list="product-supplier-options" placeholder="例如：Apple 授權供應商" className={controlClass} />
-                    </FormField>
-
-                    <FormField label="售價" htmlFor="create-price" required>
-                        <Input id="create-price" type="number" min={0} name="price" placeholder="例如 38900" required className={controlClass} />
-                    </FormField>
-
-                    <FormField label="成本" htmlFor="create-cost" required>
-                        <Input id="create-cost" type="number" min={0} name="cost" placeholder="例如 32000" required className={controlClass} />
-                    </FormField>
-
-                    <FormField label="初始庫存" htmlFor="create-stock" required>
-                        <Input id="create-stock" type="number" min={0} name="stock" defaultValue={0} required className={controlClass} />
-                    </FormField>
-
-                    <FormField label="最小庫存警戒" htmlFor="create-low-stock" required>
-                        <Input id="create-low-stock" type="number" min={0} name="lowStockThreshold" defaultValue={5} required className={controlClass} />
-                    </FormField>
-
-                    <FormField label="扣庫存模式" htmlFor="create-stock-mode" required>
-                        <Select id="create-stock-mode" name="stockDeductionMode" defaultValue="immediate" className={controlClass}>
-                            <option value="immediate">即時扣庫存（一般銷售）</option>
-                            <option value="redeem_only">兌換才扣庫存（客戶權益/活動）</option>
-                        </Select>
-                    </FormField>
-
-                    <FormField label="狀態" htmlFor="create-status" required>
-                        <Select id="create-status" name="status" defaultValue="active" className={controlClass}>
-                            <option value="active">啟用</option>
-                            <option value="inactive">停用</option>
-                        </Select>
-                    </FormField>
-
-                    <div className="flex items-end md:col-span-2 xl:col-span-3">
-                        <IconTextActionButton type="submit" icon={Plus} label="新增產品" tooltip="建立產品資料" className="h-10 px-4">
-                            新增產品
-                        </IconTextActionButton>
-                    </div>
+                <div className="flex items-end">
+                    <IconTextActionButton type="submit" icon={Plus} label="新增品項" tooltip="建立品項資料" className="h-10 px-4">
+                        新增品項
+                    </IconTextActionButton>
                 </div>
             </form>
         </FilterCard>
@@ -474,7 +440,7 @@ export function ProductManagementWorkspace({
 
     const list = (
         <MerchantSectionCard
-            title={`產品列表（${products.length}）`}
+            title={`品項列表（${products.length}）`}
             description="採用 server 分頁與固定高度清單，保留目前篩選器操作方式。"
             actions={
                 <form action="/dashboard/products" method="get" className="flex flex-wrap items-center gap-2">
@@ -498,8 +464,8 @@ export function ProductManagementWorkspace({
                 products.length === 0
                     ? {
                           icon: PackageSearch,
-                          title: "沒有符合條件的產品",
-                          description: "調整查詢條件或先建立第一筆產品資料。",
+                          title: "沒有符合條件的品項",
+                          description: "調整查詢條件或先建立第一筆品項資料。",
                       }
                     : undefined
             }
@@ -561,117 +527,28 @@ export function ProductManagementWorkspace({
                                     <input type="hidden" name="inventoryView" value="settings" />
                                     <input type="hidden" name="redirectPath" value={currentRedirectPath} />
                                     <input type="hidden" name="productId" value={product.id} />
-
-                                    <DimensionPicker
+                                    <ItemFormFields
                                         bundle={dimensionBundle}
-                                        idPrefix={`edit-${product.id}`}
-                                        value={{
-                                            categoryRef: toRefValue(product.categoryId, product.categoryName),
-                                            brandRef: toRefValue(product.brandId, product.brandName),
-                                            modelRef: toRefValue(product.modelId, product.modelName),
-                                        }}
+                                        namingSettings={namingSettings}
+                                        idPrefix={`edit-item-${product.id}`}
+                                        supplierListId="product-supplier-options"
+                                        controlClass={controlClass}
+                                        product={product}
                                     />
 
-                                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                                        <FormField label="產品名稱" htmlFor={`edit-name-${product.id}`} required>
-                                            <Input id={`edit-name-${product.id}`} name="name" defaultValue={product.name} required className={controlClass} />
-                                        </FormField>
-
-                                        <FormField label="SKU" htmlFor={`edit-sku-${product.id}`}>
-                                            <Input id={`edit-sku-${product.id}`} name="sku" defaultValue={product.sku} className={controlClass} />
-                                        </FormField>
-
-                                        <FormField label="供應商" htmlFor={`edit-supplier-${product.id}`}>
-                                            <Input
-                                                id={`edit-supplier-${product.id}`}
-                                                name="supplier"
-                                                list="product-supplier-options"
-                                                defaultValue={product.supplier}
-                                                className={controlClass}
-                                            />
-                                        </FormField>
-
-                                        <FormField label="售價" htmlFor={`edit-price-${product.id}`} required>
-                                            <Input
-                                                id={`edit-price-${product.id}`}
-                                                type="number"
-                                                min={0}
-                                                name="price"
-                                                defaultValue={product.price}
-                                                required
-                                                className={controlClass}
-                                            />
-                                        </FormField>
-
-                                        <FormField label="成本" htmlFor={`edit-cost-${product.id}`} required>
-                                            <Input
-                                                id={`edit-cost-${product.id}`}
-                                                type="number"
-                                                min={0}
-                                                name="cost"
-                                                defaultValue={product.cost}
-                                                required
-                                                className={controlClass}
-                                            />
-                                        </FormField>
-
-                                        <FormField label="目前庫存" htmlFor={`edit-stock-${product.id}`} required>
-                                            <Input
-                                                id={`edit-stock-${product.id}`}
-                                                type="number"
-                                                min={0}
-                                                name="stock"
-                                                defaultValue={product.stock}
-                                                required
-                                                className={controlClass}
-                                            />
-                                        </FormField>
-
-                                        <FormField label="最小庫存警戒" htmlFor={`edit-low-stock-${product.id}`} required>
-                                            <Input
-                                                id={`edit-low-stock-${product.id}`}
-                                                type="number"
-                                                min={0}
-                                                name="lowStockThreshold"
-                                                defaultValue={product.lowStockThreshold ?? 5}
-                                                required
-                                                className={controlClass}
-                                            />
-                                        </FormField>
-
-                                        <FormField label="扣庫存模式" htmlFor={`edit-stock-mode-${product.id}`} required>
-                                            <Select
-                                                id={`edit-stock-mode-${product.id}`}
-                                                name="stockDeductionMode"
-                                                defaultValue={product.stockDeductionMode ?? "immediate"}
-                                                className={controlClass}
-                                            >
-                                                <option value="immediate">即時扣庫存</option>
-                                                <option value="redeem_only">兌換才扣庫存</option>
-                                            </Select>
-                                        </FormField>
-
-                                        <FormField label="狀態" htmlFor={`edit-status-${product.id}`} required>
-                                            <Select id={`edit-status-${product.id}`} name="status" defaultValue={product.status ?? "active"} className={controlClass}>
-                                                <option value="active">啟用</option>
-                                                <option value="inactive">停用</option>
-                                            </Select>
-                                        </FormField>
-
-                                        <div className="flex items-end gap-2 md:col-span-2 xl:col-span-3">
-                                            <IconTextActionButton type="submit" icon={Save} label="更新產品" tooltip="儲存產品資料" className="h-10 px-4">
-                                                更新產品
-                                            </IconTextActionButton>
-                                        </div>
+                                    <div className="flex items-end gap-2">
+                                        <IconTextActionButton type="submit" icon={Save} label="更新品項" tooltip="儲存品項資料" className="h-10 px-4">
+                                            更新品項
+                                        </IconTextActionButton>
                                     </div>
                                 </form>
-                                <form action={deleteProductAction} className="mt-2" onSubmit={guardDeleteWithPassword} data-delete-target={`產品 ${product.name}`}>
+                                <form action={deleteProductAction} className="mt-2" onSubmit={guardDeleteWithPassword} data-delete-target={`品項 ${product.name}`}>
                                     <input type="hidden" name="tab" value="inventory" />
                                     <input type="hidden" name="inventoryView" value="settings" />
                                     <input type="hidden" name="redirectPath" value={currentRedirectPath} />
                                     <input type="hidden" name="productId" value={product.id} />
-                                    <IconTextActionButton type="submit" icon={Trash2} label="刪除產品" tooltip="刪除產品資料" className="h-10 px-4">
-                                        刪除產品
+                                    <IconTextActionButton type="submit" icon={Trash2} label="刪除品項" tooltip="刪除品項資料" className="h-10 px-4">
+                                        刪除品項
                                     </IconTextActionButton>
                                 </form>
                             </div>
