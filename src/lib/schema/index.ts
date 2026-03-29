@@ -207,3 +207,62 @@ export {
     normalizeUsedProductTypeSetting,
     usedProductTypeSettingsCollectionPath,
 } from "@/lib/schema/usedProductTypeSettings";
+
+export type { MerchantStore, MerchantStoreStatus } from "@/lib/schema/merchant-store";
+
+export {
+    MERCHANT_STORE_STATUSES,
+    normalizeMerchantStore,
+    storesCollectionPath,
+} from "@/lib/schema/merchant-store";
+
+export type { Warehouse } from "@/lib/schema/warehouse";
+
+export { normalizeWarehouse, warehousesCollectionPath } from "@/lib/schema/warehouse";
+
+export type { WarehouseInventoryRow } from "@/lib/schema/warehouse-inventory";
+
+export {
+    normalizeWarehouseInventoryRow,
+    warehouseInventoryCollectionPath,
+    warehouseInventoryDocId,
+} from "@/lib/schema/warehouse-inventory";
+
+export type { StockItem, StockItemStatus } from "@/lib/schema/stock-item";
+
+export { normalizeStockItem, stockItemsCollectionPath, STOCK_ITEM_STATUSES } from "@/lib/schema/stock-item";
+
+export type { InventoryLog, WarehouseInventoryLog, WarehouseInventoryLogType } from "@/lib/schema/inventory-log";
+
+export {
+    inventoryLogsCollectionPath,
+    normalizeWarehouseInventoryLog,
+    WAREHOUSE_INVENTORY_LOG_TYPES,
+} from "@/lib/schema/inventory-log";
+
+export type { InventoryTransfer, InventoryTransferLine, InventoryTransferStatus } from "@/lib/schema/inventory-transfer";
+
+export {
+    INVENTORY_TRANSFER_STATUSES,
+    normalizeInventoryTransfer,
+    transfersCollectionPath,
+} from "@/lib/schema/inventory-transfer";
+
+export type { PoDraft } from "@/lib/schema/ai/po-draft";
+
+export { poDraftItemSchema, poDraftSchema } from "@/lib/schema/ai/po-draft";
+
+export type { PoDraftProductSearchHit } from "@/lib/schema/poDraftProduct";
+
+export type { IntakeDocumentStatus } from "@/lib/schema/receiptPoIntake";
+
+export {
+    intakeDocumentDocPath,
+    intakeDocumentsCollectionPath,
+    ocrResultDocPath,
+    ocrResultsCollectionPath,
+    poDraftDocPath,
+    poDraftsCollectionPath,
+    purchaseOrderDocPath,
+    purchaseOrdersCollectionPath,
+} from "@/lib/schema/receiptPoIntake";

@@ -1,6 +1,9 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { MerchantPageShell } from "@/components/merchant/shell";
 import { UsedProductsManagementPanel } from "@/components/used-products";
+import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
+import { listUsedProductTypeSettings } from "@/lib/services/used-product-type-settings.service";
 import {
     createRefurbishmentCaseForUsedProduct,
     getUsedProductById,
@@ -12,6 +15,7 @@ import {
 type UsedProductsPageProps = {
     searchParams: Promise<{
         q?: string;
+        usedType?: string;
         saleStatus?: string;
         refurbishmentStatus?: string;
         flash?: string;
@@ -24,16 +28,30 @@ function redirectWithFlash(flash: string): never {
 }
 
 export default async function UsedProductsPage({ searchParams }: UsedProductsPageProps) {
+    const cookieStore = await cookies();
+    const lang = getUiLanguage(cookieStore.get("lang")?.value);
+    const ui = getUiText(lang);
+
     const sp = await searchParams;
     const keyword = (sp.q ?? "").trim();
+    const usedType = (sp.usedType ?? "").trim();
     const saleStatus = (sp.saleStatus ?? "").trim();
     const refurbishmentStatus = (sp.refurbishmentStatus ?? "").trim();
 
-    const products = await listUsedProducts({
-        keyword,
-        saleStatus: saleStatus as never,
-        refurbishmentStatus: refurbishmentStatus as never,
-    });
+    const [products, usedProductTypeSettings] = await Promise.all([
+        listUsedProducts({
+            keyword,
+            usedType,
+            saleStatus: saleStatus as never,
+            refurbishmentStatus: refurbishmentStatus as never,
+        }),
+        listUsedProductTypeSettings(),
+    ]);
+
+    const typeFilterOptions = usedProductTypeSettings
+        .filter((row) => row.isActive)
+        .map((row) => ({ id: row.id, name: row.name }))
+        .sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
 
     async function publishAction(formData: FormData): Promise<void> {
         "use server";
@@ -67,11 +85,13 @@ export default async function UsedProductsPage({ searchParams }: UsedProductsPag
     }
 
     return (
-        <MerchantPageShell title="二手商品管理" subtitle="集中管理二手商品清單、狀態、翻新與銷售入口。" width="index">
+        <MerchantPageShell title={ui.usedProductList.pageTitle} subtitle={ui.usedProductList.pageSubtitle} width="index">
             {sp.flash ? <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2 text-sm">{sp.flash}</div> : null}
             <UsedProductsManagementPanel
                 products={products}
                 keyword={keyword}
+                usedType={usedType}
+                typeFilterOptions={typeFilterOptions}
                 saleStatus={saleStatus}
                 refurbishmentStatus={refurbishmentStatus}
                 publishAction={publishAction}

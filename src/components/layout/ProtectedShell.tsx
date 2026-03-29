@@ -78,6 +78,7 @@ export async function ProtectedShell({ children }: ProtectedShellProps) {
         activities: ui.shell.campaigns,
         consignments: ui.shell.consignments,
         inventory: ui.shell.inventory,
+        purchaseOrders: ui.shell.purchaseOrders,
         productManagement: ui.shell.productManagement,
         usedProducts: ui.shell.usedProducts,
         checkout: ui.shell.checkout,
@@ -89,6 +90,7 @@ export async function ProtectedShell({ children }: ProtectedShellProps) {
         roleSettings: ui.shell.roleSettings,
         deleteControl: ui.shell.deleteControl,
         deleteLogs: ui.shell.deleteLogs,
+        auditLogs: ui.shell.auditLogs,
         overviewGroup: ui.shell.overviewGroup,
         transactionsGroup: ui.shell.transactionsGroup,
         serviceGroup: ui.shell.serviceGroup,
@@ -131,6 +133,7 @@ export async function ProtectedShell({ children }: ProtectedShellProps) {
                   { id: "role-settings", label: labels.roleSettings, href: "/settings/staff/roles" },
                   { id: "delete-control", label: labels.deleteControl, href: "/settings/security/delete-control" },
                   { id: "delete-logs", label: labels.deleteLogs, href: "/settings/security/delete-logs" },
+                  { id: "audit-logs", label: labels.auditLogs, href: "/settings/security/audit-logs" },
                   { id: "showcase-settings", label: labels.showcaseSettings, href: "/settings/showcase" },
               ]
             : []),

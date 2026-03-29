@@ -112,6 +112,7 @@ export function UsedProductForm({
     }, [brandValue, modelValue, typeValue]);
 
     return (
+        <>
         <form action={submitAction} className="grid gap-4">
             {product ? <input type="hidden" name="id" value={product.id} /> : null}
             <input type="hidden" name="name" value={derivedProductName} />
@@ -372,21 +373,17 @@ export function UsedProductForm({
                 <IconTextActionButton icon={Save} type="submit" label={mode === "create" ? "儲存新增" : "儲存修改"} tooltip="儲存二手商品資料" />
                 <IconTextActionButton icon={ArrowLeft} href={backHref} label="返回" tooltip="返回上一頁" />
             </div>
-
-            {mode === "edit" && product && createRefurbishmentCaseAction ? (
-                <Card className="grid gap-2">
-                    <div className="text-sm font-semibold">翻新案件</div>
-                    <form action={createRefurbishmentCaseAction} className="flex flex-wrap items-center gap-2">
-                        <input type="hidden" name="usedProductId" value={product.id} />
-                        <IconTextActionButton
-                            icon={Wrench}
-                            type="submit"
-                            label="建立翻新案件"
-                            tooltip="建立或連結翻新案件"
-                        />
-                    </form>
-                </Card>
-            ) : null}
         </form>
+
+        {mode === "edit" && product && createRefurbishmentCaseAction ? (
+            <Card className="grid gap-2">
+                <div className="text-sm font-semibold">翻新案件</div>
+                <form action={createRefurbishmentCaseAction} className="flex flex-wrap items-center gap-2">
+                    <input type="hidden" name="usedProductId" value={product.id} />
+                    <IconTextActionButton icon={Wrench} type="submit" label="建立翻新案件" tooltip="建立或連結翻新案件" />
+                </form>
+            </Card>
+        ) : null}
+        </>
     );
 }

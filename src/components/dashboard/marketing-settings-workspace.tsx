@@ -7,6 +7,7 @@ import { MarketingBrandEditor } from "@/components/dashboard/marketing-brand-edi
 import { MarketingCategoryManager } from "@/components/dashboard/marketing-category-manager";
 import { MerchantBuilderShell, EmptyStateCard, MerchantSectionCard } from "@/components/merchant/shell";
 import { Button } from "@/components/ui/button";
+import { IconOnlyButton } from "@/components/ui/icon-only-button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { UsedProductTypeSettingsCard } from "@/components/used-products";
@@ -56,42 +57,6 @@ function limitRows<T>(rows: T[], size: string): T[] {
     const limit = Number(size);
     if (!Number.isFinite(limit) || limit <= 0) return rows;
     return rows.slice(0, limit);
-}
-
-function IconOnlyButton({
-    label,
-    icon,
-    form,
-    type = "button",
-    variant = "ghost",
-    className,
-    disabled,
-    onClick,
-}: {
-    label: string;
-    icon: React.ReactNode;
-    form?: string;
-    type?: "button" | "submit" | "reset";
-    variant?: "solid" | "ghost";
-    className?: string;
-    disabled?: boolean;
-    onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
-}) {
-    return (
-        <Button
-            form={form}
-            type={type}
-            variant={variant}
-            aria-label={label}
-            title={label}
-            disabled={disabled}
-            onClick={onClick}
-            className={`group relative h-10 w-10 !p-0 ${className ?? ""}`.trim()}
-        >
-            {icon}
-            <span className="sr-only">{label}</span>
-        </Button>
-    );
 }
 
 const SECTION_TABS: Array<{ id: MarketingSectionId; label: string; hint: string }> = [

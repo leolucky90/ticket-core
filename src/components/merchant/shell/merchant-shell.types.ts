@@ -96,4 +96,5 @@ export type MerchantSidebarIcon =
     | "megaphone"
     | "building"
     | "settings"
-    | "shopping-cart";
+    | "shopping-cart"
+    | "shield-check";

@@ -11,6 +11,7 @@ type CompanyShellLabels = {
     ticket: string;
     customers: string;
     inventory: string;
+    purchaseOrders: string;
     productManagement: string;
     usedProducts: string;
     activities: string;
@@ -22,6 +23,7 @@ type CompanyShellLabels = {
     roleSettings: string;
     deleteControl: string;
     deleteLogs: string;
+    auditLogs: string;
     overviewGroup: string;
     transactionsGroup: string;
     serviceGroup: string;
@@ -73,6 +75,7 @@ export function buildCompanySidebarGroups(labels: CompanyShellLabels): MerchantS
             title: labels.operationsGroup,
             items: [
                 { id: "inventory", label: labels.inventory, href: "/dashboard?tab=inventory", icon: "package" },
+                { id: "purchase-orders", label: labels.purchaseOrders, href: "/dashboard/purchase-orders", icon: "shopping-cart" },
                 { id: "products", label: labels.productManagement, href: "/dashboard/products", icon: "shopping-bag" },
                 { id: "used-products", label: labels.usedProducts, href: "/products/used", icon: "shopping-bag" },
                 { id: "activities", label: labels.activities, href: "/dashboard?tab=activities", icon: "megaphone" },
@@ -96,6 +99,7 @@ export function buildCompanySidebarGroups(labels: CompanyShellLabels): MerchantS
                 { id: "role-settings", label: labels.roleSettings, href: "/settings/staff/roles", icon: "settings" },
                 { id: "delete-control", label: labels.deleteControl, href: "/settings/security/delete-control", icon: "settings" },
                 { id: "delete-logs", label: labels.deleteLogs, href: "/settings/security/delete-logs", icon: "receipt-text" },
+                { id: "audit-logs", label: labels.auditLogs, href: "/settings/security/audit-logs", icon: "shield-check" },
             ],
         },
     ];

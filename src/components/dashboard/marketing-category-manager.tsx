@@ -162,7 +162,8 @@ export function MarketingCategoryManager({
                                         <div className="flex min-w-0 items-stretch gap-0">
                                             <button
                                                 type="button"
-                                                className="flex w-9 shrink-0 items-center justify-center border-r border-[rgb(var(--border))] text-[rgb(var(--muted))] hover:bg-[rgb(var(--panel2))]"
+                                                title={open ? "收合子分類" : "展開子分類"}
+                                                className="group relative flex w-9 shrink-0 items-center justify-center border-r border-[rgb(var(--border))] text-[rgb(var(--muted))] hover:bg-[rgb(var(--panel2))]"
                                                 aria-expanded={open}
                                                 aria-label={open ? "收合子分類" : "展開子分類"}
                                                 onClick={() =>
@@ -176,6 +177,9 @@ export function MarketingCategoryManager({
                                                     className={`h-4 w-4 transition ${open ? "rotate-90" : ""}`}
                                                     aria-hidden="true"
                                                 />
+                                                <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                                                    {open ? "收合子分類" : "展開子分類"}
+                                                </span>
                                             </button>
                                             <button
                                                 type="button"

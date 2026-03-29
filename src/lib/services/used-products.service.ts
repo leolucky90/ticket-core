@@ -200,6 +200,8 @@ export async function listUsedProducts(filters?: {
     keyword?: string;
     saleStatus?: UsedProductSaleStatus | "";
     refurbishmentStatus?: UsedProductRefurbishmentStatus | "";
+    /** 與 `UsedProduct.type` 及商店營銷「二手商品類型」設定之名稱一致；空字串表示不篩選 */
+    usedType?: string;
     onlyPublished?: boolean;
 }): Promise<UsedProduct[]> {
     const scope = await resolveScope();
@@ -211,11 +213,13 @@ export async function listUsedProducts(filters?: {
     const keyword = toText(filters?.keyword, 240).toLowerCase();
     const saleStatus = toText(filters?.saleStatus, 40);
     const refurbishmentStatus = toText(filters?.refurbishmentStatus, 60);
+    const usedType = toText(filters?.usedType, 120);
 
     return list
         .filter((row) => matchesKeyword(row, keyword))
         .filter((row) => (saleStatus ? row.saleStatus === saleStatus : true))
         .filter((row) => (refurbishmentStatus ? row.refurbishmentStatus === refurbishmentStatus : true))
+        .filter((row) => (usedType ? row.type === usedType : true))
         .filter((row) => (filters?.onlyPublished ? row.isPublished : true));
 }
 

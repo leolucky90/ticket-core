@@ -15,8 +15,8 @@
 
 | 項目 | 值 |
 | --- | --- |
-| **版本** | **V1.01** |
-| **最後更正** | **2026-03-29** |
+| **版本** | **V1.11** |
+| **最後更正** | **2026-03-30** |
 
 ---
 
@@ -34,5 +34,15 @@
 
 | 版本 | 日期 | 摘要 |
 | --- | --- | --- |
+| V1.11 | 2026-03-30 | **`project-rules.md`** 補充：未落地／第三方 API 對照指向 `project-summary` 專節 |
+| V1.10 | 2026-03-30 | **`project-summary.md`** 新增「未落地／待細修／第三方 API 對照（實作驗證用）」；**`saas-erp-ai-blueprint.md`** 結論交叉引用該節與 intake 待辦表 |
+| V1.09 | 2026-03-30 | 擴充 **`saas-erp-ai-blueprint.md`**：商業化平台樹、Pricing 矩陣、Stripe（規劃／`companyId` metadata）、Onboarding、白牌、`project-rules`／`project-summary`／`codebase-map` 交叉引用；標註 Stripe 未內建 |
+| V1.08 | 2026-03-30 | 新增 **`docs/saas-erp-ai-blueprint.md`**：SaaS ERP+AI 完整版藍圖（租戶=`companyId`、架構樹、Lv1–9、Dashboard／OCR／Demo Flow、Codex 微調清單）；合併多輪草稿與實作對照 |
+| V1.07 | 2026-03-30 | 權限 Lv1–9 文件化；操作稽核讀取（`audit-log-read-model`）與 `/settings/security/audit-logs`；儀表板估計 COGS／毛利（`lib/reporting/financial-summary`）；Safe import 與資料流文件更新 |
+| V1.06 | 2026-03-30 | 多店面／多倉／IMEI／倉別庫存時間軸（`inventoryLogs`）／調貨／AI 補貨建議：schema + `services/inventory/*`、`services/ai/reorder-service`；Firestore 路徑與 `companyId` canonical 對齊 |
+| V1.05 | 2026-03-30 | Po 草稿：`DimensionPicker` + 商品搜尋 API + `productId` 連動；`draft-editor`；`schema/poDraftProduct`；註記不重複新建 inventory 服務（沿用既有 schema／結帳） |
+| V1.04 | 2026-03-30 | `project-summary` 新增「收據／採購 intake」待辦與後續優化備註；`codebase-map` 維護區加索引連結 |
+| V1.03 | 2026-03-30 | 收據／發票 OCR（Google Vision）→ OpenAI 結構化 PoDraft → Firestore（intakeDocuments／ocrResults／poDrafts／purchaseOrders）；API `document-intake`、`po/confirm`、`po/draft`；`/demo/receipt-po`；採購頁人工確認 UI |
+| V1.02 | 2026-03-29 | 新增商家 `/dashboard/purchase-orders` 採購草稿頁（AI 預留 + 人工建立）；型別／stub service／`lib/ai` placeholder；更新側欄與 codebase-map |
 | V1.01 | 2026-03-29 | 首頁 `/` 顯示 ©、年份與文件集版本；版本與 `documentation-version.ts` 對齊；新增 `docs/ai-chat-starter.md` |
 | V1.00 | 2026-03-29 | 初版文件集版本號與 docs 更新流程 |

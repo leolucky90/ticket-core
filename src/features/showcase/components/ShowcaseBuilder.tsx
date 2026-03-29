@@ -1055,21 +1055,29 @@ export function ShowcaseBuilder({
                                 </div>
                                 <button
                                     type="button"
-                                    className="grid h-9 w-9 place-items-center rounded-[0.85rem] text-lg text-[rgb(var(--text))] transition hover:bg-[rgb(var(--panel2))] disabled:cursor-not-allowed disabled:opacity-40"
+                                    title="縮小預覽"
+                                    className="group relative grid h-9 w-9 place-items-center rounded-[0.85rem] text-lg text-[rgb(var(--text))] transition hover:bg-[rgb(var(--panel2))] disabled:cursor-not-allowed disabled:opacity-40"
                                     onClick={() => updatePreviewScale(-1)}
                                     disabled={previewScale === PREVIEW_SCALE_STEPS[0]}
                                     aria-label="縮小預覽"
                                 >
-                                    -
+                                    <span aria-hidden="true">-</span>
+                                    <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                                        縮小預覽
+                                    </span>
                                 </button>
                                 <button
                                     type="button"
-                                    className="grid h-9 w-9 place-items-center rounded-[0.85rem] text-xl text-[rgb(var(--text))] transition hover:bg-[rgb(var(--panel2))] disabled:cursor-not-allowed disabled:opacity-40"
+                                    title="放大預覽"
+                                    className="group relative grid h-9 w-9 place-items-center rounded-[0.85rem] text-xl text-[rgb(var(--text))] transition hover:bg-[rgb(var(--panel2))] disabled:cursor-not-allowed disabled:opacity-40"
                                     onClick={() => updatePreviewScale(1)}
                                     disabled={previewScale === PREVIEW_SCALE_STEPS[PREVIEW_SCALE_STEPS.length - 1]}
                                     aria-label="放大預覽"
                                 >
-                                    +
+                                    <span aria-hidden="true">+</span>
+                                    <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                                        放大預覽
+                                    </span>
                                 </button>
                                 <button
                                     type="button"

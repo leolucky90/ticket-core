@@ -12,6 +12,7 @@
 補充 **目錄與模組導航**（非規格替代品，不取代上述兩份）:
 
 - `docs/codebase-map.md`
+- `docs/saas-erp-ai-blueprint.md`（**提案／交接用**：SaaS ERP + AI 完整版藍圖，合併架構、Lv1–9、老闆 Dashboard、OCR→PO、A/B Demo Flow、**Pricing／Stripe（規劃）／Onboarding／白牌／商業模式** 與 Codex 微調邊界；**已落地 vs 規劃** 以該檔與本 summary 為準）
 - `docs/ai-chat-starter.md`（新對話給 AI 的一鍵複製指令）
 
 **`docs/` 任一支檔變更時的版本號與更正日：** 單一來源為 `docs/DOCUMENTATION-VERSION.md`（每次變更 docs +0.01 規則見該檔）；首頁顯示之版本字串見 `src/lib/documentation-version.ts`，須與該檔同步。
@@ -78,6 +79,65 @@
 - iteration guardrails 已文件化到 canonical docs，之後 phase 收斂與 docs 更新應只回到 `project-rules.md` / `project-summary.md`
 - `lint` / `tsc` / `build` / `verify` 已通過
 - 目前沒有 lint warning
+- 採購草稿已接上 **收據／發票影像 → Google Vision OCR → OpenAI 結構化 PoDraft → Firestore**（`companies/{companyId}/intakeDocuments|ocrResults|poDrafts|purchaseOrders`），商家於 `/dashboard/purchase-orders` 人工確認後才建立正式採購單；公開驗證頁 `/demo/receipt-po`（API 需商家登入）。環境變數：`OPENAI_API_KEY`、選用 `OPENAI_PO_MODEL`（預設 `gpt-4o-mini`）、Google Vision 用 `GOOGLE_CLOUD_PROJECT_ID`／`GOOGLE_CLOUD_CLIENT_EMAIL`／`GOOGLE_CLOUD_PRIVATE_KEY`
+- Po 草稿品項已支援 **目錄 DimensionPicker（主分類／第二分類／品牌／型號）+ 品項關鍵字、`GET /api/products/search` 綁定 `productId`／SKU、自訂說明、數量×單價→金額**（`draft-editor`／`PoDraftLineItemsEditor`）；`schema/ai/po-draft` 品項欄位含 `productId`；**不重複**新增根層 `Product` 型別（沿用 `merchant-product` + `PoDraftProductSearchHit`）
+- **多店面／多倉／IMEI／倉別庫存時間軸／調貨／AI 補貨建議**：已補 **Firestore 型別與服務層**（`companies/{companyId}` 下 `stores`、`warehouses`、`warehouseInventory`、`stockItems`、`inventoryLogs`、`transfers`）；`companyId` 為 canonical；倉別庫存 key 為 `warehouseId` + `productId`；**不重複**取代既有 `inventory/{productId}` 與 `inventoryMovements`（公司層異動），新倉別時間軸走 `inventoryLogs`；路由／UI 可後續接 `merchant/inventory-write.service` 之 re-export（`transferStock`、`logInventory`、`createStockItem`、`generateReorderSuggestion`）
+- **權限 Lv1–Lv9／操作稽核／財務儀表**：`permissionLevels` + `DEFAULT_PERMISSION_MAP` 為種子；**稽核**讀取優先 **`merchant/audit-log-read-model.service`**（`queryCompanyAuditLogs`），設定頁 **`/settings/security/audit-logs`**；**毛利／估計 COGS** 純函式在 **`lib/reporting/financial-summary.ts`**，儀表板 tab=dashboard 已顯示（與既有營收趨勢並存）
+- **商業化敘事與訂閱規劃（文件）**：`docs/saas-erp-ai-blueprint.md` 已收斂 **STARTER／PRO／BUSINESS／ENTERPRISE** 方案建議、**Stripe Checkout／webhook（metadata 用 `companyId`）規劃**、onboarding／白牌／AI 營運亮點與 **10 步提案 Demo Flow**；**Stripe 與線上收款閉環尚未在程式庫內建**，BossAdmin 公司列表之訂閱時間／金額欄位為營運展示，與實際金流整合前須另對齊
+
+### 收據／採購 intake — 待辦與後續優化（備查）
+
+以下為 **尚未做** 或 **可強化** 的項目，之後迭代可由此檢索；實作時仍須遵守 `project-rules.md`（多租戶 `companyId`、UI 不塞業務邏輯、AI 不逕寫正式資料須人工確認等）。
+
+| 類型 | 項目 | 說明 |
+| --- | --- | --- |
+| 產品／流程 | PDF 上傳 | 目前僅支援影像（JPEG／PNG／WebP／GIF）；PDF 易有解析／效能問題，需另規劃（分頁 raster、或文件 AI）。 |
+| 品質 | OCR → AI 誤差 | 現況為「OCR 錯則結構化易跟錯」；可評估影像前處理、重試、多模型、或欄位層信心閾值與人工標註回饋。 |
+| 安全／營運 | API rate limit | `document-intake`／`po/confirm`／`po/draft` 尚未套全域節流；上線前建議依 IP／公司／使用者限制。 |
+| 安全／營運 | Auth 與權限細化 | 目前為「商家 session + company scope」；可再對照 `PermissionLevel`／`StaffMember`，限制僅部分角色可確認採購單或刪除草稿。 |
+| 稽核 | Audit log | 確認採購單時可寫入 `auditLogs`（誰、何時、`draftId`／`poId`），與既有刪除／安全稽核一致。 |
+| 資料／整合 | Vendor matching | AI 抽出之 `vendorName` 與既有供應商主檔比對、建議或建立關聯。 |
+| 資料／整合 | 庫存／品項連結 | Po 草稿已可選 `products` 或自訂行並帶 `productId`；**採購入庫／庫存 movement 自動沖銷**仍待後續接既有 inventory／入庫流程（勿另建與專案現有 `lib/schema/inventory.ts`、結帳扣庫重複的根目錄 inventory 服務）。 |
+| 架構註記 | 庫存／預約／活動扣庫 | **結帳扣庫、寄存、促銷**等已存在於 checkout／`inventory` schema／merchant 服務；新需求應擴充既有路徑，**不要**依外部草稿再新增一組全域 `inventory`／`reservations` collection 命名與 GPT 式重複實作。 |
+| 資料／整合 | 歷史訂單 RAG／檢索 | 以歷史採購／收據輔助建議或比對（向量庫／查詢策略另議）。 |
+| 平台 | Firestore 規則 | 寫入目前走 Admin SDK（伺服器端）；若未來開客戶端直寫，需補 `companies/{companyId}` 規則與索引檢視。 |
+| 工程 | `lib/ai` 與實作對齊 | `src/lib/ai/purchase-order-draft.ts` 仍為 placeholder 文案；可改為指向實際服務或移除重複語意，避免雙軌誤解。 |
+| i18n | 框架字串 | `feature/receipt-po` 部分文案仍為元件內字典；長期可收斂至 `ui-text.ts` 與其他 merchant 頁一致。 |
+| 維運 | Demo／種子 | `reset-firebase-data.mjs` 未強制種子 intake／PO 測試資料；需要時可選擇性加入示範 doc（不影響現有 demo 帳號流程）。 |
+
+**刻意維持的產品決策（非 bug）：** 不支援 PDF（短期）、不自動建立正式採購單（必須人工確認後才寫入 `purchaseOrders`）。
+
+### 未落地／待細修／第三方 API 對照（實作驗證用）
+
+本節為 **實作前後對照清單**：後續細修、接第三方或收斂架構時，依此逐項驗證並補正；完成項目應回寫本節或上表敘述，並依 `DOCUMENTATION-VERSION.md` bump 版本。**收據／採購 intake 專項細目** 仍以上一節表格為主；**商業化敘事與 Stripe 規劃細節** 見 `docs/saas-erp-ai-blueprint.md`。
+
+#### 商業與訂閱（程式未接或僅展示）
+
+- **Stripe**（Checkout、Webhook、方案／entitlement）：**未內建**。
+- **Pricing UI／依方案鎖功能**：**未做**（方案矩陣為產品建議，非程式強制）。
+- **BossAdmin**：公司列表之訂閱時間／金額欄位為 **展示／營運**，與真實金流整合前須另對齊。
+
+#### 第三方 API（連線狀態總覽）
+
+| 服務 | 用途 | 狀態 |
+| --- | --- | --- |
+| Google Cloud Vision | 收據 OCR | 已接（需 `GOOGLE_CLOUD_*` 等） |
+| OpenAI | Po 結構化、補貨建議等 | 已接（需 `OPENAI_API_KEY` 等） |
+| Stripe | 訂閱收款 | **未接** |
+| Firebase Admin SDK | 伺服器端寫 Firestore | 已接 |
+| 客戶端 Firestore Security Rules | 若未來改為 client 直寫 | **待補**（規則與索引） |
+
+#### 多倉／IMEI／調貨／AI 補貨
+
+- **Firestore 型別與服務層** 已存在；**後台路由／UI 完整操作面** 可續接 `merchant/inventory-write.service` 之 re-export（`transferStock`、`logInventory`、`createStockItem`、`generateReorderSuggestion`）；實作細修時應對照 **已上線頁面** 與本段敘述是否一致。
+
+#### 架構收斂與長期項目（非單一第三方）
+
+- **`commerce.ts`／`types/commerce.ts`**：新功能優先 **focused services／`*-write.service.ts`**，相容層逐步內移（見 Phase 1 與 Safe Starting Point）。
+- **Phase 7 i18n、部分 merchant 頁**：可續收斂至 `ui-text.ts` 等 shared pattern。
+- **Showcase builder**：template 架構仍非完整 dynamic block registry（見 `project-rules.md` Storefront Builder Rule）。
+
+---
 
 ## Phase Progress Map
 
@@ -268,6 +328,7 @@
 - `src/lib/services/merchant/customer-read-model.service.ts`
 - `src/lib/services/merchant/inventory-read-model.service.ts`
 - `src/lib/services/merchant/dashboard-read-model.service.ts`
+- `src/lib/services/merchant/audit-log-read-model.service.ts`
 - `src/lib/services/item-naming-settings.service.ts`
 - `src/lib/services/platform/bossadmin-reporting.service.ts`
 

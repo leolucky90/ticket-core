@@ -21,7 +21,7 @@
 - `docs/project-rules.md`
 - `docs/project-summary.md`
 
-需要快速對齊目錄與路由／模組邊界時，可參考補充導航 `docs/codebase-map.md`（仍以本檔與 project-summary 為 canonical 規格來源）。
+需要快速對齊目錄與路由／模組邊界時，可參考補充導航 `docs/codebase-map.md`（仍以本檔與 project-summary 為 canonical 規格來源）。提案／交接用 **SaaS ERP + AI 完整版藍圖**（租戶隔離、架構樹、權限、Dashboard、OCR→PO、Demo Flow、**Pricing／Stripe／Onboarding／白牌／AI 營運與商業模式敘事**）見 `docs/saas-erp-ai-blueprint.md`。**未落地／第三方 API／實作驗證對照** 見 `docs/project-summary.md` 內 **「未落地／待細修／第三方 API 對照（實作驗證用）」**（與 intake 待辦表並列）。
 
 ## Core Stack
 
@@ -179,6 +179,18 @@ Path: `src/app`
   - 這輪新增了哪些 shared rules / helpers
   - 下一輪安全起手點是什麼
 
+### 權限等級 Lv1–Lv9（摘要）
+
+- Firestore：`companies/{companyId}/permissionLevels/lv1` … `lv9`（見 `schema/permissionLevels.ts`）。
+- 員工實際授權為 **`StaffMember.roleLevel`（1–9）** 與 **`PermissionLevel.permissions` 字串鍵**（見 `permissionKeys.ts`）。
+- 預設「等級 → 能力」種子：`permission-level.service.ts` 的 `DEFAULT_PERMISSION_MAP`（例：Lv9 含 `staff.hardDelete`、`hard_delete_authorized`；Lv8 含多數 staff／安全設定但不含 hard delete）。
+- UI：商家可在 **`/settings/staff/roles`** 檢視／編輯各級顯示名稱與權限列表。
+
+### 操作稽核與財務看數
+
+- **稽核**：寫入使用 `createAuditLog`（`audit-log.service.ts`），讀取列表使用 **`queryCompanyAuditLogs`**（`merchant/audit-log-read-model.service.ts`）；商家頁面 **`/settings/security/audit-logs`** 與刪除紀錄分開。
+- **財務（老闆儀表板）**：儀表板 **`/dashboard?tab=dashboard`** 在既有營收／筆數外，另顯示 **估計 COGS**（銷售明細 × 品項成本）與 **估計毛利**（`lib/reporting/financial-summary.ts`）；無明細時 COGS 為 0，屬產品決策而非 bug。
+
 ## Authentication And Demo Accounts
 
 Planned validation / reset target after Firebase rebuild:
@@ -269,6 +281,13 @@ Company B customer:
 - `companies/{companyId}/settings/*`
 - `companies/{companyId}/settings/itemNaming`
 - `companies/{companyId}/app_config/*`
+- **多店面／多倉／序號（擴充，與既有庫存並存）**
+  - `companies/{companyId}/stores/{storeId}` — 分店
+  - `companies/{companyId}/warehouses/{warehouseId}` — 倉庫（含 `storeId`）
+  - `companies/{companyId}/warehouseInventory/{warehouseId_productId}` — 倉別庫存（key：`warehouseId` + `productId`）
+  - `companies/{companyId}/stockItems/{stockItemId}` — IMEI／序號逐件
+  - `companies/{companyId}/inventoryLogs/{logId}` — 倉別庫存時間軸（調貨、入出庫等）；與既有 `inventoryMovements`（公司層異動紀錄）分工不同，勿重複實作公司層 `inventory/{productId}` 主流程
+  - `companies/{companyId}/transfers/{transferId}` — 跨倉調貨單（選用）
 
 現況主要問題不是沒有模型，而是同一概念在不同層被叫成不同名字:
 
@@ -316,11 +335,11 @@ companies/{companyId}
 ```text
 companies/{companyId}
   -> staffMembers/{staffMemberId}
-  -> permissionLevels/lv{n}
+  -> permissionLevels/lv{n}  （Lv1–Lv9；預設能力映射見 `permission-level.service.ts` 之 `DEFAULT_PERMISSION_MAP`）
+  -> auditLogs/{auditLogId}  （操作稽核：誰對哪個目標做了什麼；與 deleteLogs 分開）
   -> settings/companyProfile
   -> settings/delete-control
   -> deleteLogs/{logId}
-  -> auditLogs/{logId}
 ```
 
 ### Customer And Repair Flow
@@ -905,6 +924,8 @@ merchant zone 長期目標是完整 shared shell system 與 page refactor。
 - merchant activity reads: `@/lib/services/merchant/activity-read-model.service`
 - merchant customer reads: `@/lib/services/merchant/customer-read-model.service`
 - merchant inventory reads: `@/lib/services/merchant/inventory-read-model.service`
+- merchant audit log reads: `@/lib/services/merchant/audit-log-read-model.service`
+- dashboard financial estimates: `@/lib/reporting/financial-summary`
 - dashboard aggregate read: `@/lib/services/merchant/dashboard-read-model.service`
 - boss admin reporting: `@/lib/services/platform/bossadmin-reporting.service`
 

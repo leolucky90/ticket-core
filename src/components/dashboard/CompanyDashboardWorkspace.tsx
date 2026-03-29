@@ -1,11 +1,12 @@
 "use client";
 
-import { type FormEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ItemFormFields } from "@/components/dashboard/ItemFormFields";
 import { MarketingSettingsWorkspace } from "@/components/dashboard/marketing-settings-workspace";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { IconOnlyButton } from "@/components/ui/icon-only-button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,6 +27,8 @@ import type { KnownTicketStatus, QuoteStatus, Ticket } from "@/lib/types/ticket"
 import type { UsedProductTypeSetting } from "@/lib/schema";
 import type { ItemNamingSettings } from "@/lib/schema/itemNamingSettings";
 import { LIST_DISPLAY_OPTIONS } from "@/lib/ui/list-display";
+import { getUiText } from "@/lib/i18n/ui-text";
+import { buildFinancialPeriodSummaryFromSales } from "@/lib/reporting/financial-summary";
 
 export type DashboardTab = "dashboard" | "customers" | "cases" | "activities" | "inventory" | "marketing";
 export type InventoryView = "stock" | "settings" | "stock-in" | "stock-out" | "product-management";
@@ -377,48 +380,6 @@ function SectionTitle({ title, hint }: { title: string; hint?: string }) {
     );
 }
 
-function IconOnlyButton({
-    label,
-    icon,
-    form,
-    formAction,
-    type = "button",
-    variant = "ghost",
-    className,
-    disabled,
-    onClick,
-}: {
-    label: string;
-    icon: ReactNode;
-    form?: string;
-    formAction?: string | ((formData: FormData) => void | Promise<void>);
-    type?: "button" | "submit" | "reset";
-    variant?: "solid" | "ghost";
-    className?: string;
-    disabled?: boolean;
-    onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
-}) {
-    return (
-        <Button
-            form={form}
-            formAction={formAction}
-            type={type}
-            variant={variant}
-            aria-label={label}
-            title={label}
-            disabled={disabled}
-            onClick={onClick}
-            className={`group relative h-10 w-10 !p-0 ${className ?? ""}`.trim()}
-        >
-            {icon}
-            <span className="sr-only">{label}</span>
-            <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                {label}
-            </span>
-        </Button>
-    );
-}
-
 function guardDeleteWithPassword(event: FormEvent<HTMLFormElement>) {
     const form = event.currentTarget;
     const targetText = (form.dataset.deleteTarget ?? "此資料").trim();
@@ -637,6 +598,7 @@ export function CompanyDashboardWorkspace({
     actionTs,
     snapshotTs,
     stats,
+    sales,
     tickets,
     customers,
     activities,
@@ -825,6 +787,8 @@ export function CompanyDashboardWorkspace({
     const visibleCustomerRows = customerRows;
     const visibleCaseTickets = tickets;
     const visibleActivities = activities;
+    const financialSummary = useMemo(() => buildFinancialPeriodSummaryFromSales(sales, products), [sales, products]);
+
     const inventorySummary = useMemo(() => {
         const totalOnHandUnits = products.reduce((sum, product) => sum + Math.max(0, product.onHandQty ?? product.stock), 0);
         const totalReservedUnits = products.reduce((sum, product) => sum + Math.max(0, product.reservedQty ?? 0), 0);
@@ -846,12 +810,17 @@ export function CompanyDashboardWorkspace({
             lowStockCount,
         };
     }, [products]);
-    const dashboardStats = useMemo<MerchantStatItem[]>(
-        () => [
+    const dashboardStats = useMemo<MerchantStatItem[]>(() => {
+        const finance = getUiText(lang).dashboardFinance;
+        return [
             { id: "today-count", label: "當日交易筆數", value: stats.todaySubscriptionCount },
             { id: "today-revenue", label: "當日營收金額", value: formatMoney(stats.todayRevenue, lang) },
             { id: "month-count", label: "當月交易筆數", value: stats.monthSubscriptionCount },
             { id: "month-revenue", label: "當月營收金額", value: formatMoney(stats.monthRevenue, lang) },
+            { id: "today-cogs", label: finance.todayCogs, value: formatMoney(financialSummary.todayCogsEstimate, lang) },
+            { id: "month-cogs", label: finance.monthCogs, value: formatMoney(financialSummary.monthCogsEstimate, lang) },
+            { id: "today-gross", label: finance.todayGross, value: formatMoney(financialSummary.todayGrossProfit, lang) },
+            { id: "month-gross", label: finance.monthGross, value: formatMoney(financialSummary.monthGrossProfit, lang) },
             { id: "customer-count", label: "客戶總數", value: customers.length },
             { id: "open-case-count", label: "進行中案件", value: tickets.filter((ticket) => ticket.status !== "closed").length },
             { id: "active-activities", label: "活動中", value: activeActivities.length },
@@ -863,9 +832,21 @@ export function CompanyDashboardWorkspace({
                     lang,
                 ),
             },
-        ],
-        [activeActivities.length, customers.length, lang, stats.monthRevenue, stats.monthSubscriptionCount, stats.todayRevenue, stats.todaySubscriptionCount, tickets],
-    );
+        ];
+    }, [
+        activeActivities.length,
+        customers.length,
+        financialSummary.monthCogsEstimate,
+        financialSummary.monthGrossProfit,
+        financialSummary.todayCogsEstimate,
+        financialSummary.todayGrossProfit,
+        lang,
+        stats.monthRevenue,
+        stats.monthSubscriptionCount,
+        stats.todayRevenue,
+        stats.todaySubscriptionCount,
+        tickets,
+    ]);
     const renderInventoryLogPanel = () => (
         <MerchantSectionCard title={`操作紀錄（${stockLogs.length}）`} description="時間、商品、數量、操作者">
             {stockLogs.length === 0 ? (
@@ -1008,6 +989,7 @@ export function CompanyDashboardWorkspace({
                         <Card>
                             <SectionTitle title="企業營運儀錶板" hint="交易、客戶、案件與活動趨勢" />
                             <MerchantStatGrid items={dashboardStats} />
+                            <p className="mt-2 text-xs text-[rgb(var(--muted))]">{getUiText(lang).dashboardFinance.hint}</p>
                             <div className="mt-4 flex items-center gap-2">
                                 <Button type="button" variant={range === "day" ? "solid" : "ghost"} onClick={() => setRange("day")}>
                                     日
@@ -1097,6 +1079,7 @@ export function CompanyDashboardWorkspace({
                                         <Link
                                             href="/dashboard?tab=customers"
                                             aria-label="清除"
+                                            title="清除"
                                             className="group absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-[rgb(var(--muted))] hover:bg-[rgb(var(--panel2))] hover:text-[rgb(var(--text))]"
                                         >
                                             <X className="h-4 w-4" aria-hidden="true" />
@@ -1106,7 +1089,13 @@ export function CompanyDashboardWorkspace({
                                             </span>
                                         </Link>
                                     </div>
-                                    <Button type="submit" variant="ghost" aria-label="查詢" className="group relative h-10 w-10 shrink-0 !p-0 flex items-center justify-center">
+                                    <Button
+                                        type="submit"
+                                        variant="ghost"
+                                        aria-label="查詢"
+                                        title="查詢"
+                                        className="group relative h-10 w-10 shrink-0 !p-0 flex items-center justify-center"
+                                    >
                                         <Search className="h-6 w-6 transition-transform group-hover:scale-110" aria-hidden="true" />
                                         <span className="sr-only">查詢</span>
                                         <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
@@ -1118,6 +1107,7 @@ export function CompanyDashboardWorkspace({
                                     type="button"
                                     variant={showCreateCustomerForm ? "solid" : "ghost"}
                                     aria-label="新增"
+                                    title="新增"
                                     className="group relative h-10 w-10 shrink-0 !p-0 flex items-center justify-center"
                                     onClick={() => {
                                         setShowCreateCustomerForm((prev) => !prev);
@@ -1372,6 +1362,7 @@ export function CompanyDashboardWorkspace({
                                         <Link
                                             href="/dashboard?tab=cases"
                                             aria-label="清除"
+                                            title="清除"
                                             className="group absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-[rgb(var(--muted))] hover:bg-[rgb(var(--panel2))] hover:text-[rgb(var(--text))]"
                                         >
                                             <X className="h-4 w-4" aria-hidden="true" />
@@ -1381,7 +1372,13 @@ export function CompanyDashboardWorkspace({
                                             </span>
                                         </Link>
                                     </div>
-                                    <Button type="submit" variant="ghost" aria-label="查詢" className="group relative h-10 w-10 shrink-0 !p-0 flex items-center justify-center">
+                                    <Button
+                                        type="submit"
+                                        variant="ghost"
+                                        aria-label="查詢"
+                                        title="查詢"
+                                        className="group relative h-10 w-10 shrink-0 !p-0 flex items-center justify-center"
+                                    >
                                         <Search className="h-6 w-6 transition-transform group-hover:scale-110" aria-hidden="true" />
                                         <span className="sr-only">查詢</span>
                                         <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
@@ -1393,6 +1390,7 @@ export function CompanyDashboardWorkspace({
                                     type="button"
                                     variant={showCreateCaseForm ? "solid" : "ghost"}
                                     aria-label="新增"
+                                    title="新增"
                                     className="group relative h-10 w-10 shrink-0 !p-0 flex items-center justify-center"
                                     onClick={() => setShowCreateCaseForm((prev) => !prev)}
                                 >
@@ -1580,6 +1578,7 @@ export function CompanyDashboardWorkspace({
                                     type="button"
                                     variant={showCreateActivityForm ? "solid" : "ghost"}
                                     aria-label="新增"
+                                    title="新增"
                                     className="group relative h-10 w-10 shrink-0 !p-0 flex items-center justify-center"
                                     onClick={() => setShowCreateActivityForm((prev) => !prev)}
                                 >
@@ -2427,13 +2426,28 @@ export function CompanyDashboardWorkspace({
                                                         <Link
                                                             href="/dashboard?tab=inventory&inventoryView=product-management"
                                                             aria-label="清除"
+                                                            title="清除"
                                                             className="group absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-[rgb(var(--muted))] hover:bg-[rgb(var(--panel2))] hover:text-[rgb(var(--text))]"
                                                         >
                                                             <X className="h-4 w-4" aria-hidden="true" />
+                                                            <span className="sr-only">清除</span>
+                                                            <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                                                                清除
+                                                            </span>
                                                         </Link>
                                                     </div>
-                                                    <Button type="submit" variant="ghost" aria-label="查詢" className="group relative h-10 w-10 shrink-0 !p-0 flex items-center justify-center">
+                                                    <Button
+                                                        type="submit"
+                                                        variant="ghost"
+                                                        aria-label="查詢"
+                                                        title="查詢"
+                                                        className="group relative h-10 w-10 shrink-0 !p-0 flex items-center justify-center"
+                                                    >
                                                         <Search className="h-6 w-6 transition-transform group-hover:scale-110" aria-hidden="true" />
+                                                        <span className="sr-only">查詢</span>
+                                                        <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                                                            查詢
+                                                        </span>
                                                     </Button>
                                                 </form>
                                             }
@@ -2442,10 +2456,15 @@ export function CompanyDashboardWorkspace({
                                                     type="button"
                                                     variant={showCreateProductForm ? "solid" : "ghost"}
                                                     aria-label="新增"
+                                                    title="新增"
                                                     className="group relative h-10 w-10 shrink-0 !p-0 flex items-center justify-center"
                                                     onClick={() => setShowCreateProductForm((prev) => !prev)}
                                                 >
                                                     <Plus className="h-6 w-6 transition-transform group-hover:scale-110" aria-hidden="true" />
+                                                    <span className="sr-only">新增</span>
+                                                    <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                                                        新增
+                                                    </span>
                                                 </Button>
                                             }
                                         />

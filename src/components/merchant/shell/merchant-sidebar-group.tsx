@@ -8,6 +8,7 @@ import {
     Package,
     ReceiptText,
     Settings2,
+    ShieldCheck,
     ShoppingBag,
     ShoppingCart,
     Ticket,
@@ -35,6 +36,7 @@ const SIDEBAR_ICONS: Record<MerchantSidebarIcon, LucideIcon> = {
     building: Building2,
     settings: Settings2,
     "shopping-cart": ShoppingCart,
+    "shield-check": ShieldCheck,
 };
 
 export function MerchantSidebarGroup({ group, isActive }: MerchantSidebarGroupProps) {

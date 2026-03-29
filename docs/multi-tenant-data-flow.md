@@ -11,12 +11,29 @@ For canonical naming, role-boundary, architecture, and refactor glossary, see:
 
 - `companies/{companyId}`
   - Company root profile (`id`, `name`, `slug`, `subdomain`, owner info)
+  - **Receipt / PO intake（OCR + AI，人工確認後寫入採購單）**
+    - `intakeDocuments/{documentId}` — 檔名、MIME、狀態（`uploaded` → `draft_ready` → `confirmed`）
+    - `ocrResults/{ocrId}` — `documentId`、`rawText`
+    - `poDrafts/{draftId}` — 採購草稿（含 `poDraftSnapshot`、人工確認前不建立正式 PO）
+    - `purchaseOrders/{poId}` — 確認後之採購單快照
+  - 需 **Google Cloud Vision**（`GOOGLE_CLOUD_*`）與 **OpenAI**（`OPENAI_API_KEY`，選用 `OPENAI_PO_MODEL`，預設 `gpt-4o-mini`）。後台仍使用既有 `FIREBASE_ADMIN_JSON_BASE64`。
 - `companies/{companyId}/customers/{customerId}`
   - Company customer profile (`emailLower`, `userUid`, `name`, `phone`, ...)
 - `companies/{companyId}/cases/{caseId}`
   - Case data, must include `companyId` and `customerId`
 - `companies/{companyId}/sales/{saleId}`
   - Sales data, must include `companyId`
+- `companies/{companyId}/permissionLevels/lv{1..9}`
+  - 權限等級定義與 `permissions` 字串陣列（與 `StaffMember.roleLevel` 對應）
+- `companies/{companyId}/auditLogs/{auditLogId}`
+  - 操作稽核（module／action／targetId／operator）；寫入 `createAuditLog`，列表頁 `/settings/security/audit-logs`
+- **Multi-store / warehouse inventory（optional；與既有 `inventory/{productId}` 公司彙總並存）**
+  - `companies/{companyId}/stores/{storeId}` — 分店（`companyId`）
+  - `companies/{companyId}/warehouses/{warehouseId}` — 倉（`companyId`, `storeId`）
+  - `companies/{companyId}/warehouseInventory/{warehouseId_productId}` — 倉別 onHand／reserved／available
+  - `companies/{companyId}/stockItems/{id}` — 逐件 IMEI／序號
+  - `companies/{companyId}/inventoryLogs/{id}` — 倉別異動時間軸（`transfer_in` / `transfer_out` 等）
+  - `companies/{companyId}/transfers/{id}` — 調貨單（選用，`createTransferDoc`）
 - `users/{uid}`
   - Login identity and tenant binding (`role`, `companyId`, `customerId`)
 

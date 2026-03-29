@@ -1,8 +1,8 @@
 "use client";
 
-import type { Dispatch, FormEvent, MouseEvent, ReactNode, SetStateAction } from "react";
+import type { Dispatch, FormEvent, SetStateAction } from "react";
 import { Pencil, Plus, Save, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { IconOnlyButton } from "@/components/ui/icon-only-button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { prepareBrandTypeDelete, prepareBrandTypeRename, submitBrandRename } from "@/components/dashboard/marketing-brand-form-helpers";
@@ -14,49 +14,6 @@ import {
 } from "@/lib/marketing/brand-catalog-helpers";
 import type { DimensionPickerBundle } from "@/lib/types/catalog";
 import type { RepairBrand } from "@/lib/types/repair-brand";
-import { cn } from "@/components/ui/cn";
-
-function IconOnlyButton({
-    label,
-    icon,
-    form,
-    type = "button",
-    variant = "ghost",
-    className,
-    disabled,
-    onClick,
-    formAction,
-}: {
-    label: string;
-    icon: ReactNode;
-    form?: string;
-    type?: "button" | "submit" | "reset";
-    variant?: "solid" | "ghost";
-    className?: string;
-    disabled?: boolean;
-    onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
-    formAction?: string | ((formData: FormData) => void | Promise<void>);
-}) {
-    return (
-        <Button
-            form={form}
-            formAction={formAction}
-            type={type}
-            variant={variant}
-            aria-label={label}
-            title={label}
-            disabled={disabled}
-            onClick={onClick}
-            className={cn("group relative h-10 w-10 !p-0", className)}
-        >
-            {icon}
-            <span className="sr-only">{label}</span>
-            <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                {label}
-            </span>
-        </Button>
-    );
-}
 
 export type MarketingBrandEditorProps = {
     brand: RepairBrand;

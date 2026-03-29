@@ -1,3 +1,5 @@
+export type { FinancialPeriodSummary } from "@/lib/reporting/financial-summary";
+
 export type TrendRange = "day" | "month";
 
 export type RevenuePoint = {
