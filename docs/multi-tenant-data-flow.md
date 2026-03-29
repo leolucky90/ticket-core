@@ -1,5 +1,7 @@
 # Multi-tenant Data Flow
 
+> **Docs 版本／更正：** 見 [`DOCUMENTATION-VERSION.md`](./DOCUMENTATION-VERSION.md)
+
 For canonical naming, role-boundary, architecture, and refactor glossary, see:
 
 - `docs/project-rules.md`

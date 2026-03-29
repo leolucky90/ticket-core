@@ -1,6 +1,8 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { MerchantPageShell } from "@/components/merchant/shell";
 import { StaffForm } from "@/components/staff/StaffForm";
+import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
 import { getPermissionLevels } from "@/lib/services/permission-level.service";
 import { getStaffMemberById, updateStaff } from "@/lib/services/staff.service";
 
@@ -16,6 +18,9 @@ function toBool(formData: FormData, key: string): boolean {
 export default async function EditStaffPage({ params, searchParams }: EditStaffPageProps) {
     const { id } = await params;
     const sp = await searchParams;
+    const cookieStore = await cookies();
+    const lang = getUiLanguage(cookieStore.get("lang")?.value);
+    const uiStaff = getUiText(lang).staffForm;
     const levels = await getPermissionLevels();
     const staff = await getStaffMemberById(id);
     if (!staff) {
@@ -45,9 +50,9 @@ export default async function EditStaffPage({ params, searchParams }: EditStaffP
     }
 
     return (
-        <MerchantPageShell title="Edit Staff" subtitle="編輯員工資料與權限設定" width="default">
+        <MerchantPageShell title={uiStaff.shellTitleEdit} subtitle={uiStaff.shellSubtitleEdit} width="default">
             {sp.flash ? <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2 text-sm">{sp.flash}</div> : null}
-            <StaffForm mode="edit" levels={levels} staff={staff} submitAction={updateAction} />
+            <StaffForm mode="edit" levels={levels} staff={staff} submitAction={updateAction} lang={lang} />
         </MerchantPageShell>
     );
 }

@@ -1,5 +1,7 @@
 # Project Rules
 
+> **Docs 版本／更正：** 見 [`DOCUMENTATION-VERSION.md`](./DOCUMENTATION-VERSION.md)
+
 ## Purpose
 
 `ticket-core` 是 Leo SaaS + AI 的核心專案。
@@ -18,6 +20,8 @@
 
 - `docs/project-rules.md`
 - `docs/project-summary.md`
+
+需要快速對齊目錄與路由／模組邊界時，可參考補充導航 `docs/codebase-map.md`（仍以本檔與 project-summary 為 canonical 規格來源）。
 
 ## Core Stack
 
@@ -150,6 +154,7 @@ Path: `src/app`
 
 ## Iteration Guardrails
 
+- **`docs/` 版本號（AI／開發者必做）：** 凡變更 `docs/` 下任一檔案，必須同步更新 `docs/DOCUMENTATION-VERSION.md`：版本自 **V1.00** 起每次 **+0.01**（例 V1.01、V1.02），並更新「最後更正」日期；若版本號變動，必須同步更新 `src/lib/documentation-version.ts` 之 `DOCUMENTATION_VERSION_DISPLAY`，使首頁 `/` 與文件一致。詳見該檔內規則；其他 docs 頂部僅需保留連結至該檔即可。
 - 不要在迭代過程中新增新的 handoff / phase / recap docs 來分散規則；除非使用者明確要求，否則一律更新既有 canonical docs:
   - `docs/project-rules.md`
   - `docs/project-summary.md`
@@ -806,6 +811,11 @@ Required checks:
 - DB 內保存的商業內容、builder content、名稱、備註、slug、enum code 保持 content-driven；UI 只負責翻譯框架字串
 - status / filter / pagination / empty state / button / flash message 的可切換文案，應優先回到 shared translation key，而不是在 route/component 內各自寫 `lang === "zh" ? ... : ...`
 - 不可把 runtime Google Translate 當作產品 i18n 架構；機器翻譯最多只能作為草稿輔助
+- merchant **員工建立／編輯**表單（含「唯讀安全資訊」區塊）框架字串應使用 `getUiText(lang).staffForm`；server page 以 `cookies().get("lang")` + `getUiLanguage` 決定 `lang`（`zh` | `en`），與其他 merchant settings 頁一致
+
+## Demo / catalog data
+
+- 示範用**品項／庫存／價目**應以**手動在後台建立**或專案內明確的 seed／reset 流程為準；不維護從第三方網站自動爬取匯入商品資料的腳本，以免違反來源網站條款與資料授權。
 
 ## Storefront Builder Rule
 

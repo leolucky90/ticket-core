@@ -1,7 +1,7 @@
 import "server-only";
 import { FieldPath } from "firebase-admin/firestore";
 import { fbAdminDb } from "@/lib/firebase-server";
-import { canHardDelete, canRestore, type PermissionModule, type PermissionSubject } from "@/lib/permissions";
+import { canHardDelete, canRestore, hasLevel, type PermissionModule, type PermissionSubject } from "@/lib/permissions";
 import {
     deleteLogsCollectionPath,
     normalizeDeleteLog,
@@ -153,7 +153,16 @@ function matchesFilter(log: DeleteLog, filter: DeleteLogFilter): boolean {
     const keyword = toText(filter.keyword, 200).toLowerCase();
     if (keyword) {
         const stack = `${log.module} ${log.targetLabel} ${log.targetId} ${log.deleteReason ?? ""}`.toLowerCase();
-        if (!stack.includes(keyword)) return false;
+        let haystack = stack;
+        haystack += ` ${toText(log.restoreReason, 2000)} ${toText(log.hardDeleteReason, 2000)}`;
+        if (log.snapshot && typeof log.snapshot === "object") {
+            const snap = log.snapshot as Record<string, unknown>;
+            const n = typeof snap.name === "string" ? snap.name : "";
+            const em = typeof snap.email === "string" ? snap.email : "";
+            const ph = typeof snap.phone === "string" ? snap.phone : "";
+            haystack += ` ${n} ${em} ${ph}`;
+        }
+        if (!haystack.toLowerCase().includes(keyword)) return false;
     }
 
     const deletedTs = Date.parse(log.deletedAt ?? log.createdAt);
@@ -338,6 +347,15 @@ export async function restoreDeletedRecord(input: {
     if (!log.canRestore) {
         throw new Error("Restore disabled on this record");
     }
+    if (log.status !== "soft_deleted") {
+        if (log.status === "restored") {
+            throw new Error("This record was already restored");
+        }
+        if (log.status === "hard_deleted") {
+            throw new Error("This record was permanently deleted. Use the Lv9 recovery flow if available.");
+        }
+        throw new Error("Invalid delete log status for restore");
+    }
 
     const path = moduleDocPath(companyId, normalizeModuleName(log.module), log.targetId);
     const docRef = fbAdminDb.doc(path);
@@ -387,6 +405,44 @@ export async function restoreDeletedRecord(input: {
     return next;
 }
 
+/**
+ * Removes a delete-log document after hard delete (Lv9 / owner only).
+ * Does not touch entity data — the target doc was already removed during hard delete.
+ */
+export async function purgeHardDeletedDeleteLogRecord(input: { deleteLogId: string; module?: string }): Promise<void> {
+    const operator = await requireCompanyOperator();
+    const companyId = operator.companyId!;
+    const subject = await resolveSubject(companyId);
+    if (!hasLevel(subject, 9) && !subject.isOwner) {
+        throw new Error("Forbidden: Lv9 or owner required to purge delete logs");
+    }
+
+    const logRef = fbAdminDb.collection(deleteLogsCollectionPath(companyId)).doc(toText(input.deleteLogId, 120));
+    const snap = await logRef.get();
+    if (!snap.exists) throw new Error("Delete log not found");
+    const log = normalizeDeleteLog(snap.data() as Partial<DeleteLog> & Pick<DeleteLog, "id" | "module" | "targetId">);
+    if (input.module && normalizeModuleName(log.module) !== normalizeModuleName(input.module)) {
+        throw new Error("Module mismatch");
+    }
+    if (log.status !== "hard_deleted") {
+        throw new Error("Only hard-deleted logs can be purged from the archive");
+    }
+
+    await logRef.delete();
+
+    const security = await getSecuritySettingsUnsafe(companyId);
+    if (security.deleteAuditLogEnabled) {
+        await createAuditLog({
+            companyId,
+            module: log.module,
+            action: "purge_delete_log",
+            targetId: log.targetId,
+            targetType: log.targetType,
+            metadata: { deleteLogId: log.id },
+        });
+    }
+}
+
 export async function hardDeleteRecord(input: {
     companyId?: string;
     deleteLogId: string;
@@ -408,6 +464,15 @@ export async function hardDeleteRecord(input: {
     }
     if (!log.canHardDelete) {
         throw new Error("Hard delete disabled on this record");
+    }
+    if (log.status !== "soft_deleted") {
+        if (log.status === "restored") {
+            throw new Error("Only soft-deleted pending records can be permanently deleted through this flow");
+        }
+        if (log.status === "hard_deleted") {
+            throw new Error("This record is already permanently deleted");
+        }
+        throw new Error("Invalid delete log status for hard delete");
     }
     if (security.requireReasonOnHardDelete && !toText(input.reason, 2000)) {
         throw new Error("Hard delete reason required");

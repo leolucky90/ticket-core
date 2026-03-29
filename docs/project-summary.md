@@ -1,11 +1,22 @@
 # Project Summary
 
+> **Docs 版本／更正：** 見 [`DOCUMENTATION-VERSION.md`](./DOCUMENTATION-VERSION.md)
+
 ## How To Use This File Set
 
 之後新的對話、摘要更新、handoff 都以這兩個檔案為主:
 
 - `docs/project-rules.md`
 - `docs/project-summary.md`
+
+補充 **目錄與模組導航**（非規格替代品，不取代上述兩份）:
+
+- `docs/codebase-map.md`
+- `docs/ai-chat-starter.md`（新對話給 AI 的一鍵複製指令）
+
+**`docs/` 任一支檔變更時的版本號與更正日：** 單一來源為 `docs/DOCUMENTATION-VERSION.md`（每次變更 docs +0.01 規則見該檔）；首頁顯示之版本字串見 `src/lib/documentation-version.ts`，須與該檔同步。
+
+**新對話一鍵複製給 AI：** `docs/ai-chat-starter.md`。
 
 如果要在新對話延續上下文，應先讀這兩個檔案，再開始工作。
 
@@ -52,6 +63,8 @@
 - builder save / image upload / theme sync 已補齊 visible processing state，避免 silent async actions
 - Phase 7 i18n consistency baseline 已開始收斂到 shared UI vocabulary 與 UI language provider
 - shared shell / processing / settings / delete logs / boss admin builder 已開始共用同一套 bilingual UI keys，減少 page-local hard-coded framework text
+- 員工建立／編輯頁（`StaffForm`）與「唯讀安全資訊」已納入 `src/lib/i18n/ui-text.ts` 的 `staffForm` 中英 key；語系與 cookie `lang` 對齊
+- 示範品項／庫存資料以手動建立或既有 seed 為準；不內建第三方網站商品爬取匯入腳本
 - Phase 8 builder template baseline 已開始收斂到 showcase block registry、instance order model 與 variant-aware preview renderer
 - storefront builder 不再只綁死固定 block map；已支援 template insertion / remove / reorder 與 hero / ad variants
 - merchant catalog 已支援主分類 / 第二分類階層與 `fullPath` 顯示基線，marketing / item management 共用同一套分類語意

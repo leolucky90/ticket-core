@@ -1,6 +1,8 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { MerchantPageShell } from "@/components/merchant/shell";
 import { StaffForm } from "@/components/staff/StaffForm";
+import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
 import { getPermissionLevels } from "@/lib/services/permission-level.service";
 import { createStaff } from "@/lib/services/staff.service";
 
@@ -9,6 +11,9 @@ function toBool(formData: FormData, key: string): boolean {
 }
 
 export default async function NewStaffPage() {
+    const cookieStore = await cookies();
+    const lang = getUiLanguage(cookieStore.get("lang")?.value);
+    const uiStaff = getUiText(lang).staffForm;
     const levels = await getPermissionLevels();
 
     async function createAction(formData: FormData): Promise<void> {
@@ -34,8 +39,8 @@ export default async function NewStaffPage() {
     }
 
     return (
-        <MerchantPageShell title="Create Staff" subtitle="建立員工帳號並設定初始權限" width="default">
-            <StaffForm mode="create" levels={levels} submitAction={createAction} />
+        <MerchantPageShell title={uiStaff.shellTitleCreate} subtitle={uiStaff.shellSubtitleCreate} width="default">
+            <StaffForm mode="create" levels={levels} submitAction={createAction} lang={lang} />
         </MerchantPageShell>
     );
 }

@@ -1,9 +1,16 @@
+import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { MerchantPageShell } from "@/components/merchant/shell";
 import { StaffDeletedRecordsPanel } from "@/components/staff/StaffDeletedRecordsPanel";
 import { listDeleteLogs } from "@/lib/services/delete-log.service";
-import { hardDeleteStaff, restoreStaff } from "@/lib/services/staff.service";
+import {
+    hardDeleteStaff,
+    purgeStaffDeleteLog,
+    restoreStaff,
+    restoreStaffFromHardDeletedLog,
+} from "@/lib/services/staff.service";
+import { requireCompanyOperator } from "@/lib/services/access-control";
 
 type StaffDeletedPageProps = {
     searchParams: Promise<{
@@ -24,11 +31,22 @@ export default async function StaffDeletedPage({ searchParams }: StaffDeletedPag
     const sp = await searchParams;
     const keyword = (sp.keyword ?? "").trim();
     const title = lang === "zh" ? "員工刪除紀錄" : "Deleted Staff Records";
-    const subtitle = lang === "zh" ? "員工誤刪恢復與永久刪除操作。" : "Review deleted staff records and handle restore or hard-delete actions.";
-    const logs = await listDeleteLogs({
+    const subtitle =
+        lang === "zh"
+            ? "待處理清單、歷史紀錄與（Lv9）永久刪除後處理。"
+            : "Pending queue, history, and Lv9 hard-delete archive.";
+
+    const operator = await requireCompanyOperator();
+    const canViewVault = operator.roleLevel >= 9 || operator.isOwner;
+
+    const allLogs = await listDeleteLogs({
         module: "staff",
         keyword,
     });
+
+    const queueLogs = allLogs.filter((l) => l.status === "soft_deleted");
+    const historyLogs = allLogs;
+    const vaultLogs = canViewVault ? allLogs.filter((l) => l.status === "hard_deleted") : [];
 
     async function restoreAction(formData: FormData): Promise<void> {
         "use server";
@@ -40,9 +58,10 @@ export default async function StaffDeletedPage({ searchParams }: StaffDeletedPag
                 resetPassword: formData.get("resetPassword") === "on",
                 requirePasswordChange: formData.get("requirePasswordChange") === "on",
             });
-            redirectWith("員工已恢復");
+            redirectWith(lang === "zh" ? "員工已恢復" : "Staff member restored.");
         } catch (error) {
-            redirectWith(error instanceof Error ? error.message : "恢復失敗");
+            if (isRedirectError(error)) throw error;
+            redirectWith(error instanceof Error ? error.message : lang === "zh" ? "恢復失敗" : "Restore failed");
         }
     }
 
@@ -54,20 +73,52 @@ export default async function StaffDeletedPage({ searchParams }: StaffDeletedPag
                 reason: String(formData.get("reason") ?? ""),
                 authorizationPassword: String(formData.get("authorizationPassword") ?? ""),
             });
-            redirectWith("員工已永久刪除");
+            redirectWith(lang === "zh" ? "員工已永久刪除" : "Staff member permanently deleted.");
         } catch (error) {
-            redirectWith(error instanceof Error ? error.message : "永久刪除失敗");
+            if (isRedirectError(error)) throw error;
+            redirectWith(error instanceof Error ? error.message : lang === "zh" ? "永久刪除失敗" : "Hard delete failed");
+        }
+    }
+
+    async function restoreHardDeleteAction(formData: FormData): Promise<void> {
+        "use server";
+        try {
+            await restoreStaffFromHardDeletedLog({
+                deleteLogId: String(formData.get("deleteLogId") ?? ""),
+                restoreReason: String(formData.get("restoreReason") ?? ""),
+                restoreMode: formData.get("restoreMode") === "inactive" ? "inactive" : "active",
+            });
+            redirectWith(lang === "zh" ? "已從永久刪除存檔復原員工資料" : "Staff data restored from hard-delete archive.");
+        } catch (error) {
+            if (isRedirectError(error)) throw error;
+            redirectWith(error instanceof Error ? error.message : lang === "zh" ? "復原失敗" : "Recovery failed");
+        }
+    }
+
+    async function purgeDeleteLogAction(formData: FormData): Promise<void> {
+        "use server";
+        try {
+            await purgeStaffDeleteLog(String(formData.get("deleteLogId") ?? ""));
+            redirectWith(lang === "zh" ? "已從資料庫移除該筆刪除紀錄" : "Delete log entry removed.");
+        } catch (error) {
+            if (isRedirectError(error)) throw error;
+            redirectWith(error instanceof Error ? error.message : lang === "zh" ? "移除失敗" : "Purge failed");
         }
     }
 
     return (
         <MerchantPageShell title={title} subtitle={subtitle} width="index">
             <StaffDeletedRecordsPanel
-                logs={logs}
+                queueLogs={queueLogs}
+                historyLogs={historyLogs}
+                vaultLogs={vaultLogs}
+                canViewVault={canViewVault}
                 keyword={keyword}
                 flash={sp.flash}
                 restoreAction={restoreAction}
                 hardDeleteAction={hardDeleteAction}
+                restoreHardDeleteAction={restoreHardDeleteAction}
+                purgeDeleteLogAction={purgeDeleteLogAction}
                 lang={lang}
             />
         </MerchantPageShell>

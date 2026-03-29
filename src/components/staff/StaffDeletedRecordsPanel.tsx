@@ -1,17 +1,24 @@
-import { RotateCcw, Search, Trash2 } from "lucide-react";
+import { RotateCcw, Search } from "lucide-react";
 import { MerchantListShell, MerchantSectionCard, SearchToolbar } from "@/components/merchant/shell";
 import { MerchantPredictiveSearchInput } from "@/components/merchant/search";
 import type { DeleteLog } from "@/lib/schema";
+import { formatIsoForDisplay } from "@/lib/format/datetime-display";
 import { IconActionButton } from "@/components/ui/icon-action-button";
-import { IconTextActionButton } from "@/components/ui/icon-text-action-button";
-import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { StaffDeletedPendingBlock } from "@/components/staff/StaffDeletedPendingBlock";
+import { StaffDeletedVaultBlock } from "@/components/staff/StaffDeletedVaultBlock";
+import { primaryReasonForLog, snapshotName } from "@/components/staff/staff-deleted-helpers";
 
 type StaffDeletedRecordsPanelProps = {
-    logs: DeleteLog[];
+    queueLogs: DeleteLog[];
+    historyLogs: DeleteLog[];
+    vaultLogs: DeleteLog[];
+    canViewVault: boolean;
     keyword: string;
     restoreAction: (formData: FormData) => Promise<void>;
     hardDeleteAction: (formData: FormData) => Promise<void>;
+    restoreHardDeleteAction: (formData: FormData) => Promise<void>;
+    purgeDeleteLogAction: (formData: FormData) => Promise<void>;
     flash?: string;
     lang: "zh" | "en";
 };
@@ -22,19 +29,178 @@ function statusTone(status: DeleteLog["status"]) {
     return "warning";
 }
 
-function statusLabel(status: DeleteLog["status"], lang: "zh" | "en"): string {
+function logStatusLabel(status: DeleteLog["status"], lang: "zh" | "en"): string {
     if (lang === "en") {
         if (status === "restored") return "Restored";
-        if (status === "hard_deleted") return "Hard Deleted";
-        return "Soft Deleted";
+        if (status === "hard_deleted") return "Hard deleted";
+        return "Soft deleted (pending)";
     }
-    if (status === "restored") return "已回復";
+    if (status === "restored") return "已復原";
     if (status === "hard_deleted") return "已永久刪除";
-    return "已軟刪除";
+    return "軟刪除（待處理）";
 }
 
-export function StaffDeletedRecordsPanel({ logs, keyword, restoreAction, hardDeleteAction, flash, lang }: StaffDeletedRecordsPanelProps) {
-    const deletedStaffSuggestions = logs.map((log) => {
+export function StaffDeletedRecordsPanel({
+    queueLogs,
+    historyLogs,
+    vaultLogs,
+    canViewVault,
+    keyword,
+    restoreAction,
+    hardDeleteAction,
+    restoreHardDeleteAction,
+    purgeDeleteLogAction,
+    flash,
+    lang,
+}: StaffDeletedRecordsPanelProps) {
+    const zh = lang === "zh";
+    const ui = zh
+        ? {
+              searchPlaceholder: "搜尋姓名 / 信箱 / 電話",
+              search: "搜尋",
+              clearSearch: "清除搜尋",
+              clearSearchTip: "清除搜尋條件",
+              pendingTitle: "待處理（軟刪除）",
+              pendingDesc: (n: number) => `共 ${n} 筆待恢復或永久刪除`,
+              pendingEmptyTitle: "沒有待處理的軟刪除員工",
+              pendingEmptyDesc: "軟刪除後尚未恢復或永久刪除的紀錄會出現在此；操作完成後會從此清單移除。",
+              historyTitle: "操作歷史",
+              historyDesc: (n: number) => `共 ${n} 筆紀錄（僅供查閱）`,
+              historyScrollHint: "資料多時可於下方區域捲動瀏覽。",
+              historyEmpty: "尚無紀錄",
+              historyColStaff: "員工",
+              historyColStatus: "紀錄狀態",
+              historyColReason: "原因",
+              historyColOperationTime: "操作時間",
+              historyColRestored: "恢復時間",
+              historyColHard: "永久刪除時間",
+              vaultTitle: "Lv9 · 永久刪除存檔",
+              vaultDesc: (n: number) => `共 ${n} 筆（可復原員工資料或移除紀錄）`,
+              vaultEmpty: "沒有永久刪除存檔",
+              vaultPurgeNote: "僅移除刪除紀錄文件，不影響已不存在的員工資料檔。",
+              restoreReason: "恢復原因",
+              restoreModeActive: "恢復為啟用 (active)",
+              restoreModeInactive: "恢復為停用 (inactive)",
+              hardDeleteReason: "永久刪除原因",
+              authPassword: "授權密碼",
+              hardDeleteWarn: "此操作將永久移除員工資料，僅限授權人員。請於視窗內填寫原因與授權密碼。",
+              pendingScrollHint: "資料多時可於下方區域捲動瀏覽；操作請點圖示並於彈出視窗填寫。",
+              restoreTooltip: "恢復員工",
+              hardDeleteTooltip: "永久刪除員工",
+              restoreModalTitle: "恢復員工",
+              hardModalTitle: "永久刪除員工",
+              modalCancel: "取消",
+              modalSubmitRestore: "確認恢復",
+              modalSubmitHard: "確認永久刪除",
+              phone: "電話",
+              email: "Email",
+              deletedBy: "刪除者",
+              actions: "操作",
+              vaultScrollHint: "可於區域內捲動；操作請點圖示並於視窗確認。",
+              vaultRestoreTooltip: "復原員工資料",
+              vaultPurgeTooltip: "移除刪除紀錄",
+              vaultRestoreModalTitle: "從存檔復原員工",
+              vaultPurgeModalTitle: "移除刪除紀錄",
+              vaultPurgeModalBody: "將從資料庫刪除此筆刪除紀錄文件，無法還原此紀錄本身。確定要繼續嗎？",
+              modalSubmitPurge: "確認移除",
+          }
+        : {
+              searchPlaceholder: "Search name / email / phone",
+              search: "Search",
+              clearSearch: "Clear",
+              clearSearchTip: "Clear search",
+              pendingTitle: "Pending (soft-deleted)",
+              pendingDesc: (n: number) => `${n} pending — restore or hard-delete`,
+              pendingEmptyTitle: "No pending soft-deleted staff",
+              pendingEmptyDesc: "Records appear here until restored or hard-deleted; then they leave this list.",
+              historyTitle: "History",
+              historyDesc: (n: number) => `${n} record(s) (read-only)`,
+              historyScrollHint: "Scroll the area below when there are many rows.",
+              historyEmpty: "No history yet",
+              historyColStaff: "Staff",
+              historyColStatus: "Log status",
+              historyColReason: "Reason",
+              historyColOperationTime: "Operation time",
+              historyColRestored: "Restored at",
+              historyColHard: "Hard-deleted at",
+              vaultTitle: "Lv9 · Hard-delete archive",
+              vaultDesc: (n: number) => `${n} in archive — restore data or purge log`,
+              vaultEmpty: "No hard-delete archive entries",
+              vaultPurgeNote: "Removes only the delete-log document.",
+              restoreReason: "Restore reason",
+              restoreModeActive: "Restore as active",
+              restoreModeInactive: "Restore as inactive",
+              hardDeleteReason: "Hard delete reason",
+              authPassword: "Authorization password",
+              hardDeleteWarn: "This permanently removes the staff document. Enter reason and authorization password below.",
+              pendingScrollHint: "Scroll the list below when needed. Use icons — a dialog will ask for details.",
+              restoreTooltip: "Restore staff",
+              hardDeleteTooltip: "Hard-delete staff",
+              restoreModalTitle: "Restore staff",
+              hardModalTitle: "Hard-delete staff",
+              modalCancel: "Cancel",
+              modalSubmitRestore: "Confirm restore",
+              modalSubmitHard: "Confirm hard delete",
+              phone: "Phone",
+              email: "Email",
+              deletedBy: "Deleted by",
+              actions: "Actions",
+              vaultScrollHint: "Scroll inside the frame. Use icons to open confirmation dialogs.",
+              vaultRestoreTooltip: "Restore staff data",
+              vaultPurgeTooltip: "Remove log entry",
+              vaultRestoreModalTitle: "Restore from archive",
+              vaultPurgeModalTitle: "Remove delete log",
+              vaultPurgeModalBody: "This deletes the delete-log document from the database. This cannot be undone. Continue?",
+              modalSubmitPurge: "Remove log",
+          };
+
+    const pendingUi = {
+        historyColStaff: ui.historyColStaff,
+        historyColReason: ui.historyColReason,
+        historyColOperationTime: ui.historyColOperationTime,
+        phone: ui.phone,
+        email: ui.email,
+        deletedBy: ui.deletedBy,
+        actions: ui.actions,
+        pendingScrollHint: ui.pendingScrollHint,
+        restoreTooltip: ui.restoreTooltip,
+        hardDeleteTooltip: ui.hardDeleteTooltip,
+        restoreModalTitle: ui.restoreModalTitle,
+        hardModalTitle: ui.hardModalTitle,
+        modalCancel: ui.modalCancel,
+        modalSubmitRestore: ui.modalSubmitRestore,
+        modalSubmitHard: ui.modalSubmitHard,
+        restoreReason: ui.restoreReason,
+        restoreModeActive: ui.restoreModeActive,
+        restoreModeInactive: ui.restoreModeInactive,
+        hardDeleteReason: ui.hardDeleteReason,
+        authPassword: ui.authPassword,
+        hardDeleteWarn: ui.hardDeleteWarn,
+    };
+
+    const vaultUi = {
+        historyColStaff: ui.historyColStaff,
+        historyColReason: ui.historyColReason,
+        historyColOperationTime: ui.historyColOperationTime,
+        historyColHard: ui.historyColHard,
+        actions: ui.actions,
+        vaultScrollHint: ui.vaultScrollHint,
+        restoreTooltip: ui.vaultRestoreTooltip,
+        purgeTooltip: ui.vaultPurgeTooltip,
+        restoreModalTitle: ui.vaultRestoreModalTitle,
+        purgeModalTitle: ui.vaultPurgeModalTitle,
+        purgeModalBody: ui.vaultPurgeModalBody,
+        modalCancel: ui.modalCancel,
+        modalSubmitRestore: ui.modalSubmitRestore,
+        modalSubmitPurge: ui.modalSubmitPurge,
+        restoreReason: ui.restoreReason,
+        restoreModeActive: ui.restoreModeActive,
+        restoreModeInactive: ui.restoreModeInactive,
+        vaultPurgeNote: ui.vaultPurgeNote,
+    };
+
+    const allForSearch = historyLogs;
+    const deletedStaffSuggestions = allForSearch.map((log) => {
         const snapshot = log.snapshot ?? {};
         const name = typeof snapshot.name === "string" ? snapshot.name : log.targetLabel;
         const phone = typeof snapshot.phone === "string" ? snapshot.phone : "";
@@ -43,13 +209,20 @@ export function StaffDeletedRecordsPanel({ logs, keyword, restoreAction, hardDel
             id: log.id,
             value: name,
             title: name,
-            subtitle: [email, phone, log.deletedAt].filter(Boolean).join(" / ") || undefined,
-            keywords: [name, phone, email, log.targetLabel, log.deletedByName, log.deletedBy, log.deleteReason].filter((value): value is string => Boolean(value)),
+            subtitle: [email, formatIsoForDisplay(log.deletedAt, lang)].filter(Boolean).join(" / ") || undefined,
+            keywords: [
+                name,
+                phone,
+                email,
+                log.targetLabel,
+                log.deletedByName,
+                log.deletedBy,
+                log.deleteReason,
+                log.restoreReason,
+                log.hardDeleteReason,
+            ].filter((value): value is string => Boolean(value)),
         };
     });
-    const zhUi = lang === "zh";
-    const title = zhUi ? "員工刪除紀錄" : "Deleted Staff Records";
-    const description = zhUi ? `共 ${logs.length} 筆刪除紀錄` : `${logs.length} deleted record(s)`;
 
     const toolbar = (
         <div className="space-y-3">
@@ -59,12 +232,12 @@ export function StaffDeletedRecordsPanel({ logs, keyword, restoreAction, hardDel
                         <MerchantPredictiveSearchInput
                             name="keyword"
                             defaultValue={keyword}
-                            placeholder={zhUi ? "搜尋姓名 / 信箱 / 電話" : "Search name / email / phone"}
+                            placeholder={ui.searchPlaceholder}
                             localSuggestions={deletedStaffSuggestions}
                             className="max-w-sm flex-1"
                         />
-                        <IconActionButton type="submit" icon={Search} label={zhUi ? "搜尋刪除紀錄" : "Search Deleted Records"} tooltip={zhUi ? "搜尋刪除紀錄" : "Search Deleted Records"} />
-                        <IconActionButton href="/staff/deleted" icon={RotateCcw} label={zhUi ? "清除搜尋" : "Clear Search"} tooltip={zhUi ? "清除搜尋條件" : "Clear search filters"} />
+                        <IconActionButton type="submit" icon={Search} label={ui.search} tooltip={ui.search} className="h-10 w-10" />
+                        <IconActionButton href="/staff/deleted" icon={RotateCcw} label={ui.clearSearch} tooltip={ui.clearSearchTip} className="h-10 w-10" />
                     </form>
                 }
             />
@@ -72,105 +245,74 @@ export function StaffDeletedRecordsPanel({ logs, keyword, restoreAction, hardDel
         </div>
     );
 
-    const list = (
+    const pendingList = (
         <MerchantSectionCard
-            title={title}
-            description={description}
+            title={ui.pendingTitle}
+            description={ui.pendingDesc(queueLogs.length)}
             emptyState={
-                logs.length === 0
+                queueLogs.length === 0
                     ? {
                           icon: Search,
-                          title: zhUi ? "沒有員工刪除紀錄" : "No deleted staff records",
-                          description: zhUi ? "符合條件的員工刪除紀錄會顯示在這裡。" : "Matching deleted staff records will appear here.",
+                          title: ui.pendingEmptyTitle,
+                          description: ui.pendingEmptyDesc,
                       }
                     : undefined
             }
         >
-            {logs.length === 0 ? null : (
-                <div className="overflow-x-auto">
-                    <table className="w-full min-w-[980px] text-sm">
-                        <thead className="bg-[rgb(var(--panel2))] text-[rgb(var(--muted))]">
+            {queueLogs.length === 0 ? null : (
+                <StaffDeletedPendingBlock
+                    queueLogs={queueLogs}
+                    restoreAction={restoreAction}
+                    hardDeleteAction={hardDeleteAction}
+                    lang={lang}
+                    ui={pendingUi}
+                />
+            )}
+        </MerchantSectionCard>
+    );
+
+    const historyList = (
+        <MerchantSectionCard
+            title={ui.historyTitle}
+            description={
+                historyLogs.length > 0 ? `${ui.historyDesc(historyLogs.length)} ${ui.historyScrollHint}` : ui.historyDesc(historyLogs.length)
+            }
+            emptyState={
+                historyLogs.length === 0
+                    ? {
+                          icon: Search,
+                          title: ui.historyEmpty,
+                          description: zh ? "符合搜尋條件的紀錄會顯示於此。" : "Matching records appear here.",
+                      }
+                    : undefined
+            }
+        >
+            {historyLogs.length === 0 ? null : (
+                <div className="max-h-[min(60vh,520px)] overflow-x-auto overflow-y-auto rounded-xl border border-[rgb(var(--border))]">
+                    <table className={`w-full text-sm ${canViewVault ? "min-w-[900px]" : "min-w-[760px]"}`}>
+                        <thead className="sticky top-0 z-10 border-b border-[rgb(var(--border))] bg-[rgb(var(--panel2))] text-[rgb(var(--muted))] shadow-[0_1px_0_rgb(var(--border))]">
                             <tr>
-                                <th className="px-3 py-2 text-left font-medium">姓名</th>
-                                <th className="px-3 py-2 text-left font-medium">電話</th>
-                                <th className="px-3 py-2 text-left font-medium">Email</th>
-                                <th className="px-3 py-2 text-left font-medium">地址</th>
-                                <th className="px-3 py-2 text-left font-medium">權限</th>
-                                <th className="px-3 py-2 text-left font-medium">刪除者</th>
-                                <th className="px-3 py-2 text-left font-medium">刪除原因</th>
-                                <th className="px-3 py-2 text-left font-medium">刪除時間</th>
-                                <th className="px-3 py-2 text-left font-medium">狀態</th>
-                                <th className="px-3 py-2 text-left font-medium">操作</th>
+                                <th className="px-3 py-2 text-left font-medium">{ui.historyColStaff}</th>
+                                <th className="px-3 py-2 text-left font-medium">{ui.historyColStatus}</th>
+                                <th className="px-3 py-2 text-left font-medium">{ui.historyColReason}</th>
+                                <th className="px-3 py-2 text-left font-medium">{ui.historyColOperationTime}</th>
+                                <th className="px-3 py-2 text-left font-medium">{ui.historyColRestored}</th>
+                                {canViewVault ? <th className="px-3 py-2 text-left font-medium">{ui.historyColHard}</th> : null}
                             </tr>
                         </thead>
                         <tbody>
-                            {logs.map((log) => {
-                                const snapshot = log.snapshot ?? {};
-                                const name = typeof snapshot.name === "string" ? snapshot.name : log.targetLabel;
-                                const phone = typeof snapshot.phone === "string" ? snapshot.phone : "-";
-                                const email = typeof snapshot.email === "string" ? snapshot.email : "-";
-                                const address = typeof snapshot.address === "string" ? snapshot.address : "-";
-                                const roleLevel = typeof snapshot.roleLevel === "number" ? snapshot.roleLevel : "-";
-                                const roleName = typeof snapshot.roleNameSnapshot === "string" ? snapshot.roleNameSnapshot : "-";
-                                return (
-                                    <tr key={log.id} className="border-t border-[rgb(var(--border))] align-top">
-                                        <td className="px-3 py-2">{name}</td>
-                                        <td className="px-3 py-2">{phone}</td>
-                                        <td className="px-3 py-2">{email}</td>
-                                        <td className="px-3 py-2">{address}</td>
-                                        <td className="px-3 py-2">
-                                            <div className="grid gap-1">
-                                                <span>Lv{roleLevel}</span>
-                                                <span className="text-xs text-[rgb(var(--muted))]">{roleName}</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-3 py-2">{log.deletedByName || log.deletedBy || "-"}</td>
-                                        <td className="px-3 py-2">{log.deleteReason || "-"}</td>
-                                        <td className="px-3 py-2">{log.deletedAt || "-"}</td>
-                                        <td className="px-3 py-2">
-                                            <StatusBadge label={statusLabel(log.status, lang)} tone={statusTone(log.status)} />
-                                        </td>
-                                        <td className="px-3 py-2">
-                                            <div className="grid gap-2">
-                                                <form action={restoreAction} className="grid gap-1">
-                                                    <input type="hidden" name="deleteLogId" value={log.id} />
-                                                    <Input name="restoreReason" placeholder={zhUi ? "恢復原因" : "Restore reason"} required className="h-7 text-xs" />
-                                                    <select name="restoreMode" defaultValue="active" className="h-7 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 text-xs">
-                                                        <option value="active">{zhUi ? "恢復為 active" : "Restore as active"}</option>
-                                                        <option value="inactive">{zhUi ? "恢復為 inactive" : "Restore as inactive"}</option>
-                                                    </select>
-                                                    <label className="flex items-center gap-1 text-xs">
-                                                        <input name="resetPassword" type="checkbox" className="h-3.5 w-3.5 accent-[rgb(var(--accent))]" />
-                                                        {zhUi ? "重置密碼" : "Reset password"}
-                                                    </label>
-                                                    <label className="flex items-center gap-1 text-xs">
-                                                        <input name="requirePasswordChange" type="checkbox" className="h-3.5 w-3.5 accent-[rgb(var(--accent))]" />
-                                                        {zhUi ? "下次登入要求改密碼" : "Require password change on next sign-in"}
-                                                    </label>
-                                                    <div className="flex flex-wrap gap-1">
-                                                        <IconTextActionButton type="submit" icon={RotateCcw} label={zhUi ? "恢復員工" : "Restore Staff"} tooltip={zhUi ? "恢復員工資料" : "Restore staff record"} className="h-8 px-3 text-xs">
-                                                            {zhUi ? "恢復員工" : "Restore Staff"}
-                                                        </IconTextActionButton>
-                                                    </div>
-                                                </form>
-                                                <form action={hardDeleteAction} className="grid gap-1">
-                                                    <input type="hidden" name="deleteLogId" value={log.id} />
-                                                    <p className="text-[11px] text-[rgb(var(--muted))]">
-                                                        {zhUi
-                                                            ? "此操作將永久移除員工資料，完成後無法復原，僅限最高權限或授權人員操作"
-                                                            : "This permanently removes the staff record and cannot be undone. Use only with proper authorization."}
-                                                    </p>
-                                                    <Input name="reason" placeholder={zhUi ? "永久刪除原因" : "Hard delete reason"} required className="h-7 text-xs" />
-                                                    <Input name="authorizationPassword" placeholder={zhUi ? "授權密碼" : "Authorization password"} type="password" required className="h-7 text-xs" />
-                                                    <IconTextActionButton type="submit" icon={Trash2} label={zhUi ? "永久刪除員工" : "Hard Delete Staff"} tooltip={zhUi ? "永久刪除員工資料" : "Permanently delete the staff record"} className="h-8 px-3 text-xs">
-                                                        {zhUi ? "永久刪除員工" : "Hard Delete Staff"}
-                                                    </IconTextActionButton>
-                                                </form>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
+                            {historyLogs.map((log) => (
+                                <tr key={log.id} className="border-t border-[rgb(var(--border))] align-top">
+                                    <td className="px-3 py-2">{snapshotName(log)}</td>
+                                    <td className="px-3 py-2">
+                                        <StatusBadge label={logStatusLabel(log.status, lang)} tone={statusTone(log.status)} />
+                                    </td>
+                                    <td className="max-w-[18rem] px-3 py-2 break-words">{primaryReasonForLog(log)}</td>
+                                    <td className="px-3 py-2 whitespace-nowrap">{formatIsoForDisplay(log.deletedAt, lang)}</td>
+                                    <td className="px-3 py-2 whitespace-nowrap">{formatIsoForDisplay(log.restoredAt, lang)}</td>
+                                    {canViewVault ? <td className="px-3 py-2 whitespace-nowrap">{formatIsoForDisplay(log.hardDeletedAt, lang)}</td> : null}
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 </div>
@@ -178,7 +320,30 @@ export function StaffDeletedRecordsPanel({ logs, keyword, restoreAction, hardDel
         </MerchantSectionCard>
     );
 
-    return (
-        <MerchantListShell toolbar={toolbar} list={list} />
+    const vaultList =
+        canViewVault && vaultLogs.length > 0 ? (
+            <MerchantSectionCard title={ui.vaultTitle} description={ui.vaultDesc(vaultLogs.length)}>
+                <StaffDeletedVaultBlock
+                    vaultLogs={vaultLogs}
+                    restoreHardDeleteAction={restoreHardDeleteAction}
+                    purgeDeleteLogAction={purgeDeleteLogAction}
+                    lang={lang}
+                    ui={vaultUi}
+                />
+            </MerchantSectionCard>
+        ) : canViewVault ? (
+            <MerchantSectionCard title={ui.vaultTitle} description={ui.vaultDesc(0)}>
+                <p className="text-sm text-[rgb(var(--muted))]">{ui.vaultEmpty}</p>
+            </MerchantSectionCard>
+        ) : null;
+
+    const list = (
+        <div className="space-y-6">
+            {pendingList}
+            {historyList}
+            {vaultList}
+        </div>
     );
+
+    return <MerchantListShell toolbar={toolbar} list={list} />;
 }

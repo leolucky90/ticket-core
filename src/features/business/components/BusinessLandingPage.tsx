@@ -29,6 +29,7 @@ import type {
     BusinessHomepageThemePreset,
 } from "@/features/business/services/businessHomepageContent";
 import { DEMO_ACCOUNT_PASSWORD } from "@/lib/demo-account-password";
+import { DOCUMENTATION_VERSION_DISPLAY } from "@/lib/documentation-version";
 
 type BusinessLandingPageProps = {
     lang: "zh" | "en";
@@ -1570,6 +1571,20 @@ export function BusinessLandingPage({
                     secondaryHref="/register/company"
                     secondaryLabel={ui.finalSecondaryCta}
                 />
+
+                <footer className="border-t border-[var(--biz-border)] bg-[var(--biz-surface)]/40 px-4 py-8">
+                    <p className="text-center text-xs leading-relaxed text-[var(--biz-body)]">
+                        {lang === "zh" ? (
+                            <>
+                                © {new Date().getFullYear()} Leo Chen / BO-HAN CHEN · Ticket Core · 文件集版本 {DOCUMENTATION_VERSION_DISPLAY}
+                            </>
+                        ) : (
+                            <>
+                                © {new Date().getFullYear()} Leo Chen / BO-HAN CHEN · Ticket Core · Documentation {DOCUMENTATION_VERSION_DISPLAY}
+                            </>
+                        )}
+                    </p>
+                </footer>
             </main>
         </div>
     );

@@ -4,10 +4,23 @@ import { canDelete, hasLevel, hasPermission, type PermissionSubject } from "@/li
 import { normalizeCompanyId } from "@/lib/tenant-scope";
 import { getUserCompanyId, getShowcaseTenantId, getUserDoc, toAccountType, type AccountType, type UserDoc } from "@/lib/services/user.service";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
-import { createDeleteLog, hardDeleteRecord, restoreDeletedRecord } from "@/lib/services/delete-log.service";
+import {
+    createDeleteLog,
+    hardDeleteRecord,
+    purgeHardDeletedDeleteLogRecord,
+    restoreDeletedRecord,
+} from "@/lib/services/delete-log.service";
 import { createAuditLog } from "@/lib/services/audit-log.service";
 import { resolveUserPermissions, getPermissionLevels } from "@/lib/services/permission-level.service";
-import { normalizeSecuritySettings, securitySettingsDocPath, type SecuritySettings, type StaffMember } from "@/lib/schema";
+import {
+    deleteLogsCollectionPath,
+    normalizeDeleteLog,
+    normalizeSecuritySettings,
+    securitySettingsDocPath,
+    type DeleteLog,
+    type SecuritySettings,
+    type StaffMember,
+} from "@/lib/schema";
 import { normalizeStaffMember, staffMembersCollectionPath } from "@/lib/schema/staffMembers";
 import { withSoftDeleted } from "@/lib/schema/softDelete";
 
@@ -441,6 +454,9 @@ export async function deactivateStaff(id: string): Promise<StaffMember> {
 
     const current = await findStaffById(operator.companyId, id);
     if (!current) throw new Error("Staff not found");
+    if (current.status !== "active") {
+        throw new Error("Only active staff can be deactivated");
+    }
     const next = normalizeStaffMember({
         ...current,
         status: "inactive",
@@ -455,6 +471,41 @@ export async function deactivateStaff(id: string): Promise<StaffMember> {
         companyId: operator.companyId,
         module: "staff",
         action: "deactivate",
+        targetId: id,
+        targetType: "staffMember",
+    });
+    return next;
+}
+
+export async function activateStaff(id: string): Promise<StaffMember> {
+    const operator = await resolveOperator();
+    const subject: PermissionSubject = {
+        uid: operator.uid,
+        roleLevel: operator.roleLevel,
+        permissions: operator.permissions,
+        isOwner: operator.isOwner,
+    };
+    if (!hasStaffPrivilege(subject, "edit")) throw new Error("Forbidden");
+
+    const current = await findStaffById(operator.companyId, id);
+    if (!current) throw new Error("Staff not found");
+    if (current.status !== "inactive") {
+        throw new Error("Only inactive staff can be activated");
+    }
+    const next = normalizeStaffMember({
+        ...current,
+        status: "active",
+        updatedAt: new Date().toISOString(),
+        updatedBy: operator.uid,
+    });
+    await fbAdminDb.doc(`${staffMembersCollectionPath(operator.companyId)}/${id}`).set(toFirestoreData(next), { merge: true });
+    if (current.uid) {
+        await fbAdminAuth.updateUser(current.uid, { disabled: false });
+    }
+    await createAuditLog({
+        companyId: operator.companyId,
+        module: "staff",
+        action: "activate",
         targetId: id,
         targetType: "staffMember",
     });
@@ -546,6 +597,93 @@ export async function hardDeleteStaff(input: {
         reason: input.reason,
         authorizationPassword: input.authorizationPassword,
     });
+}
+
+/** Lv9 / owner: rebuild staff Firestore doc from delete-log snapshot after a prior hard delete. */
+export async function restoreStaffFromHardDeletedLog(input: {
+    deleteLogId: string;
+    restoreReason?: string;
+    restoreMode?: "active" | "inactive";
+}): Promise<StaffMember> {
+    const operator = await resolveOperator();
+    const subject: PermissionSubject = {
+        uid: operator.uid,
+        roleLevel: operator.roleLevel,
+        permissions: operator.permissions,
+        isOwner: operator.isOwner,
+    };
+    if (!hasLevel(subject, 9) && !subject.isOwner) {
+        throw new Error("Forbidden");
+    }
+
+    const companyId = operator.companyId;
+    const logRef = fbAdminDb.collection(deleteLogsCollectionPath(companyId)).doc(toText(input.deleteLogId, 120));
+    const snap = await logRef.get();
+    if (!snap.exists) throw new Error("Delete log not found");
+    const log = normalizeDeleteLog(snap.data() as Partial<DeleteLog> & Pick<DeleteLog, "id" | "module" | "targetId">);
+    if (log.module !== "staff") {
+        throw new Error("Invalid module");
+    }
+    if (log.status !== "hard_deleted") {
+        throw new Error("Only hard-deleted staff can be recovered through this flow");
+    }
+    if (!log.snapshot || typeof log.snapshot !== "object") {
+        throw new Error("No snapshot available for recovery");
+    }
+
+    const raw = log.snapshot as Record<string, unknown>;
+    const nowIso = new Date().toISOString();
+    const staff = normalizeStaffMember({
+        ...raw,
+        id: log.targetId,
+        email: normalizeEmail(raw.email),
+        isDeleted: false,
+        deleteStatus: "active",
+        status: input.restoreMode === "inactive" ? "inactive" : "active",
+        updatedAt: nowIso,
+        updatedBy: operator.uid,
+    } as Partial<StaffMember> & Pick<StaffMember, "id" | "email">);
+
+    await fbAdminDb.doc(`${staffMembersCollectionPath(companyId)}/${staff.id}`).set(toFirestoreData(staff), { merge: false });
+
+    if (staff.uid) {
+        try {
+            await fbAdminAuth.updateUser(staff.uid, {
+                disabled: staff.status !== "active",
+                displayName: staff.name,
+            });
+        } catch {
+            // Auth user may be missing; Firestore staff doc is still restored for manual follow-up.
+        }
+    }
+
+    const nextLog = normalizeDeleteLog({
+        ...log,
+        status: "restored",
+        restoredAt: nowIso,
+        restoredBy: operator.uid,
+        restoredByName: operator.name,
+        restoreReason: toText(input.restoreReason, 2000),
+        updatedAt: nowIso,
+    });
+    await logRef.set(toFirestoreData(nextLog), { merge: true });
+
+    await createAuditLog({
+        companyId,
+        module: "staff",
+        action: "restore_from_hard_delete",
+        targetId: staff.id,
+        targetType: "staffMember",
+        reason: input.restoreReason,
+        metadata: { deleteLogId: log.id },
+    });
+
+    return staff;
+}
+
+export async function purgeStaffDeleteLog(deleteLogId: string): Promise<void> {
+    await resolveOperator();
+    await purgeHardDeletedDeleteLogRecord({ deleteLogId, module: "staff" });
 }
 
 export async function resetStaffPassword(input: {
