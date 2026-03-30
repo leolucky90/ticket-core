@@ -24,7 +24,7 @@ export default async function EditStaffPage({ params, searchParams }: EditStaffP
     const levels = await getPermissionLevels();
     const staff = await getStaffMemberById(id);
     if (!staff) {
-        redirect(`/staff?flash=${encodeURIComponent("找不到員工")}`);
+        redirect(`/staff?flash=${encodeURIComponent(uiStaff.flashNotFound)}`);
     }
 
     async function updateAction(formData: FormData): Promise<void> {
@@ -42,9 +42,9 @@ export default async function EditStaffPage({ params, searchParams }: EditStaffP
                 mustChangePassword: toBool(formData, "mustChangePassword"),
                 isRepairTechnician: toBool(formData, "isRepairTechnician"),
             });
-            redirect(`/staff?flash=${encodeURIComponent("員工資料已更新")}&ts=${Date.now()}`);
+            redirect(`/staff?flash=${encodeURIComponent(uiStaff.flashUpdated)}&ts=${Date.now()}`);
         } catch (error) {
-            const message = error instanceof Error ? error.message : "更新失敗";
+            const message = error instanceof Error ? error.message : uiStaff.flashUpdateFailed;
             redirect(`/staff/${encodeURIComponent(id)}/edit?flash=${encodeURIComponent(message)}&ts=${Date.now()}`);
         }
     }

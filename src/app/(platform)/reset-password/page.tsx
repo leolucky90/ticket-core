@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { ResetPasswordForm } from "@/components/auth/ResetPasswordForm";
 import { AuthPageShell } from "@/components/auth/ui/AuthPageShell";
+import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
 import { normalizeAuthTenantId, normalizeTenantId } from "@/lib/tenant-scope";
 
 type ResetPasswordSearchParams = {
@@ -31,6 +33,8 @@ export default async function ResetPasswordPage({ searchParams }: { searchParams
     const authTenantId = normalizeAuthTenantId(sp?.authTenant);
     const oobCode = normalizeCode(sp?.oobCode);
     const loginHref = withAuthContext("/login", tenantId, authTenantId);
+    const lang = getUiLanguage((await cookies()).get("lang")?.value);
+    const ui = getUiText(lang).authPages;
 
     return (
         <div className="min-h-dvh bg-[#191815] text-[#f5f1df]">
@@ -39,11 +43,11 @@ export default async function ResetPasswordPage({ searchParams }: { searchParams
                     href={loginHref}
                     className="rounded-full border border-[#ffcb2d] px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.1em] text-[#ffcb2d] hover:bg-[#ffcb2d] hover:text-[#191815]"
                 >
-                    Back Login
+                    {ui.backLogin}
                 </Link>
             </div>
             <AuthPageShell>
-                <AuthShell title="重設密碼">
+                <AuthShell title={ui.resetPasswordShellTitle}>
                     <ResetPasswordForm loginHref={loginHref} oobCode={oobCode} authTenantId={authTenantId} />
                 </AuthShell>
             </AuthPageShell>

@@ -8,8 +8,10 @@ import {
     getFirebaseClientAuth,
     getFirebaseClientErrorMessage,
 } from "@/lib/firebase-client/client";
+import { useUiLanguage } from "@/components/layout/ui-language-provider";
 import { AuthButton } from "@/components/auth/ui/AuthButton";
 import { AuthInput } from "@/components/auth/ui/AuthInput";
+import { getUiText } from "@/lib/i18n/ui-text";
 
 type ForgotPasswordFormProps = {
     loginHref: string;
@@ -21,6 +23,8 @@ function normalizeEmail(input: string): string {
 }
 
 export function ForgotPasswordForm({ loginHref, authTenantId = null }: ForgotPasswordFormProps) {
+    const lang = useUiLanguage();
+    const ui = getUiText(lang).authForms;
     const [email, setEmail] = useState("");
     const [message, setMessage] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
@@ -29,7 +33,7 @@ export function ForgotPasswordForm({ loginHref, authTenantId = null }: ForgotPas
         event.preventDefault();
         const normalizedEmail = normalizeEmail(email);
         if (!normalizedEmail) {
-            setMessage("請先輸入 Email。");
+            setMessage(ui.forgotEmailRequired);
             return;
         }
         setSubmitting(true);
@@ -45,9 +49,9 @@ export function ForgotPasswordForm({ loginHref, authTenantId = null }: ForgotPas
                 url: resetUrl,
                 handleCodeInApp: false,
             });
-            setMessage("若此 Email 已註冊，系統已寄出重設密碼連結，請檢查信箱。");
+            setMessage(ui.forgotSuccess);
         } catch (error) {
-            setMessage(firebaseClientReady ? "若此 Email 已註冊，系統已寄出重設密碼連結，請檢查信箱。" : getFirebaseClientErrorMessage(error));
+            setMessage(firebaseClientReady ? ui.forgotSuccess : getFirebaseClientErrorMessage(error));
         } finally {
             setSubmitting(false);
         }
@@ -57,7 +61,7 @@ export function ForgotPasswordForm({ loginHref, authTenantId = null }: ForgotPas
         <form onSubmit={onSubmit} className="auth-actions">
             <div className="auth-row">
                 <AuthInput
-                    placeholder="輸入註冊 Email"
+                    placeholder={ui.forgotEmailPlaceholder}
                     autoComplete="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
@@ -68,14 +72,14 @@ export function ForgotPasswordForm({ loginHref, authTenantId = null }: ForgotPas
                 type="submit"
                 disabled={submitting || !firebaseClientReady}
                 loading={submitting}
-                loadingLabel="寄送中..."
+                loadingLabel={ui.forgotSubmitting}
             >
-                寄送重設連結
+                {ui.forgotSubmit}
             </AuthButton>
             {message ? <div className="auth-muted text-sm">{message}</div> : null}
             <div className="text-center text-xs text-[rgb(var(--muted))]">
                 <Link className="auth-link" href={loginHref}>
-                    返回登入
+                    {ui.forgotBackLogin}
                 </Link>
             </div>
         </form>

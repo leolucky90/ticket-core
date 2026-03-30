@@ -83,8 +83,8 @@
 | --- | --- |
 | `components/ui/` | **純展示**可重用元件（button、processing、overlay 等）；無業務規則 |
 | `components/merchant/shell/` | **商家 shell 基線**：`MerchantPageShell`、`MerchantSectionCard`、`MerchantListShell`、`SearchToolbar`、sidebar／topbar 等 |
-| `components/merchant/search/` | 商家預測／搜尋輸入 |
-| `components/merchant/catalog/` | 目錄維度選擇等共用 UI |
+| `components/merchant/search/` | 商家預測／搜尋輸入；dropdown loading / empty / error copy 已收斂到 `lib/i18n/ui-text.ts` |
+| `components/merchant/catalog/` | 目錄維度選擇等共用 UI；`DimensionPicker` 已走 shared i18n，不在 page / form 內各自硬編欄位文案 |
 | `components/layout/` | `ProtectedShell`、`ui-language-provider`、`navigation-progress` 等全站版面 |
 | `components/dashboard/` | 儀表板大型 workspace（結帳、營銷設定、BossAdmin、品項等） |
 | `components/staff/` | 員工列表、表單、軟刪／保險庫區塊等 |
@@ -104,7 +104,7 @@
 | 目錄 | 說明 |
 | --- | --- |
 | `features/business/` | 首頁／商業落地內容與服務 |
-| `features/showcase/` | 展示頁 builder：`ShowcaseBuilder`、block registry、preferences、預設 template／renderer；builder 頂部引言與 shell 文案與 `lib/i18n/ui-text.ts`（`showcaseBuilderIntro` 等）對齊 cookie `lang` |
+| `features/showcase/` | 展示頁 builder：`ShowcaseBuilder`、block registry、preferences、預設 template／renderer；builder 頂部引言、整套 editor labels 與 shell 文案已對齊 `lib/i18n/ui-text.ts`（`showcaseBuilderIntro`、`showcaseBuilderPage`、`merchantStandalonePages`）與 cookie `lang` |
 | `features/dashboard/` | 儀表板相關 feature 服務（若與 `components/dashboard` 並用，讀取時注意邊界） |
 
 Showcase 擴充時優先動：`showBlockRegistry.ts`、`showContentPreferences.ts`、`blockRenderer.tsx`（見 `project-rules.md` Storefront Builder Rule）。
@@ -139,7 +139,7 @@ Firestore／資料形狀與 bridge；例如 `cases.ts`（ticket legacy）、`del
 | 區域 | 說明 |
 | --- | --- |
 | 根層各 `*.service.ts` / 模組 | 跨域或尚未下沉之服務（`user`、`staff`、`delete-log`、`ticket`、`sales`、`company-profile` 等） |
-| `services/merchant/` | **商家 read-model／catalog／write wrapper** 優先入口（`*-read-model.service.ts`、`*-write.service.ts`、`catalog-service.ts`、`product-service.ts`、`purchase-order-draft.service.ts` 採購草稿 Firestore 等）；`inventory-write.service.ts` 另 re-export 多倉調貨／倉別 log／IMEI／AI 補貨建議（實作於 `services/inventory/*`、`services/ai/reorder-service`）；**`audit-log-read-model.service.ts`** 讀取 `auditLogs` |
+| `services/merchant/` | **商家 read-model／catalog／write wrapper** 優先入口（`*-read-model.service.ts`、`*-write.service.ts`、`catalog-service.ts`、`product-service.ts`、`purchase-order-draft.service.ts` 採購草稿 Firestore 等）；`inventory-write.service.ts` 另 re-export 多倉調貨／倉別 log／IMEI／AI 補貨建議（實作於 `services/inventory/*`、`services/ai/reorder-service`）；**`audit-log-read-model.service.ts`** 讀取 `auditLogs`；customer/activity linkage 與 activity purchase read-model 也優先集中在此層，避免 route/page 直接用名稱比對資料流 |
 | `services/documents/` | 收據 intake、Po 確認／更新（`intake-document`、`save-document`、`confirm-po`、`update-po-draft`） |
 | `services/ocr/`、`services/ai/` | Google Vision OCR、`extract-po-draft`（OpenAI JSON） |
 | `services/db/firestore.ts` | Firestore 共用寫入／查詢 helper（`fbAdminDb`） |
@@ -151,7 +151,7 @@ Firestore／資料形狀與 bridge；例如 `cases.ts`（ticket legacy）、`del
 
 | 路徑 | 說明 |
 | --- | --- |
-| `lib/i18n/` | `ui-text.ts` 為共用 UI 字串主檔；與 `ui-language-provider` 搭配；含儀表板分頁抬頭（`dashboardWorkspaceTabs`）、商店營銷 workspace（`marketingSettingsWorkspace` 等）、獨立 merchant 路由 shell（`merchantStandalonePages`）、寄店總覽（`consignmentsOverview`）、Showcase 引言（`showcaseBuilderIntro`）等 |
+| `lib/i18n/` | `ui-text.ts` 為共用 UI 字串主檔；與 `ui-language-provider` 搭配；含儀表板分頁抬頭（`dashboardWorkspaceTabs`）、dashboard flash、dashboard customers / cases / campaigns workspace（`dashboardCustomerCaseWorkspace`）、商店營銷 workspace（`marketingSettingsWorkspace`、`itemFormFields`、`dimensionPicker`、`predictiveSearchInput` 等）、獨立 merchant 路由 shell（`merchantStandalonePages`）、寄店總覽（`consignmentsOverview`）、Showcase 引言／editor labels（`showcaseBuilderIntro`、`showcaseBuilderPage`）等 |
 | `lib/reporting/financial-summary.ts` | 儀表板用估計 COGS／毛利（銷售明細 × 品項成本） |
 | `lib/pagination/query-controls.ts` | cursor 分頁控制共用邏輯 |
 | `lib/ui/list-display.ts` | 列表 page-size 等共用常數 |

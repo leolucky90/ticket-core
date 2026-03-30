@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { FocusEvent } from "react";
+import { useUiLanguage } from "@/components/layout/ui-language-provider";
 import { cn } from "@/components/ui/cn";
 import { Input } from "@/components/ui/input";
 import { usePredictiveSearch } from "@/components/merchant/search/use-predictive-search";
+import { getUiText } from "@/lib/i18n/ui-text";
 import type { PredictiveSearchSuggestion, PredictiveSearchTarget } from "@/lib/types/search";
 
 type MerchantPredictiveSearchInputProps = {
@@ -19,6 +21,7 @@ type MerchantPredictiveSearchInputProps = {
         title?: string;
         subtitle?: string;
         keywords?: string[];
+        meta?: Record<string, string | number | boolean | null>;
     }>;
     limit?: number;
     className?: string;
@@ -36,13 +39,14 @@ const EMPTY_LOCAL_SUGGESTIONS: Array<{
     title?: string;
     subtitle?: string;
     keywords?: string[];
+    meta?: Record<string, string | number | boolean | null>;
 }> = [];
 
 export function MerchantPredictiveSearchInput({
     id,
     name,
     defaultValue = "",
-    placeholder = "輸入關鍵字",
+    placeholder,
     targets = EMPTY_TARGETS,
     localSuggestions = EMPTY_LOCAL_SUGGESTIONS,
     limit,
@@ -53,6 +57,8 @@ export function MerchantPredictiveSearchInput({
     onSelect,
     onValueChange,
 }: MerchantPredictiveSearchInputProps) {
+    const lang = useUiLanguage();
+    const ui = getUiText(lang).predictiveSearchInput;
     const [query, setQuery] = useState(defaultValue);
     const staticSuggestions = useMemo(
         () =>
@@ -63,7 +69,10 @@ export function MerchantPredictiveSearchInput({
                 title: item.title ?? item.value,
                 subtitle: item.subtitle,
                 score: Math.max(0, 1_000 - index),
-                meta: item.keywords && item.keywords.length > 0 ? { keywordsText: item.keywords.join(" ") } : undefined,
+                meta: {
+                    ...(item.meta ?? {}),
+                    ...(item.keywords && item.keywords.length > 0 ? { keywordsText: item.keywords.join(" ") } : {}),
+                },
             })),
         [localSuggestions],
     );
@@ -106,7 +115,7 @@ export function MerchantPredictiveSearchInput({
                 onFocus={() => setOpen(true)}
                 onBlur={handleBlur}
                 onKeyDown={handleKeyDown}
-                placeholder={placeholder}
+                placeholder={placeholder || ui.defaultPlaceholder}
                 autoComplete="off"
                 className={inputClassName}
                 disabled={disabled}
@@ -118,9 +127,9 @@ export function MerchantPredictiveSearchInput({
                         dropdownClassName,
                     )}
                 >
-                    {loading ? <div className="px-3 py-2 text-sm text-[rgb(var(--muted))]">搜尋中...</div> : null}
+                    {loading ? <div className="px-3 py-2 text-sm text-[rgb(var(--muted))]">{ui.loading}</div> : null}
                     {!loading && error ? <div className="px-3 py-2 text-sm text-[rgb(var(--muted))]">{error}</div> : null}
-                    {!loading && empty ? <div className="px-3 py-2 text-sm text-[rgb(var(--muted))]">找不到符合的結果</div> : null}
+                    {!loading && empty ? <div className="px-3 py-2 text-sm text-[rgb(var(--muted))]">{ui.empty}</div> : null}
                     {!loading && !error && suggestions.length > 0 ? (
                         <ul className="py-1" role="listbox" aria-label="predictive suggestions">
                             {suggestions.map((item, index) => (

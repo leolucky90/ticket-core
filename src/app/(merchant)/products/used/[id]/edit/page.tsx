@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { MerchantPageShell } from "@/components/merchant/shell";
 import { UsedProductForm } from "@/components/used-products";
+import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
 import type { UsedProductTypeSetting } from "@/lib/schema";
 import { listRepairBrands } from "@/lib/services/merchant/inventory-read-model.service";
 import {
@@ -17,22 +18,23 @@ type EditUsedProductPageProps = {
     searchParams: Promise<{ flash?: string; ts?: string }>;
 };
 
-function fallbackTypeSettings(): UsedProductTypeSetting[] {
+function fallbackTypeSettings(labels: ReturnType<typeof getUiText>["usedProductPages"]["fallbackTypes"]): UsedProductTypeSetting[] {
     const nowIso = new Date().toISOString();
     return [
-        { id: "fallback_phone", name: "手機", isActive: true, specificationTemplates: [], createdAt: nowIso, updatedAt: nowIso, updatedBy: "system" },
-        { id: "fallback_laptop", name: "筆電", isActive: true, specificationTemplates: [], createdAt: nowIso, updatedAt: nowIso, updatedBy: "system" },
-        { id: "fallback_tablet", name: "平板", isActive: true, specificationTemplates: [], createdAt: nowIso, updatedAt: nowIso, updatedBy: "system" },
-        { id: "fallback_watch", name: "手錶", isActive: true, specificationTemplates: [], createdAt: nowIso, updatedAt: nowIso, updatedBy: "system" },
-        { id: "fallback_earbuds", name: "耳機", isActive: true, specificationTemplates: [], createdAt: nowIso, updatedAt: nowIso, updatedBy: "system" },
-        { id: "fallback_console", name: "主機", isActive: true, specificationTemplates: [], createdAt: nowIso, updatedAt: nowIso, updatedBy: "system" },
-        { id: "fallback_other", name: "其他", isActive: true, specificationTemplates: [], createdAt: nowIso, updatedAt: nowIso, updatedBy: "system" },
+        { id: "fallback_phone", name: labels.phone, isActive: true, specificationTemplates: [], createdAt: nowIso, updatedAt: nowIso, updatedBy: "system" },
+        { id: "fallback_laptop", name: labels.laptop, isActive: true, specificationTemplates: [], createdAt: nowIso, updatedAt: nowIso, updatedBy: "system" },
+        { id: "fallback_tablet", name: labels.tablet, isActive: true, specificationTemplates: [], createdAt: nowIso, updatedAt: nowIso, updatedBy: "system" },
+        { id: "fallback_watch", name: labels.watch, isActive: true, specificationTemplates: [], createdAt: nowIso, updatedAt: nowIso, updatedBy: "system" },
+        { id: "fallback_earbuds", name: labels.earbuds, isActive: true, specificationTemplates: [], createdAt: nowIso, updatedAt: nowIso, updatedBy: "system" },
+        { id: "fallback_console", name: labels.console, isActive: true, specificationTemplates: [], createdAt: nowIso, updatedAt: nowIso, updatedBy: "system" },
+        { id: "fallback_other", name: labels.other, isActive: true, specificationTemplates: [], createdAt: nowIso, updatedAt: nowIso, updatedBy: "system" },
     ];
 }
 
 export default async function EditUsedProductPage({ params, searchParams }: EditUsedProductPageProps) {
     const cookieStore = await cookies();
-    const lang: "zh" | "en" = cookieStore.get("lang")?.value === "en" ? "en" : "zh";
+    const lang = getUiLanguage(cookieStore.get("lang")?.value);
+    const ui = getUiText(lang).usedProductPages;
     const { id } = await params;
     const sp = await searchParams;
 
@@ -43,10 +45,10 @@ export default async function EditUsedProductPage({ params, searchParams }: Edit
     ]);
 
     if (!product) {
-        redirect(`/products/used?flash=${encodeURIComponent("找不到商品")}`);
+        redirect(`/products/used?flash=${encodeURIComponent(ui.notFound)}`);
     }
 
-    const typeSettings = loadedTypeSettings.length > 0 ? loadedTypeSettings.filter((row) => row.isActive) : fallbackTypeSettings();
+    const typeSettings = loadedTypeSettings.length > 0 ? loadedTypeSettings.filter((row) => row.isActive) : fallbackTypeSettings(ui.fallbackTypes);
 
     async function updateAction(formData: FormData): Promise<void> {
         "use server";
@@ -58,7 +60,7 @@ export default async function EditUsedProductPage({ params, searchParams }: Edit
         });
 
         if (!updated) {
-            redirect(`/products/used/${encodeURIComponent(id)}/edit?flash=${encodeURIComponent("更新失敗")}`);
+            redirect(`/products/used/${encodeURIComponent(id)}/edit?flash=${encodeURIComponent(ui.updateFailed)}`);
         }
 
         if (payload.isRefurbished && !updated.refurbishmentCaseId) {
@@ -67,12 +69,12 @@ export default async function EditUsedProductPage({ params, searchParams }: Edit
                 refurbishmentStatus: payload.refurbishmentStatus,
             });
             if (!caseCreated) {
-                redirect(`/products/used/${encodeURIComponent(id)}?flash=${encodeURIComponent("商品已更新，但自動建立翻新案件失敗")}&ts=${encodeURIComponent(updated.updatedAt)}`);
+                redirect(`/products/used/${encodeURIComponent(id)}?flash=${encodeURIComponent(ui.updatedCaseFailed)}&ts=${encodeURIComponent(updated.updatedAt)}`);
             }
-            redirect(`/products/used/${encodeURIComponent(id)}?flash=${encodeURIComponent("商品已更新，並自動建立翻新案件")}&ts=${encodeURIComponent(updated.updatedAt)}`);
+            redirect(`/products/used/${encodeURIComponent(id)}?flash=${encodeURIComponent(ui.updatedCaseSuccess)}&ts=${encodeURIComponent(updated.updatedAt)}`);
         }
 
-        redirect(`/products/used/${encodeURIComponent(id)}?flash=${encodeURIComponent("商品已更新")}`);
+        redirect(`/products/used/${encodeURIComponent(id)}?flash=${encodeURIComponent(ui.updated)}`);
     }
 
     async function createRefurbishmentCaseAction(formData: FormData): Promise<void> {
@@ -81,7 +83,7 @@ export default async function EditUsedProductPage({ params, searchParams }: Edit
         const usedProductId = String(formData.get("usedProductId") ?? id);
         const latest = await getUsedProductById(usedProductId);
         if (!latest) {
-            redirect(`/products/used/${encodeURIComponent(id)}/edit?flash=${encodeURIComponent("找不到商品")}`);
+            redirect(`/products/used/${encodeURIComponent(id)}/edit?flash=${encodeURIComponent(ui.notFound)}`);
         }
 
         const created = await createRefurbishmentCaseForUsedProduct({
@@ -90,14 +92,14 @@ export default async function EditUsedProductPage({ params, searchParams }: Edit
         });
 
         if (!created) {
-            redirect(`/products/used/${encodeURIComponent(id)}/edit?flash=${encodeURIComponent("建立翻新案件失敗")}&ts=${encodeURIComponent(latest.updatedAt)}`);
+            redirect(`/products/used/${encodeURIComponent(id)}/edit?flash=${encodeURIComponent(ui.createCaseFailed)}&ts=${encodeURIComponent(latest.updatedAt)}`);
         }
 
-        redirect(`/dashboard?tab=cases&caseQ=${encodeURIComponent(created.caseId)}&flash=${encodeURIComponent("翻新案件已建立")}&ts=${encodeURIComponent(created.caseId)}`);
+        redirect(`/dashboard?tab=cases&caseQ=${encodeURIComponent(created.caseId)}&flash=${encodeURIComponent(ui.createdRefurbishmentCase)}&ts=${encodeURIComponent(created.caseId)}`);
     }
 
     return (
-        <MerchantPageShell title="編輯二手商品" subtitle="調整二手商品資料、翻新與銷售狀態。" width="default">
+        <MerchantPageShell title={ui.editTitle} subtitle={ui.editSubtitle} width="default">
             {sp.flash ? <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2 text-sm">{sp.flash}</div> : null}
             <UsedProductForm
                 lang={lang}

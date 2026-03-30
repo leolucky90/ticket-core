@@ -16,6 +16,7 @@ import { IconActionButton } from "@/components/ui/icon-action-button";
 import { IconTextActionButton } from "@/components/ui/icon-text-action-button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { getUiText, type UiLanguage } from "@/lib/i18n/ui-text";
 import type { ItemNamingSettings } from "@/lib/schema/itemNamingSettings";
 import type { DimensionPickerBundle } from "@/lib/types/catalog";
 import type { Product } from "@/lib/types/merchant-product";
@@ -49,16 +50,7 @@ type ProductManagementWorkspaceProps = {
     createProductAction: (formData: FormData) => Promise<void>;
     updateProductAction: (formData: FormData) => Promise<void>;
     deleteProductAction: (formData: FormData) => Promise<void>;
-};
-
-const FLASH_LABELS: Record<string, string> = {
-    invalid: "輸入資料不完整或格式錯誤",
-    error: "操作失敗，請稍後再試",
-    delete_auth_required: "請先輸入帳戶密碼才能刪除",
-    delete_auth_failed: "密碼驗證失敗，刪除已取消",
-    product_created: "品項已建立",
-    product_updated: "品項已更新",
-    product_deleted: "品項已刪除",
+    lang: UiLanguage;
 };
 
 function flashTone(flash: string): "success" | "error" {
@@ -66,15 +58,15 @@ function flashTone(flash: string): "success" | "error" {
     return "success";
 }
 
-function guardDeleteWithPassword(event: FormEvent<HTMLFormElement>) {
+function guardDeleteWithPassword(event: FormEvent<HTMLFormElement>, ui: ReturnType<typeof getUiText>["productManagementWorkspace"]) {
     const form = event.currentTarget;
-    const targetText = (form.dataset.deleteTarget ?? "此品項").trim();
-    const confirmed = window.confirm(`確定要刪除「${targetText}」嗎？此操作無法復原。`);
+    const targetText = (form.dataset.deleteTarget ?? ui.deleteTargetDefault).trim();
+    const confirmed = window.confirm(ui.deleteConfirm.replace("{target}", targetText));
     if (!confirmed) {
         event.preventDefault();
         return;
     }
-    const password = window.prompt("請輸入帳戶密碼以確認刪除：");
+    const password = window.prompt(ui.deletePasswordPrompt);
     if (!password) {
         event.preventDefault();
         return;
@@ -89,8 +81,8 @@ function guardDeleteWithPassword(event: FormEvent<HTMLFormElement>) {
     input.value = password;
 }
 
-function formatMoney(value: number): string {
-    return new Intl.NumberFormat("zh-TW").format(Math.max(0, value));
+function formatMoney(value: number, lang: UiLanguage): string {
+    return new Intl.NumberFormat(lang === "en" ? "en-US" : "zh-TW").format(Math.max(0, value));
 }
 
 function filterModelsByBrand(bundle: DimensionPickerBundle, brandId: string): DimensionPickerBundle["models"] {
@@ -109,6 +101,7 @@ function filterModelsByBrand(bundle: DimensionPickerBundle, brandId: string): Di
 }
 
 export function ProductManagementWorkspace({
+    lang,
     products,
     productKeyword,
     supplierItems,
@@ -137,13 +130,15 @@ export function ProductManagementWorkspace({
     updateProductAction,
     deleteProductAction,
 }: ProductManagementWorkspaceProps) {
+    const ui = getUiText(lang).productManagementWorkspace;
+    const flashLabels = getUiText(lang).dashboardFlash;
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [showFilters, setShowFilters] = useState(true);
     const [dismissedFlashKey, setDismissedFlashKey] = useState<string | null>(null);
     const [selectedBrandFilter, setSelectedBrandFilter] = useState(brandFilter);
     const [selectedModelFilter, setSelectedModelFilter] = useState(modelFilter);
     const currentFlashKey = `${flash}:${actionTs || "no-ts"}`;
-    const currentFlashText = FLASH_LABELS[flash] ?? "";
+    const currentFlashText = flashLabels[flash as keyof typeof flashLabels] ?? "";
     const showFlashNotice = Boolean(currentFlashText) && dismissedFlashKey !== currentFlashKey;
     const filteredModelOptions = useMemo(
         () => filterModelsByBrand(dimensionBundle, selectedBrandFilter),
@@ -210,7 +205,7 @@ export function ProductManagementWorkspace({
     }, [filteredModelOptions, selectedBrandFilter, selectedModelFilter]);
 
     const controlClass = "h-10 w-full min-w-0";
-    const promptSelectBrandFirst = () => window.alert("請先選擇品牌");
+    const promptSelectBrandFirst = () => window.alert(ui.selectBrandFirst);
     const baseQueryFields = [
         { name: "productQ", value: productKeyword },
         { name: "supplier", value: supplierFilter },
@@ -256,25 +251,25 @@ export function ProductManagementWorkspace({
                     <input type="hidden" name="maxPrice" value={maxPrice} />
                     <input type="hidden" name="pageSize" value={pageSize} />
                     <label htmlFor="product-management-search" className="sr-only">
-                        搜尋品項關鍵字
+                        {ui.searchKeywordLabel}
                     </label>
                     <MerchantPredictiveSearchInput
                         id="product-management-search"
                         name="productQ"
                         defaultValue={productKeyword}
-                        placeholder="查詢品項、SKU、分類、品牌、型號"
+                        placeholder={ui.searchPlaceholder}
                         targets={["products", "inventory"]}
                         localSuggestions={productSearchSuggestions}
                         className="min-w-0 flex-1"
                         inputClassName={controlClass}
                     />
                     <div className="flex items-center gap-2">
-                        <IconActionButton icon={Search} label="搜尋品項" tooltip="搜尋" type="submit" />
-                        <IconActionButton href="/dashboard/products" icon={RotateCcw} label="清除查詢與篩選" tooltip="清除" />
+                        <IconActionButton icon={Search} label={ui.searchItems} tooltip={ui.searchTooltip} type="submit" />
+                        <IconActionButton href="/dashboard/products" icon={RotateCcw} label={ui.clearSearchAndFilters} tooltip={ui.clearTooltip} />
                         <IconActionButton
                             icon={SlidersHorizontal}
-                            label={showFilters ? "收合篩選條件" : "展開篩選條件"}
-                            tooltip={showFilters ? "收合篩選" : "展開篩選"}
+                            label={showFilters ? ui.collapseFilters : ui.expandFilters}
+                            tooltip={showFilters ? ui.collapseFiltersTooltip : ui.expandFiltersTooltip}
                             onClick={() => setShowFilters((prev) => !prev)}
                             aria-pressed={showFilters}
                         />
@@ -285,26 +280,26 @@ export function ProductManagementWorkspace({
                 <IconTextActionButton
                     type="button"
                     icon={showCreateForm ? X : PackagePlus}
-                    label={showCreateForm ? "收合新增品項表單" : "展開新增品項表單"}
-                    tooltip={showCreateForm ? "收合新增品項表單" : "展開新增品項表單"}
+                    label={showCreateForm ? ui.collapseCreateForm : ui.expandCreateForm}
+                    tooltip={showCreateForm ? ui.collapseCreateForm : ui.expandCreateForm}
                     onClick={() => setShowCreateForm((prev) => !prev)}
                     className={showCreateForm ? "h-10 px-4 border-[rgb(var(--accent))] text-[rgb(var(--accent))]" : "h-10 px-4"}
                 >
-                    新增品項
+                    {ui.createItem}
                 </IconTextActionButton>
             }
         />
     );
 
     const filters = showFilters ? (
-        <FilterCard title="篩選條件" description="分類、品牌、型號、供應商、狀態與庫存/價格區間。">
+        <FilterCard title={ui.filtersTitle} description={ui.filtersDescription}>
             <form action="/dashboard/products" method="get" className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 <input type="hidden" name="productQ" value={productKeyword} />
                 <input type="hidden" name="pageSize" value={pageSize} />
 
-                <FormField label="分類" htmlFor="filter-category">
+                <FormField label={ui.category} htmlFor="filter-category">
                     <Select id="filter-category" name="categoryId" defaultValue={categoryFilter} className={controlClass}>
-                        <option value="">全部分類</option>
+                        <option value="">{ui.allCategories}</option>
                         {dimensionBundle.categories
                             .filter((category) => (category.categoryLevel ?? 1) === 1)
                             .map((category) => (
@@ -315,7 +310,7 @@ export function ProductManagementWorkspace({
                     </Select>
                 </FormField>
 
-                <FormField label="品牌" htmlFor="filter-brand">
+                <FormField label={ui.brand} htmlFor="filter-brand">
                     <Select
                         id="filter-brand"
                         name="brandId"
@@ -323,7 +318,7 @@ export function ProductManagementWorkspace({
                         onChange={(event) => setSelectedBrandFilter(event.currentTarget.value)}
                         className={controlClass}
                     >
-                        <option value="">全部品牌</option>
+                        <option value="">{ui.allBrands}</option>
                         {dimensionBundle.brands.map((brand) => (
                             <option key={`brand-${brand.id}`} value={brand.id}>
                                 {brand.name}
@@ -332,7 +327,7 @@ export function ProductManagementWorkspace({
                     </Select>
                 </FormField>
 
-                <FormField label="型號" htmlFor="filter-model">
+                <FormField label={ui.model} htmlFor="filter-model">
                     <Select
                         id="filter-model"
                         name="modelId"
@@ -358,7 +353,7 @@ export function ProductManagementWorkspace({
                         className={controlClass}
                     >
                         <option value="">
-                            {!selectedBrandFilter ? "請先選擇品牌" : filteredModelOptions.length === 0 ? "該品牌暫無型號" : "全部型號"}
+                            {!selectedBrandFilter ? ui.selectBrandFirst : filteredModelOptions.length === 0 ? ui.noModelsForBrand : ui.allModels}
                         </option>
                         {filteredModelOptions.map((model) => (
                             <option key={`model-${model.brandId ?? "na"}-${model.id}`} value={model.id}>
@@ -368,9 +363,9 @@ export function ProductManagementWorkspace({
                     </Select>
                 </FormField>
 
-                <FormField label="供應商" htmlFor="filter-supplier">
+                <FormField label={ui.supplier} htmlFor="filter-supplier">
                     <Select id="filter-supplier" name="supplier" defaultValue={supplierFilter} className={controlClass}>
-                        <option value="">全部供應商</option>
+                        <option value="">{ui.allSuppliers}</option>
                         {supplierNames.map((supplier) => (
                             <option key={supplier} value={supplier}>
                                 {supplier}
@@ -379,36 +374,36 @@ export function ProductManagementWorkspace({
                     </Select>
                 </FormField>
 
-                <FormField label="狀態" htmlFor="filter-status">
+                <FormField label={ui.status} htmlFor="filter-status">
                     <Select id="filter-status" name="status" defaultValue={statusFilter} className={controlClass}>
-                        <option value="">全部狀態</option>
-                        <option value="active">啟用</option>
-                        <option value="inactive">停用</option>
+                        <option value="">{ui.allStatuses}</option>
+                        <option value="active">{ui.active}</option>
+                        <option value="inactive">{ui.inactive}</option>
                     </Select>
                 </FormField>
 
-                <FormField label="最低庫存" htmlFor="filter-min-stock">
-                    <Input id="filter-min-stock" type="number" min={0} name="minStock" defaultValue={minStock} placeholder="例如 5" className={controlClass} />
+                <FormField label={ui.minStock} htmlFor="filter-min-stock">
+                    <Input id="filter-min-stock" type="number" min={0} name="minStock" defaultValue={minStock} placeholder={ui.stockPlaceholder} className={controlClass} />
                 </FormField>
 
-                <FormField label="最高庫存" htmlFor="filter-max-stock">
-                    <Input id="filter-max-stock" type="number" min={0} name="maxStock" defaultValue={maxStock} placeholder="例如 200" className={controlClass} />
+                <FormField label={ui.maxStock} htmlFor="filter-max-stock">
+                    <Input id="filter-max-stock" type="number" min={0} name="maxStock" defaultValue={maxStock} placeholder={ui.maxStockPlaceholder} className={controlClass} />
                 </FormField>
 
-                <FormField label="最低售價" htmlFor="filter-min-price">
-                    <Input id="filter-min-price" type="number" min={0} name="minPrice" defaultValue={minPrice} placeholder="例如 1000" className={controlClass} />
+                <FormField label={ui.minPrice} htmlFor="filter-min-price">
+                    <Input id="filter-min-price" type="number" min={0} name="minPrice" defaultValue={minPrice} placeholder={ui.minPricePlaceholder} className={controlClass} />
                 </FormField>
 
-                <FormField label="最高售價" htmlFor="filter-max-price">
-                    <Input id="filter-max-price" type="number" min={0} name="maxPrice" defaultValue={maxPrice} placeholder="例如 50000" className={controlClass} />
+                <FormField label={ui.maxPrice} htmlFor="filter-max-price">
+                    <Input id="filter-max-price" type="number" min={0} name="maxPrice" defaultValue={maxPrice} placeholder={ui.maxPricePlaceholder} className={controlClass} />
                 </FormField>
 
                 <div className="flex flex-wrap items-end gap-2 md:col-span-2 xl:col-span-3">
-                    <IconTextActionButton type="submit" icon={Filter} label="套用篩選" tooltip="套用篩選條件" className="h-10 px-4">
-                        套用篩選
+                    <IconTextActionButton type="submit" icon={Filter} label={ui.applyFilters} tooltip={ui.applyFiltersTooltip} className="h-10 px-4">
+                        {ui.applyFilters}
                     </IconTextActionButton>
-                    <IconTextActionButton href="/dashboard/products" icon={RotateCcw} label="清除篩選" tooltip="清除篩選條件" className="h-10 px-4">
-                        清除篩選
+                    <IconTextActionButton href="/dashboard/products" icon={RotateCcw} label={ui.clearFilters} tooltip={ui.clearFiltersTooltip} className="h-10 px-4">
+                        {ui.clearFilters}
                     </IconTextActionButton>
                 </div>
             </form>
@@ -416,7 +411,7 @@ export function ProductManagementWorkspace({
     ) : null;
 
     const createForm = showCreateForm ? (
-        <FilterCard title="新增品項" description="可選主分類、第二分類、品牌與型號；名稱可自訂，或依商店命名規則自動帶入。">
+        <FilterCard title={ui.createTitle} description={ui.createDescription}>
             <form action={createProductAction} className="grid gap-3">
                 <input type="hidden" name="tab" value="inventory" />
                 <input type="hidden" name="inventoryView" value="settings" />
@@ -430,8 +425,8 @@ export function ProductManagementWorkspace({
                 />
 
                 <div className="flex items-end">
-                    <IconTextActionButton type="submit" icon={Plus} label="新增品項" tooltip="建立品項資料" className="h-10 px-4">
-                        新增品項
+                    <IconTextActionButton type="submit" icon={Plus} label={ui.createItem} tooltip={ui.createItemTooltip} className="h-10 px-4">
+                        {ui.createItem}
                     </IconTextActionButton>
                 </div>
             </form>
@@ -440,12 +435,12 @@ export function ProductManagementWorkspace({
 
     const list = (
         <MerchantSectionCard
-            title={`品項列表（${products.length}）`}
-            description="採用 server 分頁與固定高度清單，保留目前篩選器操作方式。"
+            title={ui.listTitle.replace("{count}", String(products.length))}
+            description={ui.listDescription}
             actions={
                 <form action="/dashboard/products" method="get" className="flex flex-wrap items-center gap-2">
                     {renderBaseQueryInputs(["pageSize"])}
-                    <span className="text-xs text-[rgb(var(--muted))]">每頁</span>
+                    <span className="text-xs text-[rgb(var(--muted))]">{ui.perPage}</span>
                     <Select name="pageSize" defaultValue={pageSize} className="h-9 w-[96px]">
                         {LIST_DISPLAY_OPTIONS.map((size) => (
                             <option key={`product-page-size-${size}`} value={size}>
@@ -453,8 +448,8 @@ export function ProductManagementWorkspace({
                             </option>
                         ))}
                     </Select>
-                    <IconTextActionButton type="submit" icon={Filter} label="套用每頁筆數" tooltip="套用每頁顯示筆數" className="h-9 px-3">
-                        套用
+                    <IconTextActionButton type="submit" icon={Filter} label={ui.applyPageSize} tooltip={ui.applyPageSizeTooltip} className="h-9 px-3">
+                        {ui.applyFilters}
                     </IconTextActionButton>
                 </form>
             }
@@ -464,8 +459,8 @@ export function ProductManagementWorkspace({
                 products.length === 0
                     ? {
                           icon: PackageSearch,
-                          title: "沒有符合條件的品項",
-                          description: "調整查詢條件或先建立第一筆品項資料。",
+                          title: ui.emptyTitle,
+                          description: ui.emptyDescription,
                       }
                     : undefined
             }
@@ -473,7 +468,7 @@ export function ProductManagementWorkspace({
             {products.length === 0 ? null : (
                 <div className="space-y-3">
                     <MerchantListPagination
-                        summary={<span>本頁顯示 {products.length} 筆，清單高度固定並可滾動。</span>}
+                        summary={<span>{ui.listSummary.replace("{count}", String(products.length))}</span>}
                         previousAction={
                             <form action="/dashboard/products" method="get">
                                 {renderBaseQueryInputs()}
@@ -482,12 +477,12 @@ export function ProductManagementWorkspace({
                                 <IconTextActionButton
                                     type="submit"
                                     icon={ArrowLeft}
-                                    label="上一頁"
-                                    tooltip="載入上一頁"
+                                    label={ui.previousPage}
+                                    tooltip={ui.previousPageTooltip}
                                     className="h-9 px-3"
                                     disabled={!currentCursor}
                                 >
-                                    上一頁
+                                    {ui.previousPage}
                                 </IconTextActionButton>
                             </form>
                         }
@@ -499,12 +494,12 @@ export function ProductManagementWorkspace({
                                 <IconTextActionButton
                                     type="submit"
                                     icon={ArrowRight}
-                                    label="下一頁"
-                                    tooltip="載入下一頁"
+                                    label={ui.nextPage}
+                                    tooltip={ui.nextPageTooltip}
                                     className="h-9 px-3"
                                     disabled={!hasNextPage || !nextCursor}
                                 >
-                                    下一頁
+                                    {ui.nextPage}
                                 </IconTextActionButton>
                             </form>
                         }
@@ -515,11 +510,11 @@ export function ProductManagementWorkspace({
                         <details key={product.id} className="rounded-lg border border-[rgb(var(--border))]">
                             <summary className="grid cursor-pointer list-none gap-1.5 px-3 py-2 text-sm sm:grid-cols-2 lg:grid-cols-6 [&::-webkit-details-marker]:hidden">
                                 <span className="font-medium">{product.name}</span>
-                                <span>庫存 {product.stock}</span>
-                                <span>售價 {formatMoney(product.price)}</span>
-                                <span>成本 {formatMoney(product.cost)}</span>
+                                <span>{ui.stock} {product.stock}</span>
+                                <span>{ui.price} {formatMoney(product.price, lang)}</span>
+                                <span>{ui.cost} {formatMoney(product.cost, lang)}</span>
                                 <span>{product.supplier || "-"}</span>
-                                <span>{product.status === "inactive" ? "停用" : "啟用"}</span>
+                                <span>{product.status === "inactive" ? ui.inactive : ui.active}</span>
                             </summary>
                             <div className="border-t border-[rgb(var(--border))] p-3">
                                 <form action={updateProductAction} className="grid gap-3">
@@ -537,18 +532,18 @@ export function ProductManagementWorkspace({
                                     />
 
                                     <div className="flex items-end gap-2">
-                                        <IconTextActionButton type="submit" icon={Save} label="更新品項" tooltip="儲存品項資料" className="h-10 px-4">
-                                            更新品項
+                                        <IconTextActionButton type="submit" icon={Save} label={ui.updateItem} tooltip={ui.updateItemTooltip} className="h-10 px-4">
+                                            {ui.updateItem}
                                         </IconTextActionButton>
                                     </div>
                                 </form>
-                                <form action={deleteProductAction} className="mt-2" onSubmit={guardDeleteWithPassword} data-delete-target={`品項 ${product.name}`}>
+                                <form action={deleteProductAction} className="mt-2" onSubmit={(event) => guardDeleteWithPassword(event, ui)} data-delete-target={`${ui.createItem} ${product.name}`}>
                                     <input type="hidden" name="tab" value="inventory" />
                                     <input type="hidden" name="inventoryView" value="settings" />
                                     <input type="hidden" name="redirectPath" value={currentRedirectPath} />
                                     <input type="hidden" name="productId" value={product.id} />
-                                    <IconTextActionButton type="submit" icon={Trash2} label="刪除品項" tooltip="刪除品項資料" className="h-10 px-4">
-                                        刪除品項
+                                    <IconTextActionButton type="submit" icon={Trash2} label={ui.deleteItem} tooltip={ui.deleteItemTooltip} className="h-10 px-4">
+                                        {ui.deleteItem}
                                     </IconTextActionButton>
                                 </form>
                             </div>
@@ -579,8 +574,8 @@ export function ProductManagementWorkspace({
                             <span>{currentFlashText}</span>
                             <IconActionButton
                                 icon={X}
-                                label="關閉提示"
-                                tooltip="關閉"
+                                label={ui.closeNotice}
+                                tooltip={ui.closeNotice}
                                 onClick={() => setDismissedFlashKey(currentFlashKey)}
                             />
                         </div>

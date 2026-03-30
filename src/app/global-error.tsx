@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { getUiText, type UiLanguage } from "@/lib/i18n/ui-text";
+
+function readUiLanguage(): UiLanguage {
+    if (typeof document === "undefined") return "zh";
+    const match = document.cookie.match(/(?:^|;\s*)lang=(en|zh)\b/);
+    return match?.[1] === "en" ? "en" : "zh";
+}
 
 export default function GlobalError({
     error,
@@ -9,17 +16,21 @@ export default function GlobalError({
     error: Error & { digest?: string };
     reset: () => void;
 }) {
+    const [lang] = useState<UiLanguage>(() => readUiLanguage());
+
     useEffect(() => {
         console.error("[global-error]", error);
     }, [error]);
 
+    const ui = useMemo(() => getUiText(lang).globalErrorPage, [lang]);
+
     return (
-        <html lang="zh-Hant">
+        <html lang={lang === "en" ? "en" : "zh-Hant"}>
             <body className="min-h-dvh bg-[rgb(var(--bg))] text-[rgb(var(--text))]">
                 <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col items-start justify-center gap-4 px-6">
-                    <h1 className="text-2xl font-bold">頁面發生錯誤</h1>
+                    <h1 className="text-2xl font-bold">{ui.title}</h1>
                     <p className="text-sm text-[rgb(var(--muted))]">
-                        系統在開發模式遇到例外。請先重整，若持續發生可按下方按鈕重試。
+                        {ui.description}
                     </p>
                     {error.digest ? (
                         <p className="rounded bg-[rgb(var(--panel2))] px-2 py-1 text-xs text-[rgb(var(--muted))]">digest: {error.digest}</p>
@@ -29,7 +40,7 @@ export default function GlobalError({
                         onClick={reset}
                         className="rounded-full bg-[rgb(var(--accent))] px-4 py-2 text-sm font-semibold text-[rgb(var(--bg))] hover:opacity-90"
                     >
-                        重試
+                        {ui.retry}
                     </button>
                 </main>
             </body>

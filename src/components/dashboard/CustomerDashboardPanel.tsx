@@ -1,9 +1,10 @@
 import { Card } from "@/components/ui/card";
+import { getUiText, type UiLanguage, uiLocale } from "@/lib/i18n/ui-text";
 import type { Ticket } from "@/lib/types/ticket";
 
-function formatDateTime(timestamp: number): string {
+function formatDateTime(timestamp: number, lang: UiLanguage): string {
     if (!Number.isFinite(timestamp) || timestamp <= 0) return "-";
-    return new Date(timestamp).toLocaleString("zh-TW", {
+    return new Date(timestamp).toLocaleString(uiLocale(lang), {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
@@ -12,7 +13,10 @@ function formatDateTime(timestamp: number): string {
     });
 }
 
-export function CustomerDashboardPanel({ tickets }: { tickets: Ticket[] }) {
+export function CustomerDashboardPanel({ tickets, lang = "zh" }: { tickets: Ticket[]; lang?: UiLanguage }) {
+    const ui = getUiText(lang).customerDashboardPanel;
+    const ticketStatus = getUiText(lang).dashboardCustomerCaseWorkspace.ticketStatus;
+    const statusLabel = (status: Ticket["status"]) => (status in ticketStatus ? ticketStatus[status as keyof typeof ticketStatus] : status);
     const activeCount = tickets.filter((ticket) => ticket.status !== "closed").length;
     const totalSpent = tickets.reduce((sum, ticket) => sum + Math.max(0, ticket.repairAmount || 0), 0);
 
@@ -20,27 +24,27 @@ export function CustomerDashboardPanel({ tickets }: { tickets: Ticket[] }) {
         <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-4">
                 <Card>
-                    <div className="text-xs text-[rgb(var(--muted))]">我的案件數</div>
+                    <div className="text-xs text-[rgb(var(--muted))]">{ui.myCases}</div>
                     <div className="mt-1 text-2xl font-semibold">{tickets.length}</div>
                 </Card>
                 <Card>
-                    <div className="text-xs text-[rgb(var(--muted))]">進行中案件</div>
+                    <div className="text-xs text-[rgb(var(--muted))]">{ui.openCases}</div>
                     <div className="mt-1 text-2xl font-semibold">{activeCount}</div>
                 </Card>
                 <Card>
-                    <div className="text-xs text-[rgb(var(--muted))]">最後更新</div>
-                    <div className="mt-1 text-sm">{tickets[0] ? formatDateTime(tickets[0].updatedAt) : "-"}</div>
+                    <div className="text-xs text-[rgb(var(--muted))]">{ui.lastUpdated}</div>
+                    <div className="mt-1 text-sm">{tickets[0] ? formatDateTime(tickets[0].updatedAt, lang) : "-"}</div>
                 </Card>
                 <Card>
-                    <div className="text-xs text-[rgb(var(--muted))]">累計消費金額</div>
-                    <div className="mt-1 text-2xl font-semibold">{new Intl.NumberFormat("zh-TW").format(totalSpent)}</div>
+                    <div className="text-xs text-[rgb(var(--muted))]">{ui.totalSpent}</div>
+                    <div className="mt-1 text-2xl font-semibold">{new Intl.NumberFormat(uiLocale(lang)).format(totalSpent)}</div>
                 </Card>
             </div>
 
             <Card>
-                <div className="mb-3 text-sm font-semibold">我的案件列表</div>
+                <div className="mb-3 text-sm font-semibold">{ui.caseListTitle}</div>
                 {tickets.length === 0 ? (
-                    <div className="text-sm text-[rgb(var(--muted))]">目前沒有案件資料。</div>
+                    <div className="text-sm text-[rgb(var(--muted))]">{ui.emptyCases}</div>
                 ) : (
                     <div className="grid gap-2">
                         {tickets.map((ticket) => (
@@ -48,14 +52,14 @@ export function CustomerDashboardPanel({ tickets }: { tickets: Ticket[] }) {
                                 <summary className="cursor-pointer list-none px-3 py-2 text-sm [&::-webkit-details-marker]:hidden">
                                     <div className="font-medium">{ticket.title}</div>
                                     <div className="text-xs text-[rgb(var(--muted))]">
-                                        {ticket.device.name} {ticket.device.model} · {ticket.status}
+                                        {ticket.device.name} {ticket.device.model} · {statusLabel(ticket.status)}
                                     </div>
                                 </summary>
                                 <div className="border-t border-[rgb(var(--border))] p-3 text-sm">
-                                    <div>客戶：{ticket.customer.name}</div>
-                                    <div>電話：{ticket.customer.phone || "-"}</div>
-                                    <div>更新時間：{formatDateTime(ticket.updatedAt)}</div>
-                                    <div className="mt-1 text-[rgb(var(--muted))]">備註：{ticket.note || "-"}</div>
+                                    <div>{ui.customer}: {ticket.customer.name}</div>
+                                    <div>{ui.phone}: {ticket.customer.phone || "-"}</div>
+                                    <div>{ui.updatedAt}: {formatDateTime(ticket.updatedAt, lang)}</div>
+                                    <div className="mt-1 text-[rgb(var(--muted))]">{ui.note}: {ticket.note || "-"}</div>
                                 </div>
                             </details>
                         ))}
@@ -64,19 +68,19 @@ export function CustomerDashboardPanel({ tickets }: { tickets: Ticket[] }) {
             </Card>
 
             <Card>
-                <div className="mb-3 text-sm font-semibold">消費紀錄</div>
+                <div className="mb-3 text-sm font-semibold">{ui.spendingTitle}</div>
                 {tickets.length === 0 ? (
-                    <div className="text-sm text-[rgb(var(--muted))]">目前沒有消費紀錄。</div>
+                    <div className="text-sm text-[rgb(var(--muted))]">{ui.emptySpending}</div>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="min-w-full text-sm">
                             <thead>
                                 <tr className="border-b border-[rgb(var(--border))] text-left text-xs text-[rgb(var(--muted))]">
-                                    <th className="px-2 py-2">案件</th>
-                                    <th className="px-2 py-2">設備</th>
-                                    <th className="px-2 py-2">狀態</th>
-                                    <th className="px-2 py-2">消費金額</th>
-                                    <th className="px-2 py-2">更新時間</th>
+                                    <th className="px-2 py-2">{ui.caseColumn}</th>
+                                    <th className="px-2 py-2">{ui.deviceColumn}</th>
+                                    <th className="px-2 py-2">{ui.statusColumn}</th>
+                                    <th className="px-2 py-2">{ui.amountColumn}</th>
+                                    <th className="px-2 py-2">{ui.updatedAtColumn}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -86,9 +90,9 @@ export function CustomerDashboardPanel({ tickets }: { tickets: Ticket[] }) {
                                         <td className="px-2 py-2">
                                             {ticket.device.name} {ticket.device.model}
                                         </td>
-                                        <td className="px-2 py-2">{ticket.status}</td>
-                                        <td className="px-2 py-2">{new Intl.NumberFormat("zh-TW").format(ticket.repairAmount || 0)}</td>
-                                        <td className="px-2 py-2">{formatDateTime(ticket.updatedAt)}</td>
+                                        <td className="px-2 py-2">{statusLabel(ticket.status)}</td>
+                                        <td className="px-2 py-2">{new Intl.NumberFormat(uiLocale(lang)).format(ticket.repairAmount || 0)}</td>
+                                        <td className="px-2 py-2">{formatDateTime(ticket.updatedAt, lang)}</td>
                                     </tr>
                                 ))}
                             </tbody>

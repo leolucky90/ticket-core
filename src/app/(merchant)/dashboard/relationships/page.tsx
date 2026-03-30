@@ -11,7 +11,7 @@ export default async function DashboardRelationshipsPage() {
 
     return (
         <MerchantPageShell title={p.title} subtitle={p.subtitle} width="overview">
-            <MerchantRelationshipWorkspace rows={rows} />
+            <MerchantRelationshipWorkspace lang={lang} rows={rows} />
         </MerchantPageShell>
     );
 }

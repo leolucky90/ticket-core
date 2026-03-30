@@ -42,6 +42,7 @@ const loadActivityPurchases = cache(async (): Promise<ActivityPurchase[]> => {
                     const status: "ongoing" | "ended" = remainingQty > 0 ? "ongoing" : "ended";
                     return {
                         id: `purchase_${sale.id}_${index}_${activityIndex}_${itemIndex}`,
+                        activityId: activity.activityId || "",
                         activityName: activity.activityName || "一般銷售",
                         activityContent: toText(activity.activityContent),
                         checkoutStatus,
@@ -68,6 +69,7 @@ const loadActivityPurchases = cache(async (): Promise<ActivityPurchase[]> => {
 
             return [{
                 id: `purchase_${sale.id}_${index}_fallback`,
+                activityId: sale.activityRefs?.[0]?.activityId || "",
                 activityName: sale.activityRefs?.[0]?.activityName || "一般銷售",
                 activityContent: toText(sale.activityRefs?.[0]?.activityContent),
                 checkoutStatus: fallbackCheckoutStatus,

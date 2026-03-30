@@ -235,6 +235,7 @@ export function PurchaseOrderAiIntakeCard({ lang }: PurchaseOrderAiIntakeCardPro
     const t = getUiText(lang).receiptPo;
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [selectedFileName, setSelectedFileName] = useState("");
 
     async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault();
@@ -277,12 +278,19 @@ export function PurchaseOrderAiIntakeCard({ lang }: PurchaseOrderAiIntakeCardPro
                 </p>
             ) : null}
             <form onSubmit={onSubmit} className="mt-4 space-y-3">
-                <input
-                    name="file"
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif"
-                    className="block w-full text-sm text-[rgb(var(--muted))] file:mr-3 file:rounded-lg file:border file:border-[rgb(var(--border))] file:bg-[rgb(var(--panel2))] file:px-3 file:py-2 file:text-sm file:text-[rgb(var(--text))]"
-                />
+                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--bg))] px-3 py-3 text-sm text-[rgb(var(--text))]">
+                    <span className="inline-flex rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2 text-sm">
+                        {t.chooseFile}
+                    </span>
+                    <span className="min-w-0 truncate text-[rgb(var(--muted))]">{selectedFileName || t.noFileChosen}</span>
+                    <input
+                        name="file"
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        className="sr-only"
+                        onChange={(event) => setSelectedFileName(event.currentTarget.files?.[0]?.name ?? "")}
+                    />
+                </label>
                 <button
                     type="submit"
                     disabled={busy}
@@ -438,6 +446,7 @@ export function ReceiptPoForm({ lang = "zh", dimensionBundle }: ReceiptPoFormPro
     } | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [selectedFileName, setSelectedFileName] = useState("");
 
     const [value, setValue] = useState<PoDraft>(() => emptyDraft());
 
@@ -529,12 +538,19 @@ export function ReceiptPoForm({ lang = "zh", dimensionBundle }: ReceiptPoFormPro
                         {error}
                     </p>
                 ) : null}
-                <input
-                    name="file"
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif"
-                    className="block w-full text-sm text-[rgb(var(--muted))] file:mr-3 file:rounded-lg file:border file:border-[rgb(var(--border))] file:bg-[rgb(var(--panel2))] file:px-3 file:py-2 file:text-sm file:text-[rgb(var(--text))]"
-                />
+                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--bg))] px-3 py-3 text-sm text-[rgb(var(--text))]">
+                    <span className="inline-flex rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2 text-sm">
+                        {t.chooseFile}
+                    </span>
+                    <span className="min-w-0 truncate text-[rgb(var(--muted))]">{selectedFileName || t.noFileChosen}</span>
+                    <input
+                        name="file"
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        className="sr-only"
+                        onChange={(event) => setSelectedFileName(event.currentTarget.files?.[0]?.name ?? "")}
+                    />
+                </label>
                 <button
                     type="submit"
                     disabled={busy}

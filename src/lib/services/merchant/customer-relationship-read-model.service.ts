@@ -28,6 +28,7 @@ import type { Ticket } from "@/lib/types/ticket";
 
 type ActivityPurchase = Awaited<ReturnType<typeof listActivityPurchases>>[number];
 type ActivityDoc = Awaited<ReturnType<typeof listActivities>>[number];
+const GENERAL_SALE_ACTIVITY_NAME = "一般銷售";
 
 export type CustomerRelationshipSnapshot = {
     customerId: string;
@@ -58,6 +59,28 @@ type CustomerRelationshipSourceBundle = {
     activities: ActivityDoc[];
     purchases: ActivityPurchase[];
 };
+
+function normalizeActivityName(value: string | undefined): string {
+    return (value ?? "").trim().toLowerCase();
+}
+
+export function isGeneralActivityPurchase(purchase: ActivityPurchase): boolean {
+    if (purchase.activityId.trim()) return false;
+    const name = normalizeActivityName(purchase.activityName);
+    return !name || name === GENERAL_SALE_ACTIVITY_NAME;
+}
+
+function findLinkedActivity(activities: ActivityDoc[], purchase: ActivityPurchase): ActivityDoc | null {
+    const activityId = purchase.activityId.trim();
+    if (activityId) {
+        return activities.find((activity) => activity.id === activityId) ?? null;
+    }
+
+    const normalizedName = normalizeActivityName(purchase.activityName);
+    if (!normalizedName || normalizedName === GENERAL_SALE_ACTIVITY_NAME) return null;
+    const matched = activities.filter((activity) => normalizeActivityName(activity.name) === normalizedName);
+    return matched.length === 1 ? matched[0] : null;
+}
 
 function toOrderStatus(paymentStatus: string | undefined): Order["status"] {
     if (paymentStatus === "paid") return "completed";
@@ -265,14 +288,14 @@ function buildCustomerRelationshipSnapshot(params: {
     }));
 
     const campaignRedemptions: CampaignRedemption[] = customerPurchases
-        .filter((purchase) => purchase.activityName !== "一般銷售")
+        .filter((purchase) => !isGeneralActivityPurchase(purchase))
         .map((purchase) => {
-            const linkedCampaign = activities.find((activity) => activity.name === purchase.activityName);
+            const linkedCampaign = findLinkedActivity(activities, purchase);
             const redeemedQty = Math.max(0, purchase.totalQty - purchase.remainingQty);
             return {
                 id: `redeem_${purchase.id}`,
                 companyId: "",
-                campaignId: linkedCampaign?.id ?? `campaign_${purchase.activityName}`,
+                campaignId: linkedCampaign?.id ?? `campaign_${purchase.activityId || purchase.id}`,
                 customerId: customer.id,
                 sourceOrderId: undefined,
                 sourceTicketId: undefined,
@@ -291,7 +314,7 @@ function buildCustomerRelationshipSnapshot(params: {
     const consignments: ConsignmentStoredBenefit[] = customerPurchases
         .filter((purchase) => purchase.checkoutStatus === "stored")
         .map((purchase) => {
-            const linkedCampaign = activities.find((activity) => activity.name === purchase.activityName);
+            const linkedCampaign = findLinkedActivity(activities, purchase);
             const status: ConsignmentStoredBenefit["status"] =
                 purchase.status === "ended"
                     ? "expired"

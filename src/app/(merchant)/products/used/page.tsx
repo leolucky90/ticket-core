@@ -31,6 +31,7 @@ export default async function UsedProductsPage({ searchParams }: UsedProductsPag
     const cookieStore = await cookies();
     const lang = getUiLanguage(cookieStore.get("lang")?.value);
     const ui = getUiText(lang);
+    const pageUi = ui.usedProductPages;
 
     const sp = await searchParams;
     const keyword = (sp.q ?? "").trim();
@@ -58,8 +59,8 @@ export default async function UsedProductsPage({ searchParams }: UsedProductsPag
 
         const id = String(formData.get("id") ?? "");
         const updated = await publishUsedProduct(id);
-        if (!updated) redirectWithFlash("上架失敗");
-        redirectWithFlash("商品已上架");
+        if (!updated) redirectWithFlash(pageUi.publishFailed);
+        redirectWithFlash(pageUi.published);
     }
 
     async function unpublishAction(formData: FormData): Promise<void> {
@@ -67,8 +68,8 @@ export default async function UsedProductsPage({ searchParams }: UsedProductsPag
 
         const id = String(formData.get("id") ?? "");
         const updated = await unpublishUsedProduct(id);
-        if (!updated) redirectWithFlash("下架失敗");
-        redirectWithFlash("商品已下架");
+        if (!updated) redirectWithFlash(pageUi.unpublishFailed);
+        redirectWithFlash(pageUi.unpublished);
     }
 
     async function createRefurbishmentCaseAction(formData: FormData): Promise<void> {
@@ -76,12 +77,12 @@ export default async function UsedProductsPage({ searchParams }: UsedProductsPag
 
         const usedProductId = String(formData.get("usedProductId") ?? "");
         const existing = await getUsedProductById(usedProductId);
-        if (!existing) redirectWithFlash("找不到二手商品");
+        if (!existing) redirectWithFlash(pageUi.notFound);
 
         const created = await createRefurbishmentCaseForUsedProduct({ usedProductId });
-        if (!created) redirectWithFlash("建立翻新案件失敗");
+        if (!created) redirectWithFlash(pageUi.createCaseFailed);
 
-        redirect(`/dashboard?tab=cases&caseQ=${encodeURIComponent(created.caseId)}&flash=${encodeURIComponent("翻新案件已建立")}&ts=${encodeURIComponent(created.caseId)}`);
+        redirect(`/dashboard?tab=cases&caseQ=${encodeURIComponent(created.caseId)}&flash=${encodeURIComponent(pageUi.createdRefurbishmentCase)}&ts=${encodeURIComponent(created.caseId)}`);
     }
 
     return (

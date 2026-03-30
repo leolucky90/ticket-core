@@ -49,6 +49,7 @@ export type ActivityPurchaseStatus = "ongoing" | "ended";
 
 export type ActivityPurchase = {
     id: string;
+    activityId: string;
     customerName: string;
     customerPhone: string;
     customerEmail: string;

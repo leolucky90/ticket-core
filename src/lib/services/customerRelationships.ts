@@ -29,7 +29,6 @@ export function isCustomerMatchedByIdentity(customer: ComparableRecord, target: 
     if (customer.id && target.id && customer.id === target.id) return true;
     if (isComparableFieldMatched(customer.email, target.email)) return true;
     if (isComparableFieldMatched(customer.phone, target.phone)) return true;
-    if (isComparableFieldMatched(customer.name, target.name)) return true;
     return false;
 }
 

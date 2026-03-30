@@ -10,6 +10,8 @@ import { IconActionButton } from "@/components/ui/icon-action-button";
 import { IconTextActionButton } from "@/components/ui/icon-text-action-button";
 import { UsedProductStatusBadge } from "@/components/used-products";
 import { MerchantPredictiveSearchInput } from "@/components/merchant/search";
+import { getUiText, uiLocale, type UiLanguage } from "@/lib/i18n/ui-text";
+import { useUiLanguage } from "@/components/layout/ui-language-provider";
 import { isTicketLinkedToCustomer } from "@/lib/services/customerRelationships";
 import type { CustomerProfile } from "@/lib/types/customer";
 import type { Product } from "@/lib/types/merchant-product";
@@ -71,8 +73,8 @@ function formatDateTimeLocal(ts: number): string {
     return `${y}-${m}-${day}T${hh}:${mm}`;
 }
 
-function formatMoney(value: number) {
-    return new Intl.NumberFormat("zh-TW").format(value);
+function formatMoney(value: number, lang: UiLanguage) {
+    return new Intl.NumberFormat(uiLocale(lang)).format(value);
 }
 
 function formatDateOnly(ts: number): string {
@@ -97,21 +99,21 @@ function toCaseNo(ticket: Ticket): string {
     return `CASE-${yyyy}${mm}${dd}-${suffix}`;
 }
 
-function statusText(status: string): string {
-    if (status === "new") return "新建";
-    if (status === "in_progress") return "處理中";
-    if (status === "waiting_customer") return "等待客戶";
-    if (status === "resolved") return "已解決";
-    if (status === "closed") return "已結束";
+function statusText(status: string, ui: ReturnType<typeof getUiText>["checkoutWorkspace"]): string {
+    if (status === "new") return ui.ticketStatusNew;
+    if (status === "in_progress") return ui.ticketStatusInProgress;
+    if (status === "waiting_customer") return ui.ticketStatusWaitingCustomer;
+    if (status === "resolved") return ui.ticketStatusResolved;
+    if (status === "closed") return ui.ticketStatusClosed;
     return status;
 }
 
-function activityEffectText(effectType: Activity["effectType"]): string {
-    if (effectType === "bundle_price") return "組合價";
-    if (effectType === "gift_item") return "贈品";
-    if (effectType === "create_entitlement") return "客戶權益";
-    if (effectType === "create_pickup_reservation") return "待取貨留貨";
-    return "折扣";
+function activityEffectText(effectType: Activity["effectType"], ui: ReturnType<typeof getUiText>["checkoutWorkspace"]): string {
+    if (effectType === "bundle_price") return ui.effectBundlePrice;
+    if (effectType === "gift_item") return ui.effectGift;
+    if (effectType === "create_entitlement") return ui.effectEntitlement;
+    if (effectType === "create_pickup_reservation") return ui.effectPickupReservation;
+    return ui.effectDiscount;
 }
 
 export function CheckoutWorkspace({
@@ -127,6 +129,9 @@ export function CheckoutWorkspace({
     initialCustomerId,
     initialUsedProductId,
 }: CheckoutWorkspaceProps) {
+    const lang = useUiLanguage();
+    const ui = getUiText(lang).checkoutWorkspace;
+
     const hasInitialCustomer = Boolean(initialCustomerId && customers.some((item) => item.id === initialCustomerId));
     const initialCustomerQuery = hasInitialCustomer
         ? (() => {
@@ -175,9 +180,9 @@ export function CheckoutWorkspace({
         const seen = window.sessionStorage.getItem(key);
         if (seen === "1") return;
         window.sessionStorage.setItem(key, "1");
-        if (flash === "created") window.alert("結帳完成，收據已建立。");
-        if (flash === "invalid") window.alert("結帳資料不完整，請檢查後再試。");
-    }, [flash, actionTs]);
+        if (flash === "created") window.alert(ui.flashCreated);
+        if (flash === "invalid") window.alert(ui.flashInvalid);
+    }, [flash, actionTs, ui.flashCreated, ui.flashInvalid]);
 
     useEffect(() => {
         const frame = window.requestAnimationFrame(() => {
@@ -189,11 +194,11 @@ export function CheckoutWorkspace({
     const selectedCustomer = useMemo(() => customers.find((item) => item.id === customerId) ?? null, [customers, customerId]);
     const defaultCompanyCustomer = useMemo(
         () => ({
-            name: companyProfile?.displayName || companyProfile?.companyName || "過路客",
+            name: companyProfile?.displayName || companyProfile?.companyName || ui.walkin,
             phone: companyProfile?.phone || "",
             email: companyProfile?.email || "",
         }),
-        [companyProfile],
+        [companyProfile, ui.walkin],
     );
 
     const filteredCustomers = useMemo(() => {
@@ -319,15 +324,22 @@ export function CheckoutWorkspace({
     return (
         <div className="space-y-4">
             <MerchantSectionCard
-                title="結帳中心"
-                description="建立可追蹤的收據明細，供客戶歷史與分析使用。"
-                actions={<IconTextActionButton icon={ShoppingCart} href="/dashboard?tab=inventory" label="前往庫存管理" tooltip="前往庫存管理" />}
+                title={ui.heroTitle}
+                description={ui.heroDescription}
+                actions={
+                    <IconTextActionButton
+                        icon={ShoppingCart}
+                        href="/dashboard?tab=inventory"
+                        label={ui.goInventory}
+                        tooltip={ui.goInventoryTooltip}
+                    />
+                }
                 bodyClassName="space-y-3"
             >
                 <form action={createCheckoutAction} className="grid gap-3">
                     <div className="grid gap-2 md:grid-cols-3">
                         <label className="grid gap-1 text-sm">
-                            <span className="text-xs text-[rgb(var(--muted))]">結帳時間</span>
+                            <span className="text-xs text-[rgb(var(--muted))]">{ui.checkoutTime}</span>
                             <Input
                                 type="datetime-local"
                                 name="checkoutAt"
@@ -337,35 +349,35 @@ export function CheckoutWorkspace({
                             />
                         </label>
                         <label className="grid gap-1 text-sm">
-                            <span className="text-xs text-[rgb(var(--muted))]">付款方式</span>
+                            <span className="text-xs text-[rgb(var(--muted))]">{ui.paymentMethod}</span>
                             <Select
                                 name="paymentMethod"
                                 value={paymentMethod}
                                 onChange={(event) => setPaymentMethod(event.target.value as "cash" | "card")}
                             >
-                                <option value="cash">現金</option>
-                                <option value="card">刷卡</option>
+                                <option value="cash">{ui.paymentCash}</option>
+                                <option value="card">{ui.paymentCard}</option>
                             </Select>
                         </label>
                         <label className="grid gap-1 text-sm">
-                            <span className="text-xs text-[rgb(var(--muted))]">付款狀態</span>
+                            <span className="text-xs text-[rgb(var(--muted))]">{ui.paymentStatus}</span>
                             <Select
                                 name="paymentStatus"
                                 value={paymentStatus}
                                 onChange={(event) => setPaymentStatus(event.target.value as "unpaid" | "paid" | "deposit" | "installment")}
                             >
-                                <option value="unpaid">未付</option>
-                                <option value="paid">結清</option>
-                                <option value="deposit">訂金</option>
-                                <option value="installment">分期</option>
+                                <option value="unpaid">{ui.statusUnpaid}</option>
+                                <option value="paid">{ui.statusPaid}</option>
+                                <option value="deposit">{ui.statusDeposit}</option>
+                                <option value="installment">{ui.statusInstallment}</option>
                             </Select>
                         </label>
                     </div>
 
-                    <MerchantSectionCard title="客戶" bodyClassName="space-y-2">
+                    <MerchantSectionCard title={ui.customerSection} bodyClassName="space-y-2">
                         <div className="grid gap-2 md:grid-cols-3">
                             <label className="grid gap-1 text-sm">
-                                <span className="text-xs text-[rgb(var(--muted))]">客戶類型</span>
+                                <span className="text-xs text-[rgb(var(--muted))]">{ui.customerType}</span>
                                 <Select
                                     value={customerMode}
                                     onChange={(event) => {
@@ -378,20 +390,20 @@ export function CheckoutWorkspace({
                                         }
                                     }}
                                 >
-                                    <option value="walkin">過路客</option>
-                                    <option value="customer">選擇客戶</option>
+                                    <option value="walkin">{ui.walkin}</option>
+                                    <option value="customer">{ui.selectCustomer}</option>
                                 </Select>
                             </label>
 
                             <label className="grid gap-1 text-sm md:col-span-2">
-                                <span className="text-xs text-[rgb(var(--muted))]">打字搜尋客戶</span>
+                                <span className="text-xs text-[rgb(var(--muted))]">{ui.searchCustomerLabel}</span>
                                 <Input
                                     value={customerQuery}
                                     onChange={(event) => {
                                         setCustomerQuery(event.target.value);
                                         if (customerMode === "customer") setCustomerId("");
                                     }}
-                                    placeholder="輸入姓名、電話或 Email"
+                                    placeholder={ui.searchCustomerPlaceholder}
                                     disabled={customerMode !== "customer"}
                                 />
                             </label>
@@ -400,7 +412,7 @@ export function CheckoutWorkspace({
                         {customerMode === "customer" ? (
                             <div className="mt-2 grid max-h-52 gap-2 overflow-y-auto">
                                 {filteredCustomers.length === 0 ? (
-                                    <div className="text-sm text-[rgb(var(--muted))]">找不到符合的客戶。</div>
+                                    <div className="text-sm text-[rgb(var(--muted))]">{ui.noMatchingCustomers}</div>
                                 ) : (
                                     filteredCustomers.map((customer) => (
                                         <button
@@ -445,9 +457,9 @@ export function CheckoutWorkspace({
                         />
                     </MerchantSectionCard>
 
-                    <MerchantSectionCard title="促銷活動（可多選）" bodyClassName="space-y-3">
+                    <MerchantSectionCard title={ui.promotionsSection} bodyClassName="space-y-3">
                         {activeActivities.length === 0 ? (
-                            <div className="text-sm text-[rgb(var(--muted))]">目前沒有活動中的資料。</div>
+                            <div className="text-sm text-[rgb(var(--muted))]">{ui.noActiveActivities}</div>
                         ) : (
                             <div className="grid gap-2">
                                 {activeActivities.map((activity) => {
@@ -472,10 +484,10 @@ export function CheckoutWorkspace({
                                             <div className="grid gap-1">
                                                 <div className="font-medium">{activity.name}</div>
                                                 <div className="text-xs text-[rgb(var(--muted))]">
-                                                    活動期間：{formatDateOnly(activity.startAt)} ~ {formatDateOnly(activity.endAt)}
+                                                    {ui.activityPeriod} {formatDateOnly(activity.startAt)} ~ {formatDateOnly(activity.endAt)}
                                                 </div>
                                                 <div className="text-xs text-[rgb(var(--muted))]">
-                                                    活動效果：{activityEffectText(activity.effectType)}
+                                                    {ui.activityEffectLabel} {activityEffectText(activity.effectType, ui)}
                                                 </div>
                                             </div>
                                         </label>
@@ -486,7 +498,7 @@ export function CheckoutWorkspace({
 
                         {selectedPromotions.length > 0 ? (
                             <div className="mt-3 grid gap-2">
-                                <div className="text-xs text-[rgb(var(--muted))]">點開後可調整促銷套用內容（權益與留貨分開）。</div>
+                                <div className="text-xs text-[rgb(var(--muted))]">{ui.promotionDetailsHint}</div>
                                 {selectedPromotions.map((activity) => (
                                     <details
                                         key={activity.promotionId}
@@ -494,11 +506,11 @@ export function CheckoutWorkspace({
                                         className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3"
                                     >
                                         <summary className="cursor-pointer text-sm font-medium">
-                                            {activity.promotionName} / {activityEffectText(activity.effectType)}
+                                            {activity.promotionName} / {activityEffectText(activity.effectType, ui)}
                                         </summary>
                                         <div className="mt-2 grid gap-2 md:grid-cols-2">
                                             <label className="grid gap-1 text-sm">
-                                                <span className="text-xs text-[rgb(var(--muted))]">活動名稱</span>
+                                                <span className="text-xs text-[rgb(var(--muted))]">{ui.activityName}</span>
                                                 <Input
                                                     value={activity.promotionName}
                                                     onChange={(event) =>
@@ -510,11 +522,11 @@ export function CheckoutWorkspace({
                                                 />
                                             </label>
                                             <label className="grid gap-1 text-sm md:col-span-2">
-                                                <span className="text-xs text-[rgb(var(--muted))]">活動說明</span>
+                                                <span className="text-xs text-[rgb(var(--muted))]">{ui.activityNote}</span>
                                                 <Textarea
                                                     rows={3}
                                                     value={activity.note}
-                                                    placeholder="可編輯本次促銷說明"
+                                                    placeholder={ui.activityNotePlaceholder}
                                                     onChange={(event) =>
                                                         updateSelectedPromotion(activity.promotionId, (current) => ({
                                                             ...current,
@@ -526,7 +538,7 @@ export function CheckoutWorkspace({
                                             {activity.effectType === "discount" || activity.effectType === "bundle_price" ? (
                                                 <label className="grid gap-1 text-sm">
                                                     <span className="text-xs text-[rgb(var(--muted))]">
-                                                        {activity.effectType === "bundle_price" ? "組合價折抵金額" : "折扣金額"}
+                                                        {activity.effectType === "bundle_price" ? ui.bundleDiscountAmount : ui.discountAmount}
                                                     </span>
                                                     <Input
                                                         type="number"
@@ -546,13 +558,13 @@ export function CheckoutWorkspace({
                                             {activity.effectType === "gift_item" ? (
                                                 <>
                                                     <div className="grid gap-1 text-sm">
-                                                        <span className="text-xs text-[rgb(var(--muted))]">贈品</span>
+                                                        <span className="text-xs text-[rgb(var(--muted))]">{ui.giftLine}</span>
                                                         <div className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-3 py-2 text-sm">
-                                                            {activity.giftProductName || activity.giftProductId || "未設定贈品"}
+                                                            {activity.giftProductName || activity.giftProductId || ui.giftNotSet}
                                                         </div>
                                                     </div>
                                                     <label className="grid gap-1 text-sm">
-                                                        <span className="text-xs text-[rgb(var(--muted))]">贈品數量</span>
+                                                        <span className="text-xs text-[rgb(var(--muted))]">{ui.giftQty}</span>
                                                         <Input
                                                             type="number"
                                                             min={1}
@@ -571,7 +583,7 @@ export function CheckoutWorkspace({
                                             {activity.effectType === "create_entitlement" ? (
                                                 <>
                                                     <label className="grid gap-1 text-sm">
-                                                        <span className="text-xs text-[rgb(var(--muted))]">權益次數</span>
+                                                        <span className="text-xs text-[rgb(var(--muted))]">{ui.entitlementQty}</span>
                                                         <Input
                                                             type="number"
                                                             min={1}
@@ -586,18 +598,18 @@ export function CheckoutWorkspace({
                                                         />
                                                     </label>
                                                     <div className="grid gap-1 text-sm">
-                                                        <span className="text-xs text-[rgb(var(--muted))]">範圍</span>
+                                                        <span className="text-xs text-[rgb(var(--muted))]">{ui.scope}</span>
                                                         <div className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-3 py-2 text-sm">
                                                             {activity.scopeType === "product"
-                                                                ? `產品：${activity.productName || activity.productId || "未設定"}`
-                                                                : `分類：${activity.categoryName || activity.categoryId || "未設定"}`}
+                                                                ? `${ui.scopeProduct}${activity.productName || activity.productId || ui.notSet}`
+                                                                : `${ui.scopeCategory}${activity.categoryName || activity.categoryId || ui.notSet}`}
                                                         </div>
                                                     </div>
                                                 </>
                                             ) : null}
                                             {activity.effectType === "create_pickup_reservation" ? (
                                                 <label className="grid gap-1 text-sm">
-                                                    <span className="text-xs text-[rgb(var(--muted))]">待取貨數量</span>
+                                                    <span className="text-xs text-[rgb(var(--muted))]">{ui.pickupQty}</span>
                                                     <Input
                                                         type="number"
                                                         min={1}
@@ -648,11 +660,11 @@ export function CheckoutWorkspace({
                         ))}
                     </MerchantSectionCard>
 
-                    <MerchantSectionCard title="案件（可多選）" bodyClassName="space-y-2">
+                    <MerchantSectionCard title={ui.casesSection} bodyClassName="space-y-2">
                         {customerMode !== "customer" || !selectedCustomer ? (
-                            <div className="text-sm text-[rgb(var(--muted))]">選擇客戶後，若有進行中案件可在此勾選結帳案件。</div>
+                            <div className="text-sm text-[rgb(var(--muted))]">{ui.casesHintNoCustomer}</div>
                         ) : availableCases.length === 0 ? (
-                            <div className="text-sm text-[rgb(var(--muted))]">此客戶目前沒有進行中案件。</div>
+                            <div className="text-sm text-[rgb(var(--muted))]">{ui.noOpenCases}</div>
                         ) : (
                             <div className="grid gap-2">
                                 {availableCases.map((ticket) => {
@@ -681,9 +693,11 @@ export function CheckoutWorkspace({
                                             <div className="grid gap-1">
                                                 <div className="font-medium">{toCaseNo(ticket)}</div>
                                                 <div className="text-xs text-[rgb(var(--muted))]">
-                                                    設備：{ticket.device.name} {ticket.device.model}
+                                                    {ui.device} {ticket.device.name} {ticket.device.model}
                                                 </div>
-                                                <div className="text-xs text-[rgb(var(--muted))]">狀態：{statusText(ticket.status)}</div>
+                                                <div className="text-xs text-[rgb(var(--muted))]">
+                                                    {ui.status} {statusText(ticket.status, ui)}
+                                                </div>
                                             </div>
                                         </label>
                                     );
@@ -698,26 +712,36 @@ export function CheckoutWorkspace({
                                     checked={closeCase}
                                     onChange={(event) => setCloseCase(event.target.checked)}
                                 />
-                                結帳後將此案件狀態更新為「已結束」
+                                {ui.closeCaseAfterCheckout}
                             </label>
                         ) : null}
                         <input type="hidden" name="closeCase" value={closeCase ? "1" : "0"} />
                     </MerchantSectionCard>
 
                     <MerchantSectionCard
-                        title="商品明細"
-                        actions={<IconTextActionButton icon={CirclePlus} type="button" label="加入商品" tooltip="加入一般商品明細" onClick={() => appendLine()} />}
+                        title={ui.linesSection}
+                        actions={
+                            <IconTextActionButton
+                                icon={CirclePlus}
+                                type="button"
+                                label={ui.addLine}
+                                tooltip={ui.addLineTooltip}
+                                onClick={() => appendLine()}
+                            />
+                        }
                         bodyClassName="space-y-3"
                     >
                         <div className="mb-3">
                             <MerchantPredictiveSearchInput
-                                placeholder="快速搜尋商品加入明細（名稱、SKU、別名、分類、品牌、型號）"
+                                placeholder={ui.productSearchPlaceholder}
                                 targets={["checkout_items"]}
                                 onSelect={(item) => {
                                     const metaProductId = typeof item.meta?.productId === "string" ? item.meta.productId : "";
+                                    const exactNameMatches = products.filter((product) => product.name === item.value || product.name === item.title);
                                     const matched =
                                         products.find((product) => product.id === metaProductId) ??
-                                        products.find((product) => product.name === item.value || product.name === item.title) ??
+                                        products.find((product) => product.id === item.id) ??
+                                        (exactNameMatches.length === 1 ? exactNameMatches[0] : null) ??
                                         null;
                                     if (!matched) return;
                                     appendLine(matched.id);
@@ -725,14 +749,14 @@ export function CheckoutWorkspace({
                             />
                         </div>
                         <div className="mb-3 grid gap-2 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                            <div className="text-sm font-semibold">二手商品快捷加入</div>
+                            <div className="text-sm font-semibold">{ui.usedQuickTitle}</div>
                             <Input
                                 value={usedProductQuery}
                                 onChange={(event) => setUsedProductQuery(event.currentTarget.value)}
-                                placeholder="搜尋二手商品（品牌、型號、序號、IMEI、等級）"
+                                placeholder={ui.usedSearchPlaceholder}
                             />
                             {filteredUsedProducts.length === 0 ? (
-                                <div className="text-xs text-[rgb(var(--muted))]">找不到可銷售的二手商品。</div>
+                                <div className="text-xs text-[rgb(var(--muted))]">{ui.noSellableUsed}</div>
                             ) : (
                                 <div className="grid gap-2 md:grid-cols-2">
                                     {filteredUsedProducts.map((item) => (
@@ -755,18 +779,21 @@ export function CheckoutWorkspace({
                                                 />
                                             </div>
                                             <div className="flex items-center justify-between gap-2">
-                                                <div className="text-sm">售價：{formatMoney(item.salePrice ?? item.suggestedSalePrice ?? 0)}</div>
+                                                <div className="text-sm">
+                                                    {ui.salePrice}
+                                                    {formatMoney(item.salePrice ?? item.suggestedSalePrice ?? 0, lang)}
+                                                </div>
                                                 <div className="flex gap-1">
                                                     <IconActionButton
                                                         href={`/products/used/${encodeURIComponent(item.id)}`}
                                                         icon={Eye}
-                                                        label="查看二手商品"
-                                                        tooltip="查看二手商品明細"
+                                                        label={ui.viewUsedProduct}
+                                                        tooltip={ui.viewUsedProductTooltip}
                                                     />
                                                     <IconActionButton
                                                         icon={ShoppingCart}
-                                                        label="加入購物車"
-                                                        tooltip="加入購物車"
+                                                        label={ui.addToCart}
+                                                        tooltip={ui.addToCartTooltip}
                                                         onClick={() => appendUsedProductLine(item.id)}
                                                     />
                                                 </div>
@@ -784,12 +811,15 @@ export function CheckoutWorkspace({
                                 return (
                                     <div key={line.id} className="grid gap-2 rounded-lg border border-[rgb(var(--border))] p-3 md:grid-cols-[2fr_1fr_1fr_1fr_auto]">
                                         <label className="grid gap-1 text-sm">
-                                            <span className="text-xs text-[rgb(var(--muted))]">商品 #{index + 1}</span>
+                                            <span className="text-xs text-[rgb(var(--muted))]">
+                                                {ui.lineProduct.replace("{n}", String(index + 1))}
+                                            </span>
                                             {line.isUsedProduct ? (
                                                 <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2">
-                                                    <div className="font-medium">{usedProduct?.name ?? "已下架二手商品"}</div>
+                                                    <div className="font-medium">{usedProduct?.name ?? ui.delistedUsed}</div>
                                                     <div className="text-xs text-[rgb(var(--muted))]">
-                                                        二手 / {usedProduct?.brand || "-"} / {usedProduct?.model || "-"} / {usedProduct?.serialNumber || usedProduct?.imeiNumber || "-"}
+                                                        {ui.usedTag} / {usedProduct?.brand || "-"} / {usedProduct?.model || "-"} /{" "}
+                                                        {usedProduct?.serialNumber || usedProduct?.imeiNumber || "-"}
                                                     </div>
                                                 </div>
                                             ) : (
@@ -802,18 +832,28 @@ export function CheckoutWorkspace({
                                                         );
                                                     }}
                                                 >
-                                                    <option value="">請選擇商品</option>
+                                                    <option value="">{ui.selectProduct}</option>
                                                     {products.map((item) => (
                                                         <option key={item.id} value={item.id}>
-                                                            {item.name} / 單價 {formatMoney(item.price)} / On hand {item.onHandQty ?? item.stock} / Reserved {item.reservedQty ?? 0} / Available{" "}
-                                                            {item.availableQty ?? Math.max((item.onHandQty ?? item.stock) - (item.reservedQty ?? 0), 0)}
+                                                            {ui.productOptionLine
+                                                                .replace("{name}", item.name)
+                                                                .replace("{unitPrice}", formatMoney(item.price, lang))
+                                                                .replace("{onHand}", String(item.onHandQty ?? item.stock))
+                                                                .replace("{reserved}", String(item.reservedQty ?? 0))
+                                                                .replace(
+                                                                    "{available}",
+                                                                    String(
+                                                                        item.availableQty ??
+                                                                            Math.max((item.onHandQty ?? item.stock) - (item.reservedQty ?? 0), 0),
+                                                                    ),
+                                                                )}
                                                         </option>
                                                     ))}
                                                 </Select>
                                             )}
                                         </label>
                                         <label className="grid gap-1 text-sm">
-                                            <span className="text-xs text-[rgb(var(--muted))]">數量</span>
+                                            <span className="text-xs text-[rgb(var(--muted))]">{ui.qty}</span>
                                             <Input
                                                 type="number"
                                                 min={1}
@@ -826,15 +866,15 @@ export function CheckoutWorkspace({
                                             />
                                         </label>
                                         <div className="grid gap-1 text-sm">
-                                            <span className="text-xs text-[rgb(var(--muted))]">單價</span>
+                                            <span className="text-xs text-[rgb(var(--muted))]">{ui.unitPrice}</span>
                                             <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2">
-                                                {formatMoney(unitPrice)}
+                                                {formatMoney(unitPrice, lang)}
                                             </div>
                                         </div>
                                         <div className="grid gap-1 text-sm">
-                                            <span className="text-xs text-[rgb(var(--muted))]">小計</span>
+                                            <span className="text-xs text-[rgb(var(--muted))]">{ui.subtotal}</span>
                                             <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2">
-                                                {formatMoney(subtotal)}
+                                                {formatMoney(subtotal, lang)}
                                             </div>
                                         </div>
                                         <div className="flex items-end justify-end gap-1">
@@ -842,14 +882,14 @@ export function CheckoutWorkspace({
                                                 <IconActionButton
                                                     href={`/products/used/${encodeURIComponent(usedProduct.id)}`}
                                                     icon={Eye}
-                                                    label="查看"
-                                                    tooltip="查看二手商品"
+                                                    label={ui.view}
+                                                    tooltip={ui.viewUsedShortTooltip}
                                                 />
                                             ) : null}
                                             <IconActionButton
                                                 icon={Trash2}
-                                                label="移除"
-                                                tooltip="移除明細"
+                                                label={ui.remove}
+                                                tooltip={ui.removeLineTooltip}
                                                 onClick={() => setLines((prev) => prev.filter((row) => row.id !== line.id))}
                                             />
                                         </div>
@@ -870,60 +910,73 @@ export function CheckoutWorkspace({
                         </div>
                     </MerchantSectionCard>
 
-                    <MerchantSectionCard title="收據預覽">
+                    <MerchantSectionCard title={ui.receiptPreview}>
                         <div className="grid gap-1 text-sm">
-                            <div>客戶：{customerMode === "customer" ? selectedCustomer?.name || "未選擇" : defaultCompanyCustomer.name}</div>
+                            <div>
+                                {ui.previewCustomer}{" "}
+                                {customerMode === "customer" ? selectedCustomer?.name || ui.notSelected : defaultCompanyCustomer.name}
+                            </div>
                             {customerMode !== "customer" &&
                             selectedPromotions.some(
                                 (activity) => activity.effectType === "create_entitlement" || activity.effectType === "create_pickup_reservation",
                             ) ? (
-                                <div className="text-xs text-[rgb(var(--muted))]">提示：未選擇客戶時，不會建立客戶權益或待取貨留貨記錄。</div>
+                                <div className="text-xs text-[rgb(var(--muted))]">{ui.walkinPromotionHint}</div>
                             ) : null}
                             <div>
-                                立即價格效果：
+                                {ui.previewPriceEffects}{" "}
                                 {selectedPromotions
                                     .filter((activity) => activity.effectType === "discount" || activity.effectType === "bundle_price" || activity.effectType === "gift_item")
-                                    .map((activity) => `${activity.promotionName}（${activityEffectText(activity.effectType)}）`)
-                                    .join("、") || "無"}
+                                    .map((activity) => `${activity.promotionName}（${activityEffectText(activity.effectType, ui)}）`)
+                                    .join("、") || ui.none}
                             </div>
                             <div>
-                                客戶權益 / 可兌換記錄：
+                                {ui.previewEntitlements}{" "}
                                 {selectedPromotions
                                     .filter((activity) => activity.effectType === "create_entitlement")
                                     .map((activity) => {
                                         const scopeText =
                                             activity.scopeType === "product"
-                                                ? activity.productName || activity.productId || "指定產品"
-                                                : activity.categoryName || activity.categoryId || "指定分類";
-                                        return `${activity.promotionName}（${scopeText}，${activity.entitlementQty} 次）`;
+                                                ? activity.productName || activity.productId || ui.entitlementScopeProduct
+                                                : activity.categoryName || activity.categoryId || ui.entitlementScopeCategory;
+                                        return ui.entitlementPreviewRow
+                                            .replace("{name}", activity.promotionName)
+                                            .replace("{scope}", scopeText)
+                                            .replace("{qty}", String(activity.entitlementQty));
                                     })
-                                    .join("、") || "無"}
+                                    .join("、") || ui.none}
                             </div>
                             <div>
-                                待取貨 / 已留貨：
+                                {ui.previewPickup}{" "}
                                 {selectedPromotions
                                     .filter((activity) => activity.effectType === "create_pickup_reservation")
-                                    .map((activity) => `${activity.promotionName}（${activity.reservationQty} 件）`)
-                                    .join("、") || "無"}
+                                    .map((activity) =>
+                                        ui.pickupPreviewRow.replace("{name}", activity.promotionName).replace("{qty}", String(activity.reservationQty)),
+                                    )
+                                    .join("、") || ui.none}
                             </div>
                             <div>
-                                案件：
+                                {ui.previewCases}{" "}
                                 {selectedCases.length > 0
                                     ? selectedCases.map((ticket) => toCaseNo(ticket)).join("、")
-                                    : "未綁定案件"}
+                                    : ui.noCasesLinked}
                             </div>
-                            <div>付款方式：{paymentMethod === "card" ? "刷卡" : "現金"}</div>
                             <div>
-                                付款狀態：
-                                {paymentStatus === "unpaid"
-                                    ? "未付"
-                                    : paymentStatus === "deposit"
-                                      ? "訂金"
-                                      : paymentStatus === "installment"
-                                        ? "分期"
-                                        : "結清"}
+                                {ui.previewPaymentMethod} {paymentMethod === "card" ? ui.paymentCard : ui.paymentCash}
                             </div>
-                            <div className="text-base font-semibold">總金額：{formatMoney(totalAmount)}</div>
+                            <div>
+                                {ui.previewPaymentStatus}{" "}
+                                {paymentStatus === "unpaid"
+                                    ? ui.statusUnpaid
+                                    : paymentStatus === "deposit"
+                                      ? ui.statusDeposit
+                                      : paymentStatus === "installment"
+                                        ? ui.statusInstallment
+                                        : ui.statusPaid}
+                            </div>
+                            <div className="text-base font-semibold">
+                                {ui.total}
+                                {formatMoney(totalAmount, lang)}
+                            </div>
                         </div>
                     </MerchantSectionCard>
 
@@ -931,11 +984,11 @@ export function CheckoutWorkspace({
                         <IconTextActionButton
                             icon={ShoppingCart}
                             type="submit"
-                            label="完成結帳"
-                            tooltip="完成結帳並建立收據"
+                            label={ui.submitCheckout}
+                            tooltip={ui.submitCheckoutTooltip}
                             disabled={!hasValidLine}
                         />
-                        <IconTextActionButton icon={Eye} href="/dashboard/receipts" label="收據中心" tooltip="查看收據中心" />
+                        <IconTextActionButton icon={Eye} href="/dashboard/receipts" label={ui.receiptsHub} tooltip={ui.receiptsHubTooltip} />
                     </div>
                 </form>
             </MerchantSectionCard>

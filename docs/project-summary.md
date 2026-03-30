@@ -27,6 +27,7 @@
 
 - 不新增新的 phase recap / handoff / temp docs；優先只更新這兩份 canonical docs
 - 有新的 shared helper、shared shell、service boundary、route baseline、demo baseline 變動時，同一輪必須同步更新 docs
+- 之後任何新增或修改 visible UI 的工作，都必須在同一輪完成 i18n 與 shared child component 掃描；不可留下「頁面改了但 dropdown / empty state / prompt 還是舊語系」的補漏債
 - 如果某個 shared helper 已經成形，同一輪應盡量把平行頁面一起收斂，不要讓新舊 pattern 長期並存
 - 如果大型 workspace 持續膨脹，下一輪優先任務應改成拆 focused workspace / helper，而不是直接再疊功能
 - `project-summary.md` 應只保留目前仍有效的 ground truth，不保留過時 phase 記錄
@@ -65,6 +66,10 @@
 - Phase 7 i18n consistency baseline 已開始收斂到 shared UI vocabulary 與 UI language provider
 - shared shell / processing / settings / delete logs / boss admin builder 已開始共用同一套 bilingual UI keys，減少 page-local hard-coded framework text
 - 員工建立／編輯頁（`StaffForm`）與「唯讀安全資訊」已納入 `src/lib/i18n/ui-text.ts` 的 `staffForm` 中英 key；語系與 cookie `lang` 對齊
+- auth routes、二手商品 create/edit/detail、customer detail、receipts、relationships、`not-found`／`global-error`、`settings/dashboard` 與 `settings/showcase` 已進一步收斂到 `ui-text.ts`；page route 不再維持 route-local 中英字典
+- `ItemFormFields`、dashboard flash、staff create/edit flash 也已改走 shared i18n key；獨立頁與 workspace 不再依賴 page-local flash 中文字串
+- merchant dashboard 主 workspace（dashboard / customers / cases / activities）與 `/dashboard/products` 已補齊 shared i18n；`dashboardCustomerCaseWorkspace`、`productManagementWorkspace`、`customerDashboardPanel` 等 key 已涵蓋 KPI、list filters、pagination、活動表單與 delete prompt
+- merchant 共用 UI 補漏已延伸到 `DimensionPicker` 與 predictive search dropdown / error copy；英文模式下不再因底層 selector / 搜尋狀態而回退中文
 - 示範品項／庫存資料以手動建立或既有 seed 為準；不內建第三方網站商品爬取匯入腳本
 - Phase 8 builder template baseline 已開始收斂到 showcase block registry、instance order model 與 variant-aware preview renderer
 - storefront builder 不再只綁死固定 block map；已支援 template insertion / remove / reorder 與 hero / ad variants
@@ -220,6 +225,9 @@
   - customer detail page 已進一步收斂到 one-shot detail read-model，集中 relationship / entitlements / redemptions / pickup reservations
   - dashboard route load 已開始集中到 `dashboard-read-model.service.ts`，避免 page-local orchestration 漂移
   - `listActivityPurchases` 已抽到 focused read-model，避免 customer / relationship flow 直接依賴 `commerce.ts`
+  - customer identity linkage 已移除最後的 plain-name fallback；僅以 `id` / `email` / `phone` 關聯，避免同名客戶誤併
+  - activity purchase linkage 已優先帶 `activityId`；若缺 id，只在名稱唯一時才 fallback 到 `activityName`
+  - predictive search / checkout item 綁定已優先用 `meta.productId`，名稱 fallback 僅允許唯一 match
   - sales / tickets / entitlements / pickup reservations / campaign-consignment 已補上 warm cache + write invalidation baseline
   - merchant customer / activity / product / inventory / catalog / marketing route actions 已開始透過 focused write wrappers 匯入
 - 目前基線:

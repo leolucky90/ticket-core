@@ -71,6 +71,7 @@ function toPredictiveSuggestion(
         meta: {
             entity: item.entity,
             matchedBy: item.matchedBy ?? "",
+            ...(item.meta ?? {}),
         },
     };
 }

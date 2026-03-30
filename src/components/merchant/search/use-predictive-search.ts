@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { KeyboardEvent } from "react";
+import { useUiLanguage } from "@/components/layout/ui-language-provider";
+import { getUiText } from "@/lib/i18n/ui-text";
 import type { PredictiveSearchSuggestion, PredictiveSearchTarget } from "@/lib/types/search";
 
 type UsePredictiveSearchParams = {
@@ -78,6 +80,8 @@ export function usePredictiveSearch({
     enabled = true,
     onEnterSelect,
 }: UsePredictiveSearchParams): UsePredictiveSearchResult {
+    const lang = useUiLanguage();
+    const ui = getUiText(lang).predictiveSearchInput;
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [open, setOpen] = useState(false);
@@ -121,7 +125,7 @@ export function usePredictiveSearch({
                 });
                 if (!response.ok) {
                     if (!cancelled) {
-                        setError("查詢失敗");
+                        setError(ui.searchFailed);
                         setSuggestions([]);
                         setActiveIndex(-1);
                     }
@@ -142,7 +146,7 @@ export function usePredictiveSearch({
                 }
             } catch {
                 if (!cancelled) {
-                    setError("查詢失敗");
+                    setError(ui.searchFailed);
                     setSuggestions(staticMatches);
                     setActiveIndex(staticMatches.length > 0 ? 0 : -1);
                 }
@@ -155,7 +159,7 @@ export function usePredictiveSearch({
             cancelled = true;
             window.clearTimeout(handle);
         };
-    }, [debounceMs, enabled, limit, normalizedQuery, normalizedTargets, staticSuggestions]);
+    }, [debounceMs, enabled, limit, normalizedQuery, normalizedTargets, staticSuggestions, ui.searchFailed]);
 
     const selectSuggestion = useCallback(
         (item: PredictiveSearchSuggestion) => {

@@ -146,6 +146,7 @@ export default async function ProductManagementPage({ searchParams }: ProductMan
             ]}
         >
             <ProductManagementWorkspace
+                lang={lang}
                 products={productPage.items}
                 productKeyword={productKeyword}
                 supplierItems={supplierRecords.map((supplier) => ({ id: supplier.id, name: supplier.name, status: supplier.status }))}

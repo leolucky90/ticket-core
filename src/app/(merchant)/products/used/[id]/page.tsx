@@ -1,6 +1,8 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { MerchantPageShell } from "@/components/merchant/shell";
 import { UsedProductDetailPanel } from "@/components/used-products";
+import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
 import {
     createRefurbishmentCaseForUsedProduct,
     getUsedProductById,
@@ -14,12 +16,14 @@ type UsedProductDetailPageProps = {
 };
 
 export default async function UsedProductDetailPage({ params, searchParams }: UsedProductDetailPageProps) {
+    const lang = getUiLanguage((await cookies()).get("lang")?.value);
+    const ui = getUiText(lang).usedProductPages;
     const { id } = await params;
     const sp = await searchParams;
     const product = await getUsedProductById(id);
 
     if (!product) {
-        redirect(`/products/used?flash=${encodeURIComponent("找不到商品")}`);
+        redirect(`/products/used?flash=${encodeURIComponent(ui.notFound)}`);
     }
 
     async function publishAction(formData: FormData): Promise<void> {
@@ -28,9 +32,9 @@ export default async function UsedProductDetailPage({ params, searchParams }: Us
         const targetId = String(formData.get("id") ?? id);
         const updated = await publishUsedProduct(targetId);
         if (!updated) {
-            redirect(`/products/used/${encodeURIComponent(id)}?flash=${encodeURIComponent("上架失敗")}`);
+            redirect(`/products/used/${encodeURIComponent(id)}?flash=${encodeURIComponent(ui.publishFailed)}`);
         }
-        redirect(`/products/used/${encodeURIComponent(id)}?flash=${encodeURIComponent("已上架")}&ts=${encodeURIComponent(updated.updatedAt)}`);
+        redirect(`/products/used/${encodeURIComponent(id)}?flash=${encodeURIComponent(ui.published)}&ts=${encodeURIComponent(updated.updatedAt)}`);
     }
 
     async function unpublishAction(formData: FormData): Promise<void> {
@@ -39,9 +43,9 @@ export default async function UsedProductDetailPage({ params, searchParams }: Us
         const targetId = String(formData.get("id") ?? id);
         const updated = await unpublishUsedProduct(targetId);
         if (!updated) {
-            redirect(`/products/used/${encodeURIComponent(id)}?flash=${encodeURIComponent("下架失敗")}`);
+            redirect(`/products/used/${encodeURIComponent(id)}?flash=${encodeURIComponent(ui.unpublishFailed)}`);
         }
-        redirect(`/products/used/${encodeURIComponent(id)}?flash=${encodeURIComponent("已下架")}&ts=${encodeURIComponent(updated.updatedAt)}`);
+        redirect(`/products/used/${encodeURIComponent(id)}?flash=${encodeURIComponent(ui.unpublished)}&ts=${encodeURIComponent(updated.updatedAt)}`);
     }
 
     async function createRefurbishmentCaseAction(formData: FormData): Promise<void> {
@@ -50,7 +54,7 @@ export default async function UsedProductDetailPage({ params, searchParams }: Us
         const usedProductId = String(formData.get("usedProductId") ?? id);
         const latest = await getUsedProductById(usedProductId);
         if (!latest) {
-            redirect(`/products/used/${encodeURIComponent(id)}?flash=${encodeURIComponent("找不到商品")}`);
+            redirect(`/products/used/${encodeURIComponent(id)}?flash=${encodeURIComponent(ui.notFound)}`);
         }
 
         const created = await createRefurbishmentCaseForUsedProduct({
@@ -59,14 +63,14 @@ export default async function UsedProductDetailPage({ params, searchParams }: Us
         });
 
         if (!created) {
-            redirect(`/products/used/${encodeURIComponent(id)}?flash=${encodeURIComponent("建立翻新案件失敗")}&ts=${encodeURIComponent(latest.updatedAt)}`);
+            redirect(`/products/used/${encodeURIComponent(id)}?flash=${encodeURIComponent(ui.createCaseFailed)}&ts=${encodeURIComponent(latest.updatedAt)}`);
         }
 
-        redirect(`/dashboard?tab=cases&caseQ=${encodeURIComponent(created.caseId)}&flash=${encodeURIComponent("翻新案件已建立")}&ts=${encodeURIComponent(created.caseId)}`);
+        redirect(`/dashboard?tab=cases&caseQ=${encodeURIComponent(created.caseId)}&flash=${encodeURIComponent(ui.createdRefurbishmentCase)}&ts=${encodeURIComponent(created.caseId)}`);
     }
 
     return (
-        <MerchantPageShell title="二手商品明細" subtitle="檢視商品資料、翻新資訊、保固與銷售狀態。" width="index">
+        <MerchantPageShell title={ui.detailTitle} subtitle={ui.detailSubtitle} width="index">
             {sp.flash ? <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2 text-sm">{sp.flash}</div> : null}
             <UsedProductDetailPanel
                 product={product}

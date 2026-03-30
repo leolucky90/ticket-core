@@ -28,4 +28,5 @@ export interface SearchSuggestionItem {
     subtitle?: string;
     keywords: string[];
     matchedBy?: "name" | "phone" | "email" | "sku" | "alias" | "model" | "ticketNumber";
+    meta?: Record<string, string | number | boolean | null>;
 }

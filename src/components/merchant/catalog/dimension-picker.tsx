@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo, useState, type FocusEvent, type MouseEvent } from "react";
+import { useUiLanguage } from "@/components/layout/ui-language-provider";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/components/ui/cn";
 import { FormField } from "@/components/ui/form-field";
+import { getUiText } from "@/lib/i18n/ui-text";
 import type { DimensionPickerBundle } from "@/lib/types/catalog";
 
 type DimensionPickerValue = {
@@ -64,6 +66,8 @@ export function DimensionPicker({
     modelRefName = "modelRef",
     onChange,
 }: DimensionPickerProps) {
+    const lang = useUiLanguage();
+    const ui = getUiText(lang).dimensionPicker;
     const categoryId = `${idPrefix}-${categoryRefName}`;
     const secondaryCategoryId = `${idPrefix}-${secondaryCategoryRefName}`;
     const brandId = `${idPrefix}-${brandRefName}`;
@@ -126,10 +130,10 @@ export function DimensionPicker({
     };
 
     const promptSelectBrandFirst = () => {
-        window.alert("請先選擇品牌");
+        window.alert(ui.selectBrandFirst);
     };
     const promptSelectCategoryFirst = () => {
-        window.alert("請先選擇主分類");
+        window.alert(ui.selectCategoryFirst);
     };
 
     const handleCategoryChange = (nextRef: string) => {
@@ -206,9 +210,9 @@ export function DimensionPicker({
 
     return (
         <div className={cn("grid gap-3 md:grid-cols-2 xl:grid-cols-4", className)}>
-            <FormField label="主分類" htmlFor={categoryId}>
+            <FormField label={ui.primaryCategory} htmlFor={categoryId}>
                 <Select id={categoryId} name={categoryRefName} value={selectedCategoryRef} onChange={(event) => handleCategoryChange(event.currentTarget.value)} className={controlClass}>
-                    <option value="">未指定</option>
+                    <option value="">{ui.unspecified}</option>
                     {topLevelCategories.map((item) => (
                         <option key={`cat-${item.id}`} value={encodeRef(item.id, item.name)}>
                             {item.name}
@@ -216,7 +220,7 @@ export function DimensionPicker({
                     ))}
                 </Select>
             </FormField>
-            <FormField label="第二分類" htmlFor={secondaryCategoryId}>
+            <FormField label={ui.secondaryCategory} htmlFor={secondaryCategoryId}>
                 <Select
                     id={secondaryCategoryId}
                     name={secondaryCategoryRefName}
@@ -235,7 +239,7 @@ export function DimensionPicker({
                     className={controlClass}
                 >
                     <option value="">
-                        {!hasSelectedCategory ? "請先選擇主分類" : secondaryCategoryOptions.length === 0 ? "此主分類暫無第二分類" : "未指定"}
+                        {!hasSelectedCategory ? ui.selectCategoryFirst : secondaryCategoryOptions.length === 0 ? ui.noSecondaryCategories : ui.unspecified}
                     </option>
                     {secondaryCategoryOptions.map((item) => (
                         <option key={`secondary-category-${item.id}`} value={encodeRef(item.id, item.name)}>
@@ -244,7 +248,7 @@ export function DimensionPicker({
                     ))}
                 </Select>
             </FormField>
-            <FormField label="品牌" htmlFor={brandId}>
+            <FormField label={ui.brand} htmlFor={brandId}>
                 <Select
                     id={brandId}
                     name={brandRefName}
@@ -252,7 +256,7 @@ export function DimensionPicker({
                     onChange={(event) => handleBrandChange(event.currentTarget.value)}
                     className={controlClass}
                 >
-                    <option value="">未指定</option>
+                    <option value="">{ui.unspecified}</option>
                     {brandOptions.map((item) => (
                         <option key={`brand-${item.id}`} value={encodeRef(item.id, item.name)}>
                             {item.name}
@@ -260,7 +264,7 @@ export function DimensionPicker({
                     ))}
                 </Select>
             </FormField>
-            <FormField label="型號" htmlFor={modelId}>
+            <FormField label={ui.model} htmlFor={modelId}>
                 <Select
                     id={modelId}
                     name={modelRefName}
@@ -271,7 +275,7 @@ export function DimensionPicker({
                     className={controlClass}
                 >
                     <option value="">
-                        {!hasSelectedBrand ? "請先選擇品牌" : modelOptions.length === 0 ? "該品牌暫無型號" : "未指定"}
+                        {!hasSelectedBrand ? ui.selectBrandFirst : modelOptions.length === 0 ? ui.noModelsForBrand : ui.unspecified}
                     </option>
                     {modelOptions.map((item) => (
                         <option key={`model-${item.brandId ?? "na"}-${item.id}`} value={encodeRef(item.id, item.name)}>

@@ -2,6 +2,7 @@
 
 import { ArrowLeft, Save, Wrench } from "lucide-react";
 import { useMemo, useState } from "react";
+import { getUiText } from "@/lib/i18n/ui-text";
 import { Card } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
 import { IconTextActionButton } from "@/components/ui/icon-text-action-button";
@@ -52,6 +53,8 @@ export function UsedProductForm({
     createRefurbishmentCaseAction,
     backHref,
 }: UsedProductFormProps) {
+    const ui = getUiText(lang).usedProductForm;
+    const listUi = getUiText(lang).usedProductList;
     const [typeValue, setTypeValue] = useState(product?.type ?? typeSettings[0]?.name ?? "");
     const [grade, setGrade] = useState<UsedProductGrade>(product?.grade ?? "GRADE_B");
     const [brandValue, setBrandValue] = useState(product?.brand ?? "");
@@ -118,9 +121,9 @@ export function UsedProductForm({
             <input type="hidden" name="name" value={derivedProductName} />
 
             <Card className="grid gap-3">
-                <div className="text-sm font-semibold">基本資訊</div>
+                <div className="text-sm font-semibold">{ui.basicInfo}</div>
                 <div className="grid gap-3 md:grid-cols-2">
-                    <FormField label="類型" required>
+                    <FormField label={ui.type} required>
                         <Select
                             name="type"
                             value={typeValue}
@@ -141,7 +144,7 @@ export function UsedProductForm({
                             }}
                             required
                         >
-                            <option value="">請選擇類型</option>
+                            <option value="">{ui.typePlaceholder}</option>
                             {typeSettings.map((row) => (
                                 <option key={row.id} value={row.name}>
                                     {row.name}
@@ -149,7 +152,7 @@ export function UsedProductForm({
                             ))}
                         </Select>
                     </FormField>
-                    <FormField label="品牌" required hint={typeValue ? "只顯示該類型可用品牌" : "請先選擇類型"}>
+                    <FormField label={ui.brand} required hint={typeValue ? ui.brandHintTypeOnly : ui.brandHintSelectType}>
                         <Select
                             name="brand"
                             value={brandValue}
@@ -173,7 +176,7 @@ export function UsedProductForm({
                             required
                             disabled={!typeValue}
                         >
-                            <option value="">{typeValue ? "請選擇品牌" : "請先選擇類型"}</option>
+                            <option value="">{typeValue ? ui.brandPlaceholder : ui.brandHintSelectType}</option>
                             {effectiveBrandOptions.map((name) => (
                                 <option key={`brand-opt-${name}`} value={name}>
                                     {name}
@@ -181,7 +184,7 @@ export function UsedProductForm({
                             ))}
                         </Select>
                     </FormField>
-                    <FormField label="型號" required hint={brandValue ? "先選品牌再選型號" : "請先選擇品牌"}>
+                    <FormField label={ui.model} required hint={brandValue ? ui.modelHintBrandOnly : ui.modelHintSelectBrand}>
                         <Select
                             name="model"
                             value={modelValue}
@@ -189,7 +192,7 @@ export function UsedProductForm({
                             required
                             disabled={!brandValue}
                         >
-                            <option value="">{brandValue ? "請選擇型號" : "請先選擇品牌"}</option>
+                            <option value="">{brandValue ? ui.modelPlaceholder : ui.modelHintSelectBrand}</option>
                             {effectiveModelOptions.map((name) => (
                                 <option key={`model-opt-${name}`} value={name}>
                                     {name}
@@ -197,12 +200,12 @@ export function UsedProductForm({
                             ))}
                         </Select>
                     </FormField>
-                    <FormField label="序列號/IMEI No">
+                    <FormField label={ui.serialOrImei}>
                         <Input name="serialOrImei" defaultValue={serialOrImeiValue} />
                     </FormField>
                     <div className="md:col-span-2 grid gap-1">
-                        <div className="text-xs font-medium text-[rgb(var(--text))]">規格欄位</div>
-                        <div className="text-xs text-[rgb(var(--muted))]">規格欄位會依商品類型模板自動帶入；如需調整欄位結構，請到商店營銷設定修改。</div>
+                        <div className="text-xs font-medium text-[rgb(var(--text))]">{ui.specificationFields}</div>
+                        <div className="text-xs text-[rgb(var(--muted))]">{ui.specificationHint}</div>
                         <SpecificationEditor
                             key={specificationEditorKey}
                             templates={activeTypeSetting?.specificationTemplates ?? []}
@@ -215,9 +218,9 @@ export function UsedProductForm({
             </Card>
 
             <Card className="grid gap-3">
-                <div className="text-sm font-semibold">商品狀態 / 評價</div>
+                <div className="text-sm font-semibold">{ui.statusAndCondition}</div>
                 <div className="grid gap-3 md:grid-cols-2">
-                    <FormField label="商品評級" required>
+                    <FormField label={ui.grade} required>
                         <Select
                             name="grade"
                             value={grade}
@@ -227,27 +230,27 @@ export function UsedProductForm({
                             <option value="GRADE_B">Grade B</option>
                             <option value="GRADE_C">Grade C</option>
                             <option value="GRADE_D">Grade D</option>
-                            <option value="CUSTOM">自訂</option>
+                            <option value="CUSTOM">{ui.gradeCustom}</option>
                         </Select>
                     </FormField>
                     {grade === "CUSTOM" ? (
-                        <FormField label="自訂評級">
-                            <Input name="gradeLabel" defaultValue={product?.gradeLabel ?? ""} placeholder="例如：99 新" />
+                        <FormField label={ui.customGrade}>
+                            <Input name="gradeLabel" defaultValue={product?.gradeLabel ?? ""} placeholder={ui.customGradePlaceholder} />
                         </FormField>
                     ) : (
                         <input type="hidden" name="gradeLabel" value={product?.gradeLabel ?? ""} />
                     )}
-                    <FormField label="外觀描述" className="md:col-span-2">
+                    <FormField label={ui.conditionNote} className="md:col-span-2">
                         <Textarea name="conditionNote" rows={2} defaultValue={product?.conditionNote ?? ""} />
                     </FormField>
-                    <FormField label="功能描述" className="md:col-span-2">
+                    <FormField label={ui.functionalNote} className="md:col-span-2">
                         <Textarea name="functionalNote" rows={2} defaultValue={product?.functionalNote ?? ""} />
                     </FormField>
                 </div>
             </Card>
 
             <Card className="grid gap-3">
-                <div className="text-sm font-semibold">翻新資訊</div>
+                <div className="text-sm font-semibold">{ui.refurbishment}</div>
                 <div className="grid gap-3 md:grid-cols-2">
                     <label className="inline-flex items-center gap-2 text-sm">
                         <input
@@ -264,9 +267,9 @@ export function UsedProductForm({
                             }}
                             className="h-4 w-4 accent-[rgb(var(--accent))]"
                         />
-                        需翻新才能販賣
+                        {ui.needsRefurbishment}
                     </label>
-                    <FormField label="翻新狀態" required>
+                    <FormField label={ui.refurbishmentStatus} required>
                         <Select
                             name="refurbishmentStatus"
                             value={needsRefurbishment ? refurbishmentStatusValue : "no_need_refurbishment"}
@@ -275,112 +278,112 @@ export function UsedProductForm({
                         >
                             {needsRefurbishment ? (
                                 <>
-                                    <option value="waiting_refurbishment">等待翻新</option>
-                                    <option value="refurbishing">翻新中</option>
-                                    <option value="refurbished">已翻新</option>
+                                    <option value="waiting_refurbishment">{ui.waitingRefurbishment}</option>
+                                    <option value="refurbishing">{ui.refurbishing}</option>
+                                    <option value="refurbished">{ui.refurbished}</option>
                                 </>
                             ) : (
-                                <option value="no_need_refurbishment">不須翻新</option>
+                                <option value="no_need_refurbishment">{ui.noNeedRefurbishment}</option>
                             )}
                         </Select>
                     </FormField>
-                    <FormField label="翻新說明" className="md:col-span-2">
+                    <FormField label={ui.refurbishmentNote} className="md:col-span-2">
                         <Textarea name="refurbishmentNote" rows={2} defaultValue={product?.refurbishmentNote ?? ""} />
                     </FormField>
                 </div>
             </Card>
 
             <Card className="grid gap-3">
-                <div className="text-sm font-semibold">收購資訊</div>
+                <div className="text-sm font-semibold">{ui.purchaseInfo}</div>
                 <div className="grid gap-3 md:grid-cols-2">
-                    <FormField label="收購日期" required>
+                    <FormField label={ui.purchaseDate} required>
                         <Input type="date" name="purchaseDate" defaultValue={(product?.purchaseDate ?? "").slice(0, 10)} required />
                     </FormField>
-                    <FormField label="收購價格" required>
+                    <FormField label={ui.purchasePrice} required>
                         <Input type="number" min={0} name="purchasePrice" defaultValue={String(product?.purchasePrice ?? 0)} required />
                     </FormField>
-                    <FormField label="收購來源說明" className="md:col-span-2">
+                    <FormField label={ui.sourceNote} className="md:col-span-2">
                         <Textarea name="sourceNote" rows={2} defaultValue={product?.sourceNote ?? ""} />
                     </FormField>
-                    <FormField label="驗機結果" className="md:col-span-2">
+                    <FormField label={ui.inspectionResult} className="md:col-span-2">
                         <Textarea name="inspectionResult" rows={2} defaultValue={product?.inspectionResult ?? ""} />
                     </FormField>
-                    <FormField label="經手人員">
+                    <FormField label={ui.inspectedBy}>
                         <Input name="inspectedBy" defaultValue={product?.inspectedBy ?? ""} />
                     </FormField>
                 </div>
             </Card>
 
             <Card className="grid gap-3">
-                <div className="text-sm font-semibold">銷售資訊</div>
+                <div className="text-sm font-semibold">{ui.salesInfo}</div>
                 <div className="grid gap-3 md:grid-cols-2">
-                    <FormField label="建議售價">
+                    <FormField label={ui.suggestedSalePrice}>
                         <Input type="number" min={0} name="suggestedSalePrice" defaultValue={String(product?.suggestedSalePrice ?? "")} />
                     </FormField>
-                    <FormField label="實際售價">
+                    <FormField label={ui.salePrice}>
                         <Input type="number" min={0} name="salePrice" defaultValue={String(product?.salePrice ?? "")} />
                     </FormField>
                     <label className="inline-flex items-center gap-2 text-sm">
                         <input type="checkbox" name="isSellable" defaultChecked={product?.isSellable ?? true} className="h-4 w-4 accent-[rgb(var(--accent))]" />
-                        是否可販售
+                        {ui.isSellable}
                     </label>
                     <label className="inline-flex items-center gap-2 text-sm">
                         <input type="checkbox" name="isPublished" defaultChecked={product?.isPublished ?? false} className="h-4 w-4 accent-[rgb(var(--accent))]" />
-                        上架狀態
+                        {ui.isPublished}
                     </label>
-                    <FormField label="銷售狀態" className="md:col-span-2">
+                    <FormField label={ui.saleStatus} className="md:col-span-2">
                         <Select name="saleStatus" defaultValue={product?.saleStatus ?? "draft"}>
-                            <option value="draft">draft</option>
-                            <option value="purchased">purchased</option>
-                            <option value="inspecting">inspecting</option>
-                            <option value="available">available</option>
-                            <option value="reserved">reserved</option>
-                            <option value="sold">sold</option>
-                            <option value="returned">returned</option>
-                            <option value="archived">archived</option>
+                            <option value="draft">{listUi.saleStatus.draft}</option>
+                            <option value="purchased">{listUi.saleStatus.purchased}</option>
+                            <option value="inspecting">{listUi.saleStatus.inspecting}</option>
+                            <option value="available">{listUi.saleStatus.available}</option>
+                            <option value="reserved">{listUi.saleStatus.reserved}</option>
+                            <option value="sold">{listUi.saleStatus.sold}</option>
+                            <option value="returned">{listUi.saleStatus.returned}</option>
+                            <option value="archived">{listUi.saleStatus.archived}</option>
                         </Select>
                     </FormField>
                 </div>
             </Card>
 
             <Card className="grid gap-3">
-                <div className="text-sm font-semibold">保固資訊</div>
+                <div className="text-sm font-semibold">{ui.warrantyInfo}</div>
                 <div className="grid gap-3 md:grid-cols-2">
                     <label className="inline-flex items-center gap-2 text-sm">
                         <input type="checkbox" name="warrantyEnabled" defaultChecked={product?.warrantyEnabled ?? true} className="h-4 w-4 accent-[rgb(var(--accent))]" />
-                        啟用保固
+                        {ui.warrantyEnabled}
                     </label>
-                    <FormField label="預設保固時限" required>
+                    <FormField label={ui.warrantyDuration} required>
                         <Input type="number" min={0} name="warrantyDuration" defaultValue={String(product?.warrantyDuration ?? 3)} required />
                     </FormField>
-                    <FormField label="保固單位" required>
+                    <FormField label={ui.warrantyUnit} required>
                         <Select name="warrantyUnit" defaultValue={product?.warrantyUnit ?? "month"}>
-                            <option value="day">day</option>
-                            <option value="month">month</option>
+                            <option value="day">{ui.warrantyUnitDay}</option>
+                            <option value="month">{ui.warrantyUnitMonth}</option>
                         </Select>
                     </FormField>
-                    <FormField label="保固起算方式">
-                        <Input value="receipt_issued_at" disabled />
+                    <FormField label={ui.warrantyStartsOn}>
+                        <Input value={ui.warrantyStartsOnSold} disabled />
                         <input type="hidden" name="warrantyStartsOn" value="receipt_issued_at" />
                     </FormField>
-                    <FormField label="保固說明" className="md:col-span-2">
+                    <FormField label={ui.warrantyNote} className="md:col-span-2">
                         <Textarea name="warrantyNote" rows={2} defaultValue={product?.warrantyNote ?? ""} />
                     </FormField>
                 </div>
             </Card>
 
             <div className="flex flex-wrap gap-2">
-                <IconTextActionButton icon={Save} type="submit" label={mode === "create" ? "儲存新增" : "儲存修改"} tooltip="儲存二手商品資料" />
-                <IconTextActionButton icon={ArrowLeft} href={backHref} label="返回" tooltip="返回上一頁" />
+                <IconTextActionButton icon={Save} type="submit" label={mode === "create" ? ui.saveCreate : ui.saveEdit} tooltip={mode === "create" ? ui.saveCreate : ui.saveEdit} />
+                <IconTextActionButton icon={ArrowLeft} href={backHref} label={ui.back} tooltip={ui.backTooltip} />
             </div>
         </form>
 
         {mode === "edit" && product && createRefurbishmentCaseAction ? (
             <Card className="grid gap-2">
-                <div className="text-sm font-semibold">翻新案件</div>
+                <div className="text-sm font-semibold">{ui.refurbishment}</div>
                 <form action={createRefurbishmentCaseAction} className="flex flex-wrap items-center gap-2">
                     <input type="hidden" name="usedProductId" value={product.id} />
-                    <IconTextActionButton icon={Wrench} type="submit" label="建立翻新案件" tooltip="建立或連結翻新案件" />
+                    <IconTextActionButton icon={Wrench} type="submit" label={ui.createRefurbishmentCase} tooltip={ui.createRefurbishmentCaseTooltip} />
                 </form>
             </Card>
         ) : null}

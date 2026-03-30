@@ -2,19 +2,19 @@ import { headers } from "next/headers";
 import { cookies } from "next/headers";
 import { MerchantPageShell } from "@/components/merchant/shell";
 import { getLocaleFromHeader, t } from "@/lib/i18n/authIndex";
+import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
 import { SecuritySettingsPanel } from "@/components/settings/SecuritySettingsPanel";
 
 export default async function DashboardSettingsPage() {
     const h = await headers();
     const c = await cookies();
     const langCookie = c.get("lang")?.value;
+    const uiLang = getUiLanguage(langCookie);
+    const pageUi = getUiText(uiLang).dashboardSettingsPage;
     const locale = langCookie === "en" ? "en" : getLocaleFromHeader(h.get("accept-language"));
-    const isEnglish = locale === "en";
-    const title = isEnglish ? "Dashboard Settings" : "儀表板設定";
-    const subtitle = isEnglish ? "Manage Google linking and dashboard theme preferences." : "Google 綁定與主題樣式設定。";
 
     return (
-        <MerchantPageShell title={title} subtitle={subtitle} width="default">
+        <MerchantPageShell title={pageUi.pageTitle} subtitle={pageUi.pageSubtitle} width="default">
             <SecuritySettingsPanel
                 linkGoogleTitle={t(locale, "linkGoogle")}
                 linkedLabel={t(locale, "linked")}

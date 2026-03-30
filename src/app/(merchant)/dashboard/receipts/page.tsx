@@ -28,6 +28,7 @@ export default async function DashboardReceiptsPage({ searchParams }: ReceiptsPa
     return (
         <MerchantPageShell title={p.title} subtitle={p.subtitle} width="index">
             <ReceiptWorkspace
+                lang={lang}
                 receipts={receiptPage.items}
                 keyword={keyword}
                 pageSize={String(receiptPage.pageSize)}

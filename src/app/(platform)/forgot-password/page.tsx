@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { ForgotPasswordForm } from "@/components/auth/ForgotPasswordForm";
 import { AuthPageShell } from "@/components/auth/ui/AuthPageShell";
+import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
 import { normalizeAuthTenantId, normalizeTenantId } from "@/lib/tenant-scope";
 
 type ForgotPasswordSearchParams = {
@@ -22,6 +24,8 @@ export default async function ForgotPasswordPage({ searchParams }: { searchParam
     const tenantId = normalizeTenantId(sp?.tenant);
     const authTenantId = normalizeAuthTenantId(sp?.authTenant);
     const loginHref = withAuthContext("/login", tenantId, authTenantId);
+    const lang = getUiLanguage((await cookies()).get("lang")?.value);
+    const ui = getUiText(lang).authPages;
 
     return (
         <div className="min-h-dvh bg-[#191815] text-[#f5f1df]">
@@ -30,11 +34,11 @@ export default async function ForgotPasswordPage({ searchParams }: { searchParam
                     href={loginHref}
                     className="rounded-full border border-[#ffcb2d] px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.1em] text-[#ffcb2d] hover:bg-[#ffcb2d] hover:text-[#191815]"
                 >
-                    Back Login
+                    {ui.backLogin}
                 </Link>
             </div>
             <AuthPageShell>
-                <AuthShell title="忘記密碼">
+                <AuthShell title={ui.forgotPasswordShellTitle}>
                     <ForgotPasswordForm loginHref={loginHref} authTenantId={authTenantId} />
                 </AuthShell>
             </AuthPageShell>

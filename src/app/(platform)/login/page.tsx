@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { AuthClientBlock } from "@/components/auth/AuthClientBlock";
 import { AuthPageShell } from "@/components/auth/ui/AuthPageShell";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
+import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
 import { getCurrentSessionAccountContext } from "@/lib/services/staff.service";
 import { normalizeAuthTenantId, normalizeTenantId } from "@/lib/tenant-scope";
 
@@ -24,6 +26,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   const tenantId = normalizeTenantId(sp?.tenant);
   const authTenantId = normalizeAuthTenantId(sp?.authTenant);
+  const lang = getUiLanguage((await cookies()).get("lang")?.value);
+  const ui = getUiText(lang).authPages;
 
   const session = await getSessionUser();
   if (session) {
@@ -38,32 +42,6 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     redirect("/customer-dashboard");
   }
 
-  const labels = {
-    email: "Email",
-    password: "密碼",
-    signIn: "登入",
-    signUp: "註冊",
-    switchToSignUp: "沒有帳號？去註冊",
-    switchToSignIn: "已有帳號？去登入",
-    error: "發生錯誤",
-    or: "或",
-    verifyNeeded: "請先到信箱完成 Email 驗證後再登入。",
-    resendVerify: "重寄驗證信",
-    verifySent: "已送出驗證信（請檢查收件匣/垃圾郵件）。",
-    confirmPassword: "確認密碼",
-    passwordRuleCase: "需包含至少 1 個大寫與 1 個小寫英文字母",
-    passwordRuleLength: "密碼至少 8 個字元",
-    passwordMismatch: "密碼輸入不一樣",
-    passwordMatch: "密碼驗證符合",
-    passwordStrength: "密碼強度",
-    strengthWeak: "弱",
-    strengthMedium: "中",
-    strengthStrong: "強",
-    showPassword: "顯示密碼",
-    hidePassword: "隱藏密碼",
-    passwordPolicyError: "密碼規則不符合，請檢查提示。",
-  };
-
   return (
     <div className="min-h-dvh bg-[#191815] text-[#f5f1df]">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-5 md:px-6">
@@ -71,20 +49,20 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           href={tenantId ? `/${encodeURIComponent(tenantId)}` : "/"}
           className="rounded-full border border-[#ffcb2d] px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.1em] text-[#ffcb2d] hover:bg-[#ffcb2d] hover:text-[#191815]"
         >
-          Back Home
+          {ui.backHome}
         </Link>
       </div>
       <AuthPageShell>
-        <AuthShell title="登入 / 註冊">
+        <AuthShell title={ui.loginShellTitle}>
           <AuthClientBlock
-            labels={labels}
-            googleLabel="使用 Google 登入"
+            labels={ui.loginLabels}
+            googleLabel={ui.googleSignIn}
             tenantContextId={tenantId}
             firebaseAuthTenantId={authTenantId}
           />
           <div className="pt-1 text-center text-xs text-[rgb(var(--muted))]">
             <Link className="text-[rgb(var(--accent))] hover:underline" href={withAuthContext("/forgot-password", tenantId, authTenantId)}>
-              忘記密碼？
+              {ui.forgotPasswordLink}
             </Link>
           </div>
           <div className="pt-1 text-center">
@@ -92,13 +70,13 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
               className="inline-flex rounded-full border border-[rgb(var(--accent))] px-4 py-1.5 text-xs font-semibold text-[rgb(var(--accent))] hover:bg-[rgb(var(--accent))] hover:text-[#191815]"
               href={withAuthContext("/register/customer", tenantId, authTenantId)}
             >
-              註冊一般客戶帳號
+              {ui.registerCustomerAccount}
             </Link>
           </div>
           <div className="pt-1 text-center text-xs text-[rgb(var(--muted))]">
-            需要公司帳號？
+            {ui.needCompanyAccount}
             <Link className="ml-1 text-[rgb(var(--accent))] hover:underline" href="/register/company">
-              前往公司專用註冊
+              {ui.goCompanyRegister}
             </Link>
           </div>
         </AuthShell>

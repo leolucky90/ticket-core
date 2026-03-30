@@ -31,9 +31,9 @@ export default async function NewStaffPage() {
                 mustChangePassword: toBool(formData, "mustChangePassword"),
                 isRepairTechnician: toBool(formData, "isRepairTechnician"),
             });
-            redirect(`/staff?flash=${encodeURIComponent("員工建立完成")}&ts=${Date.now()}`);
+            redirect(`/staff?flash=${encodeURIComponent(uiStaff.flashCreated)}&ts=${Date.now()}`);
         } catch (error) {
-            const message = error instanceof Error ? error.message : "建立員工失敗";
+            const message = error instanceof Error ? error.message : uiStaff.flashCreateFailed;
             redirect(`/staff/new?flash=${encodeURIComponent(message)}&ts=${Date.now()}`);
         }
     }

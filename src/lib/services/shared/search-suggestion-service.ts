@@ -96,6 +96,9 @@ function buildProductItems(query: string, products: Product[]): Array<SearchSugg
             subtitle: productSubtitle(product),
             keywords,
             matchedBy: hit.matchedBy ?? "name",
+            meta: {
+                productId: product.id,
+            },
             score: hit.score,
         });
     }
@@ -167,6 +170,10 @@ async function buildCheckoutItems(query: string): Promise<Array<SearchSuggestion
                 subtitle: [sale.customerName ?? "", sale.receiptNo ?? ""].filter((item) => item.length > 0).join(" | "),
                 keywords,
                 matchedBy: hit.matchedBy ?? "name",
+                meta: {
+                    productId: line.productId || null,
+                    saleId: sale.id,
+                },
                 score: hit.score,
             });
         }

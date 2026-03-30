@@ -3,8 +3,10 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { EmailAuthForm } from "@/components/auth/EmailAuthForm";
 import { GoogleAuthButton } from "@/components/auth/GoogleAuthButton";
+import { useUiLanguage } from "@/components/layout/ui-language-provider";
 import { startNavigationProgress } from "@/components/layout/navigation-progress";
 import { firebaseClientConfigError, firebaseClientReady } from "@/lib/firebase-client/client";
+import { getUiText } from "@/lib/i18n/ui-text";
 import { normalizeAuthTenantId, normalizeTenantId } from "@/lib/tenant-scope";
 
 type Labels = Parameters<typeof EmailAuthForm>[0]["labels"];
@@ -34,6 +36,8 @@ export function AuthClientBlock({
     firebaseAuthTenantId?: string | null;
     showGoogle?: boolean;
 }) {
+    const lang = useUiLanguage();
+    const formUi = getUiText(lang).authForms;
     const router = useRouter();
     const sp = useSearchParams();
     const next = sp.get("next");
@@ -113,10 +117,9 @@ export function AuthClientBlock({
         <div className="auth-actions">
             {!firebaseClientReady ? (
                 <div className="auth-error">
-                    {firebaseClientConfigError ?? "Firebase 前端設定異常，暫時無法登入。"}
+                    {firebaseClientConfigError ?? formUi.firebaseConfigError}
                     <br />
-                    請在部署環境補上 `NEXT_PUBLIC_FIREBASE_API_KEY`、`NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`、
-                    `NEXT_PUBLIC_FIREBASE_PROJECT_ID`、`NEXT_PUBLIC_FIREBASE_APP_ID`。
+                    {formUi.firebaseConfigEnvHint}
                 </div>
             ) : null}
             <EmailAuthForm

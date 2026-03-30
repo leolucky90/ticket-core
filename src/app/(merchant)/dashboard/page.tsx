@@ -222,7 +222,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         const settings = await listUsedProductTypeSettings();
         const current = settings.find((row) => row.id === id);
         if (!current) {
-            return redirect(`/dashboard?tab=marketing&flash=${encodeURIComponent("找不到二手類型")}&ts=${Date.now()}`);
+            return redirect(`/dashboard?tab=marketing&flash=used_product_type_not_found&ts=${Date.now()}`);
         }
 
         if (actionMode === "addSpec") {
@@ -232,10 +232,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             const specInputType = toSpecInputType(formData.get("specInputType"));
             const specOptions = parseSpecTemplateOptions(formData.get("specOptionsJson"));
             if (!specName) {
-                return redirect(`/dashboard?tab=marketing&flash=${encodeURIComponent("規格名稱不可空白")}&ts=${Date.now()}`);
+                return redirect(`/dashboard?tab=marketing&flash=used_product_spec_name_required&ts=${Date.now()}`);
             }
             if (specInputType === "select" && specOptions.length === 0) {
-                return redirect(`/dashboard?tab=marketing&flash=${encodeURIComponent("下拉選單至少要有一個選項")}&ts=${Date.now()}`);
+                return redirect(`/dashboard?tab=marketing&flash=used_product_spec_options_required&ts=${Date.now()}`);
             }
             const specKey = toSpecTemplateKey(specName);
             const exists = current.specificationTemplates.some((row) => {
@@ -259,7 +259,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 id,
                 specificationTemplates: nextTemplates,
             });
-            return redirect(`/dashboard?tab=marketing&flash=${encodeURIComponent("規格欄位已新增")}&ts=${Date.now()}`);
+            return redirect(`/dashboard?tab=marketing&flash=used_product_spec_added&ts=${Date.now()}`);
         }
 
         if (actionMode === "updateSpec") {
@@ -271,13 +271,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             const specOptions = parseSpecTemplateOptions(formData.get("specOptionsJson"));
 
             if (!specKey) {
-                return redirect(`/dashboard?tab=marketing&flash=${encodeURIComponent("找不到規格欄位")}&ts=${Date.now()}`);
+                return redirect(`/dashboard?tab=marketing&flash=used_product_spec_not_found&ts=${Date.now()}`);
             }
             if (!specName) {
-                return redirect(`/dashboard?tab=marketing&flash=${encodeURIComponent("規格名稱不可空白")}&ts=${Date.now()}`);
+                return redirect(`/dashboard?tab=marketing&flash=used_product_spec_name_required&ts=${Date.now()}`);
             }
             if (specInputType === "select" && specOptions.length === 0) {
-                return redirect(`/dashboard?tab=marketing&flash=${encodeURIComponent("下拉選單至少要有一個選項")}&ts=${Date.now()}`);
+                return redirect(`/dashboard?tab=marketing&flash=used_product_spec_options_required&ts=${Date.now()}`);
             }
 
             const nextTemplates = current.specificationTemplates.map((row) =>
@@ -297,7 +297,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 id,
                 specificationTemplates: nextTemplates,
             });
-            return redirect(`/dashboard?tab=marketing&flash=${encodeURIComponent("規格欄位已更新")}&ts=${Date.now()}`);
+            return redirect(`/dashboard?tab=marketing&flash=used_product_spec_updated&ts=${Date.now()}`);
         }
 
         if (actionMode === "removeSpec") {
@@ -307,9 +307,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 id,
                 specificationTemplates: nextTemplates,
             });
-            return redirect(`/dashboard?tab=marketing&flash=${encodeURIComponent("規格欄位已刪除")}&ts=${Date.now()}`);
+            return redirect(`/dashboard?tab=marketing&flash=used_product_spec_deleted&ts=${Date.now()}`);
         }
-        return redirect(`/dashboard?tab=marketing&flash=${encodeURIComponent("二手規格模板已更新")}&ts=${Date.now()}`);
+        return redirect(`/dashboard?tab=marketing&flash=used_product_templates_updated&ts=${Date.now()}`);
     }
 
     async function updateItemNamingSettingsAction(formData: FormData): Promise<void> {
@@ -363,9 +363,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                     const sourceCaseId = String(formData.get("sourceCaseId") ?? "").trim();
                     const created = await createWarrantyCaseFromExistingCase({ sourceCaseId });
                     if (!created) {
-                        redirect(`/dashboard?tab=cases&flash=${encodeURIComponent("建立保固案件失敗")}&ts=${Date.now()}`);
+                        redirect(`/dashboard?tab=cases&flash=warranty_case_create_failed&ts=${Date.now()}`);
                     }
-                    redirect(`/dashboard?tab=cases&caseQ=${encodeURIComponent(created.id)}&flash=${encodeURIComponent("保固案件已建立")}&ts=${Date.now()}`);
+                    redirect(`/dashboard?tab=cases&caseQ=${encodeURIComponent(created.id)}&flash=warranty_case_created&ts=${Date.now()}`);
                 }}
                 updateCaseAction={updateTicket}
                 repairTechnicians={repairTechnicians.map((row) => ({

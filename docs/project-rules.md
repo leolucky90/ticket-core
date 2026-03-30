@@ -828,6 +828,8 @@ Required checks:
 
 - shared UI vocabulary 應優先集中到 `src/lib/i18n/ui-text.ts`
 - app-wide UI language state 應優先透過 `src/components/layout/ui-language-provider.tsx` 提供
+- 之後任何**新增或編輯** visible UI 的工作，都必須在**同一輪**完成 i18n；不可先交付單語 UI 再留待後續補翻
+- i18n 檢查範圍不可只看 route / page 本身；必須連同該頁會 render 的 shared child components、toolbar、dropdown、empty state、prompt / alert / confirm、pagination、search feedback 一起檢查，避免事後再回頭找漏網文案
 - shared shell / shared toolbar / shared processing / shared settings / shared builder chrome 不要再散落 page-local hard-coded 文案
 - DB 內保存的商業內容、builder content、名稱、備註、slug、enum code 保持 content-driven；UI 只負責翻譯框架字串
 - status / filter / pagination / empty state / button / flash message 的可切換文案，應優先回到 shared translation key，而不是在 route/component 內各自寫 `lang === "zh" ? ... : ...`

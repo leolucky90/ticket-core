@@ -4,10 +4,12 @@ import { MerchantListPagination, MerchantListShell, MerchantSectionCard, Merchan
 import type { MerchantStatItem } from "@/components/merchant/shell";
 import { IconActionButton } from "@/components/ui/icon-action-button";
 import { IconTextActionButton } from "@/components/ui/icon-text-action-button";
+import { getUiText, type UiLanguage, uiLocale } from "@/lib/i18n/ui-text";
 import type { Sale } from "@/lib/types/sale";
 import { LIST_DISPLAY_OPTIONS } from "@/lib/ui/list-display";
 
 type ReceiptWorkspaceProps = {
+    lang: UiLanguage;
     receipts: Sale[];
     keyword?: string;
     pageSize: string;
@@ -19,13 +21,13 @@ type ReceiptWorkspaceProps = {
     hasNextPage: boolean;
 };
 
-function formatMoney(value: number) {
-    return new Intl.NumberFormat("zh-TW").format(value);
+function formatMoney(value: number, locale: string) {
+    return new Intl.NumberFormat(locale).format(value);
 }
 
-function formatTime(value: number) {
+function formatTime(value: number, locale: string) {
     if (!Number.isFinite(value) || value <= 0) return "-";
-    return new Intl.DateTimeFormat("zh-TW", {
+    return new Intl.DateTimeFormat(locale, {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
@@ -34,14 +36,15 @@ function formatTime(value: number) {
     }).format(value);
 }
 
-function paymentStatusText(value: Sale["paymentStatus"]) {
-    if (value === "unpaid") return "未付";
-    if (value === "deposit") return "訂金";
-    if (value === "installment") return "分期";
-    return "結清";
+function paymentStatusText(value: Sale["paymentStatus"], ui: ReturnType<typeof getUiText>["receiptWorkspace"]) {
+    if (value === "unpaid") return ui.paymentStatusUnpaid;
+    if (value === "deposit") return ui.paymentStatusDeposit;
+    if (value === "installment") return ui.paymentStatusInstallment;
+    return ui.paymentStatusPaid;
 }
 
 export function ReceiptWorkspace({
+    lang,
     receipts,
     keyword = "",
     pageSize,
@@ -52,19 +55,21 @@ export function ReceiptWorkspace({
     nextCursorStack,
     hasNextPage,
 }: ReceiptWorkspaceProps) {
+    const ui = getUiText(lang).receiptWorkspace;
+    const locale = uiLocale(lang);
     const totalAmount = receipts.reduce((sum, row) => sum + Math.max(0, row.amount), 0);
     const paidCount = receipts.filter((row) => row.paymentStatus === "paid").length;
     const receiptSuggestions = receipts.map((receipt) => ({
         id: receipt.id,
         value: receipt.receiptNo || receipt.id,
         title: receipt.receiptNo || receipt.id,
-        subtitle: [receipt.customerName || "過路客", receipt.customerPhone, receipt.customerEmail].filter(Boolean).join(" / ") || undefined,
+        subtitle: [receipt.customerName || ui.walkin, receipt.customerPhone, receipt.customerEmail].filter(Boolean).join(" / ") || undefined,
         keywords: [receipt.receiptNo, receipt.id, receipt.customerName, receipt.customerPhone, receipt.customerEmail].filter((value): value is string => Boolean(value)),
     }));
     const stats: MerchantStatItem[] = [
-        { id: "count", label: "收據總數", value: receipts.length },
-        { id: "total", label: "總營收", value: formatMoney(totalAmount) },
-        { id: "paid", label: "結清筆數", value: paidCount },
+        { id: "count", label: ui.statsCount, value: receipts.length },
+        { id: "total", label: ui.statsTotal, value: formatMoney(totalAmount, locale) },
+        { id: "paid", label: ui.statsPaid, value: paidCount },
     ];
 
     const toolbar = (
@@ -74,21 +79,21 @@ export function ReceiptWorkspace({
                     <MerchantPredictiveSearchInput
                         name="q"
                         defaultValue={keyword}
-                        placeholder="查詢收據編號、客戶名稱、電話、Email"
+                        placeholder={ui.searchPlaceholder}
                         localSuggestions={receiptSuggestions}
                         className="min-w-0 flex-1"
                     />
                     <input type="hidden" name="pageSize" value={pageSize} />
                     <div className="flex items-center gap-2">
-                        <IconActionButton icon={Search} type="submit" label="搜尋收據" tooltip="搜尋收據" />
-                        <IconActionButton href="/dashboard/receipts" icon={RotateCcw} label="清除搜尋" tooltip="清除搜尋條件" />
+                        <IconActionButton icon={Search} type="submit" label={ui.searchAction} tooltip={ui.searchAction} />
+                        <IconActionButton href="/dashboard/receipts" icon={RotateCcw} label={ui.clearSearch} tooltip={ui.clearSearchTooltip} />
                     </div>
                 </form>
             }
             filtersSlot={
                 <form action="/dashboard/receipts" method="get" className="flex items-center gap-2">
                     {keyword ? <input type="hidden" name="q" value={keyword} /> : null}
-                    <span className="text-xs text-[rgb(var(--muted))]">每頁</span>
+                    <span className="text-xs text-[rgb(var(--muted))]">{ui.perPage}</span>
                     <select
                         name="pageSize"
                         defaultValue={pageSize}
@@ -100,8 +105,8 @@ export function ReceiptWorkspace({
                             </option>
                         ))}
                     </select>
-                    <IconTextActionButton type="submit" icon={Filter} label="套用每頁筆數" tooltip="套用每頁顯示筆數" className="h-10 px-3">
-                        套用
+                    <IconTextActionButton type="submit" icon={Filter} label={ui.applyPageSize} tooltip={ui.applyPageSize} className="h-10 px-3">
+                        {ui.apply}
                     </IconTextActionButton>
                 </form>
             }
@@ -110,13 +115,13 @@ export function ReceiptWorkspace({
 
     const list = (
         <MerchantSectionCard
-            title={`收據明細（${receipts.length}）`}
+            title={ui.title.replace("{count}", String(receipts.length))}
             emptyState={
                 receipts.length === 0
                     ? {
                           icon: ReceiptText,
-                          title: "尚無收據資料",
-                          description: "完成結帳後，收據會集中出現在這裡，方便後續營運與對帳。",
+                          title: ui.emptyTitle,
+                          description: ui.emptyDescription,
                       }
                     : undefined
             }
@@ -124,7 +129,7 @@ export function ReceiptWorkspace({
             {receipts.length === 0 ? null : (
                 <div className="space-y-3">
                     <MerchantListPagination
-                        summary={<span>本頁顯示 {receipts.length} 筆，採用固定高度與 server 分頁。</span>}
+                        summary={<span>{ui.summary.replace("{count}", String(receipts.length))}</span>}
                         previousAction={
                             <form action="/dashboard/receipts" method="get">
                                 {keyword ? <input type="hidden" name="q" value={keyword} /> : null}
@@ -134,12 +139,12 @@ export function ReceiptWorkspace({
                                 <IconTextActionButton
                                     type="submit"
                                     icon={ArrowLeft}
-                                    label="上一頁"
-                                    tooltip="載入上一頁"
+                                    label={ui.previousPage}
+                                    tooltip={ui.previousTooltip}
                                     className="h-9 px-3"
                                     disabled={!currentCursor}
                                 >
-                                    上一頁
+                                    {ui.previousPage}
                                 </IconTextActionButton>
                             </form>
                         }
@@ -152,12 +157,12 @@ export function ReceiptWorkspace({
                                 <IconTextActionButton
                                     type="submit"
                                     icon={ArrowRight}
-                                    label="下一頁"
-                                    tooltip="載入下一頁"
+                                    label={ui.nextPage}
+                                    tooltip={ui.nextTooltip}
                                     className="h-9 px-3"
                                     disabled={!hasNextPage || !nextCursor}
                                 >
-                                    下一頁
+                                    {ui.nextPage}
                                 </IconTextActionButton>
                             </form>
                         }
@@ -167,58 +172,58 @@ export function ReceiptWorkspace({
                         <details key={receipt.id} className="rounded-lg border border-[rgb(var(--border))]">
                             <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm [&::-webkit-details-marker]:hidden">
                                 <span className="font-semibold">{receipt.receiptNo || receipt.id}</span>
-                                <span>{receipt.customerName || "過路客"}</span>
-                                <span>{formatMoney(receipt.amount)}</span>
-                                <span>{formatTime(receipt.checkoutAt)}</span>
+                                <span>{receipt.customerName || ui.walkin}</span>
+                                <span>{formatMoney(receipt.amount, locale)}</span>
+                                <span>{formatTime(receipt.checkoutAt, locale)}</span>
                             </summary>
                             <div className="border-t border-[rgb(var(--border))] p-3 text-sm">
-                                <div>客戶：{receipt.customerName || "過路客"}</div>
-                                <div>電話：{receipt.customerPhone || "-"}</div>
-                                <div>Email：{receipt.customerEmail || "-"}</div>
+                                <div>{ui.customer}：{receipt.customerName || ui.walkin}</div>
+                                <div>{ui.phone}：{receipt.customerPhone || "-"}</div>
+                                <div>{ui.email}：{receipt.customerEmail || "-"}</div>
                                 <div>
-                                    促銷活動：
+                                    {ui.promotions}：
                                     {(receipt.appliedPromotions ?? []).length > 0
                                         ? (receipt.appliedPromotions ?? []).map((row) => `${row.promotionName}（${row.effectType}）`).join("、")
-                                        : "無"}
+                                        : ui.none}
                                 </div>
                                 <div>
-                                    客戶權益：
+                                    {ui.entitlements}：
                                     {(receipt.createdEntitlements ?? []).length > 0
                                         ? (receipt.createdEntitlements ?? [])
                                               .map((row) =>
                                                   row.scopeType === "product"
-                                                      ? `${row.entitlementType} / 產品 ${row.productName || "-"} / 剩餘 ${row.remainingQty}`
-                                                      : `${row.entitlementType} / 分類 ${row.categoryName || "-"} / 剩餘 ${row.remainingQty}`,
+                                                      ? `${row.entitlementType} / ${ui.scopeProductPrefix}${row.productName || "-"} / ${ui.remainingPrefix}${row.remainingQty}`
+                                                      : `${row.entitlementType} / ${ui.scopeCategoryPrefix}${row.categoryName || "-"} / ${ui.remainingPrefix}${row.remainingQty}`,
                                               )
                                               .join("、")
-                                        : "無新增"}
+                                        : ui.noNewEntitlements}
                                 </div>
                                 <div>
-                                    待取貨留貨：
+                                    {ui.pickupReservations}：
                                     {(receipt.createdPickupReservations ?? []).length > 0
                                         ? (receipt.createdPickupReservations ?? [])
-                                              .map((row) => `${row.reservationId} / ${row.status} / ${row.lineItemCount} 項`)
+                                              .map((row) => `${row.reservationId} / ${row.status} / ${row.lineItemCount}${ui.lineItemSuffix}`)
                                               .join("、")
-                                        : "無新增"}
+                                        : ui.noNewPickupReservations}
                                 </div>
                                 <div>
-                                    案件：
+                                    {ui.cases}：
                                     {(receipt.caseRefs ?? []).length > 0
                                         ? (receipt.caseRefs ?? []).map((row) => `${row.caseNo} / ${row.caseTitle || "-"}`).join("、")
-                                        : "未綁定案件"}
+                                        : ui.noLinkedCase}
                                 </div>
-                                <div>付款方式：{receipt.paymentMethod === "card" ? "刷卡" : "現金"}</div>
-                                <div>付款狀態：{paymentStatusText(receipt.paymentStatus)}</div>
-                                <div>建立時間：{formatTime(receipt.createdAt)}</div>
-                                <div className="mt-2 text-xs font-semibold text-[rgb(var(--muted))]">商品明細</div>
+                                <div>{ui.paymentMethod}：{receipt.paymentMethod === "card" ? ui.paymentMethodCard : ui.paymentMethodCash}</div>
+                                <div>{ui.paymentStatus}：{paymentStatusText(receipt.paymentStatus, ui)}</div>
+                                <div>{ui.createdAt}：{formatTime(receipt.createdAt, locale)}</div>
+                                <div className="mt-2 text-xs font-semibold text-[rgb(var(--muted))]">{ui.lineItems}</div>
                                 <div className="mt-1 overflow-x-auto">
                                     <table className="min-w-full text-xs">
                                         <thead>
                                             <tr className="text-left text-[rgb(var(--muted))]">
-                                                <th className="px-1 py-1">商品</th>
-                                                <th className="px-1 py-1">數量</th>
-                                                <th className="px-1 py-1">單價</th>
-                                                <th className="px-1 py-1">小計</th>
+                                                <th className="px-1 py-1">{ui.colProduct}</th>
+                                                <th className="px-1 py-1">{ui.colQty}</th>
+                                                <th className="px-1 py-1">{ui.colUnitPrice}</th>
+                                                <th className="px-1 py-1">{ui.colSubtotal}</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -226,11 +231,11 @@ export function ReceiptWorkspace({
                                                 <tr key={`${receipt.id}_${index}`}>
                                                     <td className="px-1 py-1">{item.productName}</td>
                                                     <td className="px-1 py-1">{item.qty}</td>
-                                                    <td className="px-1 py-1">{formatMoney(item.unitPrice)}</td>
-                                                    <td className="px-1 py-1">{formatMoney(item.subtotal)}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
+                                                                <td className="px-1 py-1">{formatMoney(item.unitPrice, locale)}</td>
+                                                                <td className="px-1 py-1">{formatMoney(item.subtotal, locale)}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
                                     </table>
                                 </div>
                             </div>
@@ -244,7 +249,7 @@ export function ReceiptWorkspace({
 
     return (
         <div className="space-y-4">
-            <MerchantSectionCard title="收據中心" description="集中保存結帳收據，支援營運分析與對帳追蹤。">
+            <MerchantSectionCard title={ui.hubTitle} description={ui.hubDescription}>
                 <MerchantStatGrid items={stats} />
             </MerchantSectionCard>
             <MerchantListShell toolbar={toolbar} list={list} />

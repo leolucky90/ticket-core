@@ -13,7 +13,9 @@ import { getFirebaseClientAuth, getFirebaseClientErrorMessage } from "@/lib/fire
 import { AuthButton } from "@/components/auth/ui/AuthButton";
 import { AuthDivider } from "@/components/auth/ui/AuthDivider";
 import { AuthInput } from "@/components/auth/ui/AuthInput";
+import { useUiLanguage } from "@/components/layout/ui-language-provider";
 import { ProcessingIndicator } from "@/components/ui/processing-indicator";
+import { getUiText } from "@/lib/i18n/ui-text";
 
 type Mode = "signIn" | "signUp";
 type SignUpAccountType = "customer" | "company";
@@ -74,38 +76,43 @@ function getAuthErrorCode(error: unknown): string {
     return "";
 }
 
-function getAuthErrorMessage(code: string, mode: Mode, labels: Labels): string {
+function getAuthErrorMessage(
+    code: string,
+    mode: Mode,
+    labels: Labels,
+    ui: ReturnType<typeof getUiText>["authForms"]["emailForm"],
+): string {
     if (code === "server/EMAIL_NOT_VERIFIED") return labels.verifyNeeded;
-    if (code === "server/TENANT_USER_NOT_BOUND") return "此帳號尚未綁定到該商家，請改用正確商家入口登入。";
-    if (code === "server/TENANT_SCOPE_MISMATCH") return "登入入口與帳號綁定商家不一致，請使用正確商家網址。";
-    if (code === "server/TENANT_LOGIN_FORBIDDEN") return "此帳號是商家管理帳號，請從一般後台登入。";
-    if (code === "server/CUSTOMER_TENANT_CONFLICT") return "此客戶帳號已綁定其他商家，請從原商家入口登入。";
-    if (code === "server/CUSTOMER_TENANT_REQUIRED") return "客戶帳號需要商家入口才能登入。";
-    if (code === "server/STAFF_ACCOUNT_NOT_ACTIVATED") return "帳號尚未啟用，請聯絡管理員。";
-    if (code === "server/STAFF_ACCOUNT_INACTIVE") return "帳號已停用，請聯絡管理員。";
-    if (code === "server/STAFF_ACCOUNT_LOCKED") return "帳號已被鎖定，請聯絡管理員。";
-    if (code === "server/STAFF_ACCOUNT_DELETED") return "帳號已刪除，無法登入。";
-    if (code === "server/STAFF_GOOGLE_NOT_LINKED") return "此帳號尚未綁定 Google，請先使用 Email 登入後至帳號安全頁綁定。";
-    if (code === "server/STAFF_GOOGLE_EMAIL_MISMATCH") return "Google 信箱與員工主信箱不一致，不可登入。";
-    if (code === "server/REGISTER_PROFILE_FAILED") return "建立帳號資料失敗，請稍後重試。";
-    if (code === "server/SESSION_CREATE_FAILED") return "登入工作階段建立失敗，請稍後重試。";
+    if (code === "server/TENANT_USER_NOT_BOUND") return ui.tenantUserNotBound;
+    if (code === "server/TENANT_SCOPE_MISMATCH") return ui.tenantScopeMismatch;
+    if (code === "server/TENANT_LOGIN_FORBIDDEN") return ui.tenantLoginForbidden;
+    if (code === "server/CUSTOMER_TENANT_CONFLICT") return ui.customerTenantConflict;
+    if (code === "server/CUSTOMER_TENANT_REQUIRED") return ui.customerTenantRequired;
+    if (code === "server/STAFF_ACCOUNT_NOT_ACTIVATED") return ui.staffAccountNotActivated;
+    if (code === "server/STAFF_ACCOUNT_INACTIVE") return ui.staffAccountInactive;
+    if (code === "server/STAFF_ACCOUNT_LOCKED") return ui.staffAccountLocked;
+    if (code === "server/STAFF_ACCOUNT_DELETED") return ui.staffAccountDeleted;
+    if (code === "server/STAFF_GOOGLE_NOT_LINKED") return ui.staffGoogleNotLinked;
+    if (code === "server/STAFF_GOOGLE_EMAIL_MISMATCH") return ui.staffGoogleEmailMismatch;
+    if (code === "server/REGISTER_PROFILE_FAILED") return ui.registerProfileFailed;
+    if (code === "server/SESSION_CREATE_FAILED") return ui.sessionCreateFailed;
 
     if (mode === "signIn") {
         if (code === "auth/invalid-credential" || code === "auth/wrong-password" || code === "auth/user-not-found") {
-            return "帳號或密碼錯誤，若你是用 Google 建立帳號請改用 Google 登入。";
+            return ui.invalidCredential;
         }
-        if (code === "auth/user-disabled") return "此帳號已被停用，請聯絡管理員。";
-        if (code === "auth/too-many-requests") return "嘗試次數過多，請稍後再試。";
-        if (code === "auth/network-request-failed") return "網路連線異常，請檢查網路後再試。";
-        if (code === "auth/operation-not-allowed") return "此登入方式目前未開啟，請聯絡管理員。";
-        if (TENANT_SIGNIN_ERROR_CODES.has(code)) return "租戶登入設定異常，請改用一般登入入口。";
+        if (code === "auth/user-disabled") return ui.userDisabled;
+        if (code === "auth/too-many-requests") return ui.tooManyRequests;
+        if (code === "auth/network-request-failed") return ui.networkFailed;
+        if (code === "auth/operation-not-allowed") return ui.operationNotAllowed;
+        if (TENANT_SIGNIN_ERROR_CODES.has(code)) return ui.tenantConfigError;
     }
 
     if (mode === "signUp") {
-        if (code === "auth/email-already-in-use") return "此 Email 已被註冊，請直接登入。";
-        if (code === "auth/invalid-email") return "Email 格式不正確。";
-        if (code === "auth/weak-password") return labels.passwordPolicyError ?? "密碼強度不足。";
-        if (TENANT_SIGNIN_ERROR_CODES.has(code)) return "租戶註冊設定異常，請改用一般註冊入口。";
+        if (code === "auth/email-already-in-use") return ui.emailInUse;
+        if (code === "auth/invalid-email") return ui.invalidEmail;
+        if (code === "auth/weak-password") return labels.passwordPolicyError ?? ui.invalidCredential;
+        if (TENANT_SIGNIN_ERROR_CODES.has(code)) return ui.tenantRegisterConfigError;
     }
 
     if (code) return `${labels.error} (${code})`;
@@ -131,6 +138,9 @@ export function EmailAuthForm({
     firebaseAuthTenantId?: string | null;
     disabled?: boolean;
 }) {
+    const lang = useUiLanguage();
+    const defaultLabels = getUiText(lang).authPages.loginLabels;
+    const formUi = getUiText(lang).authForms.emailForm;
     const [mode, setMode] = useState<Mode>(initialMode);
     const [email, setEmail] = useState("");
     const [pw, setPw] = useState("");
@@ -164,19 +174,19 @@ export function EmailAuthForm({
     const isSubmitDisabled =
         disabled || !email.trim() || !pw || (isSignUp ? !passwordValid || !confirmMatched : false);
 
-    const confirmPasswordLabel = labels.confirmPassword ?? "確認密碼";
-    const passwordRuleCase = labels.passwordRuleCase ?? "需包含至少 1 個大寫與 1 個小寫英文字母";
-    const passwordRuleLength = labels.passwordRuleLength ?? "密碼至少 8 個字元";
-    const passwordMismatch = labels.passwordMismatch ?? "密碼輸入不一樣";
-    const passwordMatch = labels.passwordMatch ?? "密碼驗證符合";
-    const passwordStrengthLabel = labels.passwordStrength ?? "密碼強度";
-    const strengthWeak = labels.strengthWeak ?? "弱";
-    const strengthMedium = labels.strengthMedium ?? "中";
-    const strengthStrong = labels.strengthStrong ?? "強";
-    const showPasswordLabel = labels.showPassword ?? "顯示密碼";
-    const hidePasswordLabel = labels.hidePassword ?? "隱藏密碼";
-    const passwordPolicyError = labels.passwordPolicyError ?? "密碼規則不符合，請檢查提示。";
-    const submittingMessage = `${primaryLabel}中...`;
+    const confirmPasswordLabel = labels.confirmPassword ?? defaultLabels.confirmPassword;
+    const passwordRuleCase = labels.passwordRuleCase ?? defaultLabels.passwordRuleCase;
+    const passwordRuleLength = labels.passwordRuleLength ?? defaultLabels.passwordRuleLength;
+    const passwordMismatch = labels.passwordMismatch ?? defaultLabels.passwordMismatch;
+    const passwordMatch = labels.passwordMatch ?? defaultLabels.passwordMatch;
+    const passwordStrengthLabel = labels.passwordStrength ?? defaultLabels.passwordStrength;
+    const strengthWeak = labels.strengthWeak ?? defaultLabels.strengthWeak;
+    const strengthMedium = labels.strengthMedium ?? defaultLabels.strengthMedium;
+    const strengthStrong = labels.strengthStrong ?? defaultLabels.strengthStrong;
+    const showPasswordLabel = labels.showPassword ?? defaultLabels.showPassword;
+    const hidePasswordLabel = labels.hidePassword ?? defaultLabels.hidePassword;
+    const passwordPolicyError = labels.passwordPolicyError ?? defaultLabels.passwordPolicyError;
+    const submittingMessage = `${primaryLabel}...`;
 
     function onEmailChange(e: ChangeEvent<HTMLInputElement>) {
         setEmail(e.target.value);
@@ -359,7 +369,7 @@ export function EmailAuthForm({
                         await onAuthed(idToken);
                     } catch (error) {
                         const code = getAuthErrorCode(error);
-                        setMsg(code ? getAuthErrorMessage(code, mode, labels) : getFirebaseClientErrorMessage(error));
+                        setMsg(code ? getAuthErrorMessage(code, mode, labels, formUi) : getFirebaseClientErrorMessage(error));
                     } finally {
                         setSubmitting(false);
                         fbAuth.tenantId = previousTenantId;
