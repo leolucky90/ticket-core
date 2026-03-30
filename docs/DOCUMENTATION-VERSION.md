@@ -15,7 +15,7 @@
 
 | 項目 | 值 |
 | --- | --- |
-| **版本** | **V1.11** |
+| **版本** | **V1.12** |
 | **最後更正** | **2026-03-30** |
 
 ---
@@ -34,6 +34,7 @@
 
 | 版本 | 日期 | 摘要 |
 | --- | --- | --- |
+| V1.12 | 2026-03-30 | Merchant i18n 收斂：`ui-text.ts` 新增 showcase 引言、商店營銷 workspace／品項快速命名／品牌編輯／二手規格說明等 key；儀表板分頁與多個獨立路由 shell 標題與 cookie `lang` 對齊；**`project-summary`**／**`project-rules`**／**`codebase-map`** 同步敘述 |
 | V1.11 | 2026-03-30 | **`project-rules.md`** 補充：未落地／第三方 API 對照指向 `project-summary` 專節 |
 | V1.10 | 2026-03-30 | **`project-summary.md`** 新增「未落地／待細修／第三方 API 對照（實作驗證用）」；**`saas-erp-ai-blueprint.md`** 結論交叉引用該節與 intake 待辦表 |
 | V1.09 | 2026-03-30 | 擴充 **`saas-erp-ai-blueprint.md`**：商業化平台樹、Pricing 矩陣、Stripe（規劃／`companyId` metadata）、Onboarding、白牌、`project-rules`／`project-summary`／`codebase-map` 交叉引用；標註 Stripe 未內建 |

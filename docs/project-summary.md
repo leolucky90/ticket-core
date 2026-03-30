@@ -71,6 +71,8 @@
 - merchant catalog 已支援主分類 / 第二分類階層與 `fullPath` 顯示基線，marketing / item management 共用同一套分類語意
 - 商店營銷分類設定已改為左側樹狀清單（主分類可展開第二分類）+ 右側新增／編輯／刪除面板；品項自動命名支援選填「副品名」接在自動帶入名稱後（`customLabel` 在 structured 模式下僅存副品名）；品項快速命名設置預設以 `<details>` 收起
 - 儀表板「商店營銷設定」分頁已改為頂部區塊選單（分類／供應來源／品牌／二手商品）+ `MerchantBuilderShell` 左清單右編輯區；已移除重複的「商店營銷設置 · 維修品牌型號」搜尋工具列；品牌編輯與型號邏輯收斂至 `MarketingBrandEditor` + `src/lib/marketing/brand-catalog-helpers.ts`
+- 商店營銷 workspace、品項快速命名（`ItemQuickNamingSettingsCard`）、品牌編輯器、二手規格模板說明等 **框架文案** 已收斂至 `src/lib/i18n/ui-text.ts`（`marketingSettingsWorkspace`、`itemQuickNaming`、`marketingBrandEditor`、`usedProductTypeSettings` 等），與 cookie `lang` 一致；`ShowcaseBuilder` 頂部產品敘述用 `showcaseBuilderIntro`，`settings/showcase` 的 `MerchantPageShell` 副標用 `merchantStandalonePages.showcaseBuilderShellSubtitle`
+- 儀表板 workspace 分頁抬頭（`dashboardWorkspaceTabs`）與結帳／收據／關聯總覽／寄店總覽／品項管理獨立路由等 shell 標題（`merchantStandalonePages`）、寄店 KPI 區塊（`consignmentsOverview`）已走同一套 `getUiLanguage`／`getUiText`，避免英文模式下殘留寫死中文
 - 「二手商品」子區塊與供應來源／品牌對齊：`UsedProductTypeSettingsCard` 使用 `MerchantBuilderShell`，左欄為啟用中的二手類型清單（搜尋、清單顯示筆數、可點選列），右欄為該類型之規格模板列表與新增／編輯規格表單（不再用整頁 `<details>` 摺疊列表）
 - merchant item naming baseline 已集中到 `companies/{companyId}/settings/itemNaming` 與 shared helper，支援品牌 / 型號 / 主分類 / 第二分類排序
 - dashboard inventory `settings` / `product-management` 與 `/dashboard/products` 已共用同一套 `ItemFormFields`，避免第二分類與自動命名只存在單一路徑

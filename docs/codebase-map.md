@@ -104,7 +104,7 @@
 | 目錄 | 說明 |
 | --- | --- |
 | `features/business/` | 首頁／商業落地內容與服務 |
-| `features/showcase/` | 展示頁 builder：`ShowcaseBuilder`、block registry、preferences、預設 template／renderer |
+| `features/showcase/` | 展示頁 builder：`ShowcaseBuilder`、block registry、preferences、預設 template／renderer；builder 頂部引言與 shell 文案與 `lib/i18n/ui-text.ts`（`showcaseBuilderIntro` 等）對齊 cookie `lang` |
 | `features/dashboard/` | 儀表板相關 feature 服務（若與 `components/dashboard` 並用，讀取時注意邊界） |
 
 Showcase 擴充時優先動：`showBlockRegistry.ts`、`showContentPreferences.ts`、`blockRenderer.tsx`（見 `project-rules.md` Storefront Builder Rule）。
@@ -151,7 +151,7 @@ Firestore／資料形狀與 bridge；例如 `cases.ts`（ticket legacy）、`del
 
 | 路徑 | 說明 |
 | --- | --- |
-| `lib/i18n/` | `ui-text.ts` 為共用 UI 字串主檔；與 `ui-language-provider` 搭配 |
+| `lib/i18n/` | `ui-text.ts` 為共用 UI 字串主檔；與 `ui-language-provider` 搭配；含儀表板分頁抬頭（`dashboardWorkspaceTabs`）、商店營銷 workspace（`marketingSettingsWorkspace` 等）、獨立 merchant 路由 shell（`merchantStandalonePages`）、寄店總覽（`consignmentsOverview`）、Showcase 引言（`showcaseBuilderIntro`）等 |
 | `lib/reporting/financial-summary.ts` | 儀表板用估計 COGS／毛利（銷售明細 × 品項成本） |
 | `lib/pagination/query-controls.ts` | cursor 分頁控制共用邏輯 |
 | `lib/ui/list-display.ts` | 列表 page-size 等共用常數 |

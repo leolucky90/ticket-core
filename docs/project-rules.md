@@ -620,6 +620,7 @@ merchant zone 要重構成 unified page shell system。
 - 頂部為區塊選單：分類、供應來源、品牌、二手商品。
 - **供應來源**、**品牌**、**二手商品** 三區皆應使用 `MerchantBuilderShell`（左清單／右編輯），與既有 Builder 雙欄語意一致。
 - **二手商品**：`src/components/used-products/used-product-type-settings-card.tsx`（`UsedProductTypeSettingsCard`）左欄為「類型清單」（來自品牌設定中已啟用之二手類型），右欄為該類型之規格模板與表單；類型啟用與否仍由品牌設定側控制，此區只維護規格模板。
+- **i18n**：上述 workspace 之區塊選單、供應商／品牌清單與表單、`ItemQuickNamingSettingsCard`、`MarketingBrandEditor`、二手規格說明等 UI 字串應自 `src/lib/i18n/ui-text.ts` 取用（例如 `marketingSettingsWorkspace`、`itemQuickNaming`、`marketingBrandEditor`、`usedProductTypeSettings`），語系與 cookie `lang`／`UiLanguageProvider` 對齊，避免 page-local 硬編中英分支。
 
 ## Shared Page Rules
 
@@ -709,6 +710,7 @@ merchant zone 要重構成 unified page shell system。
 已完成:
 
 - modern 3-column builder UI
+- merchant `ShowcaseBuilder` 頂部產品敘述（block list／canvas／inspector）收斂至 `ui-text.ts` 的 `showcaseBuilderIntro`；`settings/showcase` 頁 shell 副標與 `merchantStandalonePages.showcaseBuilderShellSubtitle` 對齊 cookie 語系
 - synchronized official and merchant builder visual language
 - preview viewport controls
 - browser-like preview zoom control
