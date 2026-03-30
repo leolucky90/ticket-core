@@ -1,5 +1,7 @@
+import { cookies } from "next/headers";
 import { ProductManagementWorkspace } from "@/components/dashboard/ProductManagementWorkspace";
 import { MerchantPageShell } from "@/components/merchant/shell";
+import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
 import { decodeCursorStack, encodeCursorStack, parseListPageSize } from "@/lib/pagination/query-controls";
 import { getItemNamingSettings } from "@/lib/services/item-naming-settings.service";
 import { getCatalogDimensionBundle, listCatalogSuppliers } from "@/lib/services/merchant/catalog-service";
@@ -66,6 +68,10 @@ function dedupeDimensionOptions(items: DimensionOption[]): DimensionOption[] {
 
 export default async function ProductManagementPage({ searchParams }: ProductManagementPageProps) {
     const sp = await searchParams;
+    const lang = getUiLanguage((await cookies()).get("lang")?.value);
+    const ui = getUiText(lang);
+    const pm = ui.merchantStandalonePages.productManagement;
+    const inv = ui.inventoryNav;
     const productKeyword = (sp.productQ ?? "").trim();
     const supplierFilter = (sp.supplier ?? "").trim();
     const categoryFilter = (sp.categoryId ?? "").trim();
@@ -128,15 +134,15 @@ export default async function ProductManagementPage({ searchParams }: ProductMan
 
     return (
         <MerchantPageShell
-            title="品項管理"
-            subtitle="營運型清單頁，集中處理搜尋、篩選與品項維護。"
+            title={pm.title}
+            subtitle={pm.subtitle}
             width="index"
             tabs={[
-                { id: "inventory-stock", label: "庫存", href: "/dashboard?tab=inventory&inventoryView=stock" },
-                { id: "inventory-settings", label: "庫存設置", href: "/dashboard?tab=inventory&inventoryView=settings" },
-                { id: "inventory-stock-in", label: "入庫", href: "/dashboard?tab=inventory&inventoryView=stock-in" },
-                { id: "inventory-stock-out", label: "出庫", href: "/dashboard?tab=inventory&inventoryView=stock-out" },
-                { id: "inventory-products", label: "品項管理", href: "/dashboard/products" },
+                { id: "inventory-stock", label: inv.stock, href: "/dashboard?tab=inventory&inventoryView=stock" },
+                { id: "inventory-settings", label: inv.settings, href: "/dashboard?tab=inventory&inventoryView=settings" },
+                { id: "inventory-stock-in", label: inv.stockIn, href: "/dashboard?tab=inventory&inventoryView=stock-in" },
+                { id: "inventory-stock-out", label: inv.stockOut, href: "/dashboard?tab=inventory&inventoryView=stock-out" },
+                { id: "inventory-products", label: inv.productManagement, href: "/dashboard/products" },
             ]}
         >
             <ProductManagementWorkspace

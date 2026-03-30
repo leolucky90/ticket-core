@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { type DragEvent, type PointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import type { UiLanguage } from "@/lib/i18n/ui-text";
+import { getUiText } from "@/lib/i18n/ui-text";
 
 export type NavCardItem = {
     id: string;
@@ -12,7 +14,7 @@ export type NavCardItem = {
 
 type DraggableNavCardsProps = {
     items: NavCardItem[];
-    lang: "zh" | "en";
+    lang: UiLanguage;
     storageKey?: string;
 };
 
@@ -92,8 +94,9 @@ export function DraggableNavCards({ items, lang, storageKey }: DraggableNavCards
 
     const isNavCardId = (value: unknown): value is string => typeof value === "string" && itemMap.has(value);
 
-    const hintText = lang === "zh" ? "拖曳卡片或右側把手可對調位置" : "Drag card or handle to swap order";
-    const dragHandleLabel = lang === "zh" ? "拖曳把手" : "Drag handle";
+    const navUi = getUiText(lang).navCards;
+    const hintText = navUi.hintText;
+    const dragHandleLabel = navUi.dragHandleLabel;
 
     const handleDragStart = (id: string) => (event: DragEvent<HTMLDivElement>) => {
         setDragging(id);

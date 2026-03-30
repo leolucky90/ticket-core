@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { MerchantPageShell } from "@/components/merchant/shell";
 import { PermissionLevelsSettingsPanel } from "@/components/settings/PermissionLevelsSettingsPanel";
+import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
 import { getPermissionLevels, updatePermissionLevel } from "@/lib/services/permission-level.service";
 
 type StaffRolesPageProps = {
@@ -23,27 +24,14 @@ function parsePermissions(rawValues: FormDataEntryValue[]): string[] {
 
 export default async function StaffRolesPage({ searchParams }: StaffRolesPageProps) {
     const cookieStore = await cookies();
-    const langCookie = cookieStore.get("lang")?.value;
-    const lang: "zh" | "en" = langCookie === "en" ? "en" : "zh";
+    const lang = getUiLanguage(cookieStore.get("lang")?.value);
+    const permUi = getUiText(lang).permissionLevels;
     const levels = await getPermissionLevels();
     const sp = await searchParams;
-    const ui =
-        lang === "zh"
-            ? {
-                  updated: "權限等級已更新",
-                  failed: "更新失敗",
-                  title: "權限等級設定",
-                  subtitle: "固定 Lv1 ~ Lv9，使用方塊勾選權限",
-              }
-            : {
-                  updated: "Permission levels updated",
-                  failed: "Update failed",
-                  title: "Permission Levels",
-                  subtitle: "Fixed Lv1 ~ Lv9 with checkbox permission editor",
-              };
 
     async function saveAction(formData: FormData): Promise<void> {
         "use server";
+        const m = getUiText(getUiLanguage((await cookies()).get("lang")?.value)).permissionLevels;
         try {
             await updatePermissionLevel({
                 level: Number(formData.get("level")),
@@ -51,15 +39,15 @@ export default async function StaffRolesPage({ searchParams }: StaffRolesPagePro
                 isActive: formData.get("isActive") === "on",
                 permissions: parsePermissions(formData.getAll("permissions[]")),
             });
-            redirect(`/settings/staff/roles?flash=${encodeURIComponent(ui.updated)}&ts=${Date.now()}`);
+            redirect(`/settings/staff/roles?flash=${encodeURIComponent(m.flashUpdated)}&ts=${Date.now()}`);
         } catch (error) {
-            const message = error instanceof Error ? error.message : ui.failed;
+            const message = error instanceof Error ? error.message : m.flashFailed;
             redirect(`/settings/staff/roles?flash=${encodeURIComponent(message)}&ts=${Date.now()}`);
         }
     }
 
     return (
-        <MerchantPageShell title={ui.title} subtitle={ui.subtitle} width="index">
+        <MerchantPageShell title={permUi.pageTitle} subtitle={permUi.pageSubtitle} width="index">
             {sp.flash ? <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2 text-sm">{sp.flash}</div> : null}
             <PermissionLevelsSettingsPanel levels={levels} saveAction={saveAction} canEdit={true} lang={lang} />
         </MerchantPageShell>

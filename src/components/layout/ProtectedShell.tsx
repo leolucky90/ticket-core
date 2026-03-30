@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { AiChatBallVisibilityProvider } from "@/components/ai/ai-chat-ball-visibility-provider";
+import { ChatBall } from "@/components/ai/chat-ball";
 import { SignOutButton } from "@/components/layout/SignOutButton";
 import { MerchantAccountMenu, MerchantAppShell, MerchantTopbarLinkBar } from "@/components/merchant/shell";
 import { DashboardThemeSync } from "@/components/settings/DashboardThemeSync";
@@ -8,6 +10,7 @@ import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
 import { getCurrentSessionAccountContext } from "@/lib/services/staff.service";
 import { resolveCustomerHomepageUrl } from "@/lib/services/homepage-url.service";
+import { getDashboardPreferences } from "@/features/dashboard/services/dashboardPreferences.server";
 import {
     buildCompanySidebarGroups,
     buildCompanyTopbarLinks,
@@ -55,6 +58,12 @@ export async function ProtectedShell({ children }: ProtectedShellProps) {
 
     const accountContext = await getCurrentSessionAccountContext();
     const shellAccountType = accountContext?.accountType ?? "customer";
+    const companyTenantId = shellAccountType === "company" ? accountContext?.tenantId ?? null : null;
+    let aiChatBallEnabled = true;
+    if (companyTenantId) {
+        const prefs = await getDashboardPreferences({ tenantId: companyTenantId });
+        aiChatBallEnabled = prefs.aiChatBallEnabled !== false;
+    }
     const customerTenantId = shellAccountType === "customer" ? accountContext?.tenantId ?? null : null;
     const customerDashboardHref = customerTenantId ? `/${encodeURIComponent(customerTenantId)}/dashboard` : "/customer-dashboard";
     if (shellAccountType === "customer" && isCompanyOnlyPath(pathname)) {
@@ -62,10 +71,15 @@ export async function ProtectedShell({ children }: ProtectedShellProps) {
     }
 
     if (shellAccountType === "company" && isStandaloneCompanyHomePath(pathname)) {
-        return <>{children}</>;
+        return (
+            <AiChatBallVisibilityProvider initialEnabled={aiChatBallEnabled}>
+                {children}
+                <ChatBall />
+            </AiChatBallVisibilityProvider>
+        );
     }
 
-    const accountName = sessionUser.email.split("@")[0] || "使用者";
+    const accountName = sessionUser.email.split("@")[0] || ui.shell.defaultUserMoniker;
     const accountEmail = sessionUser.email;
     const avatarText = accountName.slice(0, 1).toUpperCase();
     const labels = {
@@ -139,9 +153,12 @@ export async function ProtectedShell({ children }: ProtectedShellProps) {
             : []),
     ];
 
-    const quickLinks = hasPublicHomeLink
-        ? [{ id: "public-home", label: labels.publicHome, href: publicHomeHref, external: publicHomeIsExternal }]
-        : [{ id: "back-home", label: labels.backHome, href: "/" }];
+    const quickLinks =
+        shellAccountType === "company"
+            ? []
+            : hasPublicHomeLink
+              ? [{ id: "public-home", label: labels.publicHome, href: publicHomeHref, external: publicHomeIsExternal }]
+              : [{ id: "back-home", label: labels.backHome, href: "/" }];
 
     const topbarActions = (
         <div className="flex items-center gap-2">
@@ -154,6 +171,7 @@ export async function ProtectedShell({ children }: ProtectedShellProps) {
                 settingsLabel={labels.settings}
                 settingsLinks={settingsLinks}
                 quickLinks={quickLinks}
+                aiChatBallMenu={shellAccountType === "company" ? { enabled: aiChatBallEnabled } : null}
                 signOutSlot={<SignOutButton className="w-full text-left" label={labels.signOut} />}
             />
         </div>
@@ -161,12 +179,21 @@ export async function ProtectedShell({ children }: ProtectedShellProps) {
 
     const sidebarGroups = shellAccountType === "company" ? companySidebarGroups : customerSidebarGroups;
 
+    if (shellAccountType === "company") {
+        return (
+            <AiChatBallVisibilityProvider initialEnabled={aiChatBallEnabled}>
+                <DashboardThemeSync />
+                <MerchantAppShell sidebarGroups={sidebarGroups} topbarActions={topbarActions} brandHref={homeHref}>
+                    {children}
+                </MerchantAppShell>
+                <ChatBall />
+            </AiChatBallVisibilityProvider>
+        );
+    }
+
     return (
-        <>
-            {shellAccountType === "company" ? <DashboardThemeSync /> : null}
-            <MerchantAppShell sidebarGroups={sidebarGroups} topbarActions={topbarActions} brandHref={homeHref}>
-                {children}
-            </MerchantAppShell>
-        </>
+        <MerchantAppShell sidebarGroups={sidebarGroups} topbarActions={topbarActions} brandHref={homeHref}>
+            {children}
+        </MerchantAppShell>
     );
 }

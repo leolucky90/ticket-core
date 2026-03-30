@@ -1,5 +1,7 @@
+import { cookies } from "next/headers";
 import { ReceiptWorkspace } from "@/components/dashboard/ReceiptWorkspace";
 import { MerchantPageShell } from "@/components/merchant/shell";
+import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
 import { decodeCursorStack, encodeCursorStack, parseListPageSize } from "@/lib/pagination/query-controls";
 import { queryCheckoutSalesPage } from "@/lib/services/sales";
 
@@ -9,6 +11,8 @@ type ReceiptsPageProps = {
 
 export default async function DashboardReceiptsPage({ searchParams }: ReceiptsPageProps) {
     const sp = await searchParams;
+    const lang = getUiLanguage((await cookies()).get("lang")?.value);
+    const p = getUiText(lang).merchantStandalonePages.receipts;
     const keyword = (sp.q ?? "").trim();
     const currentCursor = (sp.cursor ?? "").trim();
     const currentCursorStack = decodeCursorStack((sp.cursorStack ?? "").trim());
@@ -22,7 +26,7 @@ export default async function DashboardReceiptsPage({ searchParams }: ReceiptsPa
     const nextCursorStack = encodeCursorStack(currentCursor ? [...currentCursorStack, currentCursor] : currentCursorStack);
 
     return (
-        <MerchantPageShell title="收據" subtitle="收據索引頁，優先檢索、篩選與明細查閱。" width="index">
+        <MerchantPageShell title={p.title} subtitle={p.subtitle} width="index">
             <ReceiptWorkspace
                 receipts={receiptPage.items}
                 keyword={keyword}

@@ -1,4 +1,6 @@
 import type { PermissionLevel } from "@/lib/schema";
+import type { UiLanguage } from "@/lib/i18n/ui-text";
+import { getUiText } from "@/lib/i18n/ui-text";
 import { ALL_PERMISSION_KEYS } from "@/lib/permissionKeys";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -9,7 +11,7 @@ type PermissionLevelsSettingsPanelProps = {
     levels: PermissionLevel[];
     saveAction: (formData: FormData) => Promise<void>;
     canEdit: boolean;
-    lang: "zh" | "en";
+    lang: UiLanguage;
 };
 
 type PermissionGroup = {
@@ -86,7 +88,7 @@ const PERMISSION_LABELS: Record<string, { zh: string; en: string }> = {
     hard_delete_authorized: { zh: "高風險永久刪除授權", en: "High-risk Hard Delete Authorization" },
 };
 
-function permissionLabel(key: string, lang: "zh" | "en"): string {
+function permissionLabel(key: string, lang: UiLanguage): string {
     return PERMISSION_LABELS[key]?.[lang] ?? key;
 }
 
@@ -105,30 +107,7 @@ function uniqueKeys(value: string[]): string[] {
 }
 
 export function PermissionLevelsSettingsPanel({ levels, saveAction, canEdit, lang }: PermissionLevelsSettingsPanelProps) {
-    const ui =
-        lang === "zh"
-            ? {
-                  active: "啟用",
-                  inactive: "停用",
-                  displayName: "顯示名稱",
-                  activeToggle: "啟用此等級",
-                  permissions: "權限勾選",
-                  custom: "其他自訂權限",
-                  code: "代碼",
-                  updated: "更新時間",
-                  save: "儲存",
-              }
-            : {
-                  active: "Active",
-                  inactive: "Inactive",
-                  displayName: "Display Name",
-                  activeToggle: "Enable this level",
-                  permissions: "Permission Checkboxes",
-                  custom: "Custom Permissions",
-                  code: "Code",
-                  updated: "Updated",
-                  save: "Save",
-              };
+    const ui = getUiText(lang).permissionLevels;
 
     return (
         <div className="grid max-w-5xl gap-3">

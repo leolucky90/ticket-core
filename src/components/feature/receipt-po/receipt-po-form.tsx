@@ -7,6 +7,8 @@ import type { PurchaseOrderDraft } from "@/lib/types/purchase-order";
 import type { DimensionPickerBundle } from "@/lib/types/catalog";
 import { emptyDimensionBundle, PoDraftLineItemsEditor } from "@/components/feature/receipt-po/draft-editor";
 import { ProcessingOverlay } from "@/components/ui/processing-overlay";
+import type { UiLanguage } from "@/lib/i18n/ui-text";
+import { getUiText } from "@/lib/i18n/ui-text";
 
 const emptyDraft = (): PoDraft => ({
     documentType: "unknown",
@@ -41,77 +43,8 @@ function cloneDraft(d: PoDraft): PoDraft {
     };
 }
 
-type Lang = "zh" | "en";
-
-const ui = {
-    zh: {
-        uploadTitle: "上傳收據／發票影像",
-        uploadHint: "支援 JPEG、PNG、WebP、GIF（不支援 PDF）。需登入商家帳號。",
-        submit: "上傳並解析",
-        saving: "OCR 與 AI 解析中…",
-        vendor: "供應商／抬頭",
-        docNo: "單號",
-        docDate: "日期",
-        currency: "幣別",
-        subtotal: "小計",
-        tax: "稅額",
-        total: "總計",
-        summary: "摘要",
-        warnings: "提醒",
-        confidence: "信心分數",
-        items: "品項",
-        lineDesc: "說明",
-        qty: "數量",
-        unit: "單價",
-        amt: "金額",
-        addLine: "新增列",
-        remove: "刪除",
-        saveDraft: "儲存草稿",
-        confirmPo: "確認建立採購單",
-        deleting: "刪除草稿",
-        deleteDraft: "刪除草稿",
-        docType: "單據類型",
-        receipt: "收據",
-        invoice: "發票",
-        unknown: "未知",
-        loginNote: "請先登入商家後台再使用此功能。",
-    },
-    en: {
-        uploadTitle: "Upload receipt / invoice image",
-        uploadHint: "JPEG, PNG, WebP, GIF only. PDF not supported. Merchant login required.",
-        submit: "Upload & parse",
-        saving: "Running OCR and AI…",
-        vendor: "Vendor",
-        docNo: "Document #",
-        docDate: "Date",
-        currency: "Currency",
-        subtotal: "Subtotal",
-        tax: "Tax",
-        total: "Total",
-        summary: "Summary",
-        warnings: "Warnings",
-        confidence: "Confidence",
-        items: "Line items",
-        lineDesc: "Description",
-        qty: "Qty",
-        unit: "Unit price",
-        amt: "Amount",
-        addLine: "Add line",
-        remove: "Remove",
-        saveDraft: "Save draft",
-        confirmPo: "Confirm purchase order",
-        deleting: "Deleting…",
-        deleteDraft: "Delete draft",
-        docType: "Document type",
-        receipt: "Receipt",
-        invoice: "Invoice",
-        unknown: "Unknown",
-        loginNote: "Sign in to the merchant workspace to use this flow.",
-    },
-} as const;
-
 type PoDraftEditorProps = {
-    lang: Lang;
+    lang: UiLanguage;
     draftId: string;
     value: PoDraft;
     onChange: (next: PoDraft) => void;
@@ -133,7 +66,7 @@ function PoDraftEditor({
     busy,
     dimensionBundle,
 }: PoDraftEditorProps) {
-    const t = ui[lang];
+    const t = getUiText(lang).receiptPo;
 
     const setField = useCallback(
         <K extends keyof PoDraft>(key: K, v: PoDraft[K]) => {
@@ -294,12 +227,12 @@ function PoDraftEditor({
 }
 
 export type PurchaseOrderAiIntakeCardProps = {
-    lang: Lang;
+    lang: UiLanguage;
 };
 
 export function PurchaseOrderAiIntakeCard({ lang }: PurchaseOrderAiIntakeCardProps) {
     const router = useRouter();
-    const t = ui[lang];
+    const t = getUiText(lang).receiptPo;
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -310,7 +243,7 @@ export function PurchaseOrderAiIntakeCard({ lang }: PurchaseOrderAiIntakeCardPro
         const input = form.elements.namedItem("file") as HTMLInputElement | null;
         const file = input?.files?.[0];
         if (!file) {
-            setError(lang === "zh" ? "請選擇檔案" : "Choose a file");
+            setError(t.errChooseFile);
             return;
         }
         setBusy(true);
@@ -320,7 +253,7 @@ export function PurchaseOrderAiIntakeCard({ lang }: PurchaseOrderAiIntakeCardPro
             const res = await fetch("/api/document-intake", { method: "POST", body: fd });
             const data = (await res.json()) as { draftId?: string; error?: string };
             if (!res.ok) {
-                setError(data.error ?? "Request failed");
+                setError(data.error ?? t.errRequestFailed);
                 return;
             }
             if (data.draftId) {
@@ -328,7 +261,7 @@ export function PurchaseOrderAiIntakeCard({ lang }: PurchaseOrderAiIntakeCardPro
                 router.refresh();
             }
         } catch {
-            setError(lang === "zh" ? "上傳失敗" : "Upload failed");
+            setError(t.errUploadFailed);
         } finally {
             setBusy(false);
         }
@@ -405,14 +338,14 @@ function purchaseOrderToPoDraft(draft: PurchaseOrderDraft): PoDraft {
 }
 
 export type PoDraftReviewPanelProps = {
-    lang: Lang;
+    lang: UiLanguage;
     draft: PurchaseOrderDraft;
     dimensionBundle: DimensionPickerBundle;
 };
 
 export function PoDraftReviewPanel({ lang, draft, dimensionBundle }: PoDraftReviewPanelProps) {
     const router = useRouter();
-    const t = ui[lang];
+    const t = getUiText(lang).receiptPo;
     const [value, setValue] = useState<PoDraft>(() => purchaseOrderToPoDraft(draft));
     const [busy, setBusy] = useState(false);
 
@@ -493,12 +426,12 @@ export function PoDraftReviewPanel({ lang, draft, dimensionBundle }: PoDraftRevi
 }
 
 type ReceiptPoFormProps = {
-    lang?: Lang;
+    lang?: UiLanguage;
     dimensionBundle?: DimensionPickerBundle;
 };
 
 export function ReceiptPoForm({ lang = "zh", dimensionBundle }: ReceiptPoFormProps) {
-    const t = ui[lang];
+    const t = getUiText(lang).receiptPo;
     const [result, setResult] = useState<{
         draftId: string;
         draft: PoDraft;
@@ -515,7 +448,7 @@ export function ReceiptPoForm({ lang = "zh", dimensionBundle }: ReceiptPoFormPro
         const input = form.elements.namedItem("file") as HTMLInputElement | null;
         const file = input?.files?.[0];
         if (!file) {
-            setError(lang === "zh" ? "請選擇檔案" : "Choose a file");
+            setError(t.errChooseFile);
             return;
         }
         setBusy(true);
@@ -529,7 +462,7 @@ export function ReceiptPoForm({ lang = "zh", dimensionBundle }: ReceiptPoFormPro
                 return;
             }
             if (!res.ok) {
-                setError(data.error ?? "Error");
+                setError(data.error ?? t.errGeneric);
                 return;
             }
             if (data.draft && data.draftId) {
@@ -537,7 +470,7 @@ export function ReceiptPoForm({ lang = "zh", dimensionBundle }: ReceiptPoFormPro
                 setValue(cloneDraft(data.draft));
             }
         } catch {
-            setError(lang === "zh" ? "請求失敗" : "Request failed");
+            setError(t.errRequestFailed);
         } finally {
             setBusy(false);
         }

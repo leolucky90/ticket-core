@@ -50,7 +50,6 @@ export function DeleteLogsPanel({
     hardDeleteAction,
 }: DeleteLogsPanelProps) {
     const ui = getUiText(lang).deleteLogs;
-    const isZh = lang === "zh";
     const moduleSuggestions = Array.from(new Set(logs.map((log) => log.module).filter(Boolean))).map((moduleName) => ({
         id: `module-${moduleName}`,
         value: moduleName,
@@ -80,10 +79,8 @@ export function DeleteLogsPanel({
         title: value,
         keywords: [value],
     }));
-    const listCountLabel = isZh ? `共 ${logs.length} 筆` : `${logs.length} record${logs.length === 1 ? "" : "s"}`;
-    const summaryLabel = isZh
-        ? `共 ${logs.length} 筆刪除紀錄，${ui.resultSummary}`
-        : `${logs.length} delete log record${logs.length === 1 ? "" : "s"}. ${ui.resultSummary}`;
+    const listCountLabel = ui.toolbarCount.replace("{count}", String(logs.length));
+    const summaryLabel = ui.toolbarSummary.replace("{count}", String(logs.length)).replace("{resultSummary}", ui.resultSummary);
 
     function formatStatusLabel(status: DeleteLog["status"]) {
         if (status === "restored") return ui.statusRestored;

@@ -9,6 +9,8 @@ import { formatDisplayPhone } from "@/lib/format/phone-display";
 import { IconActionButton } from "@/components/ui/icon-action-button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
+import type { UiLanguage } from "@/lib/i18n/ui-text";
+import { getUiText, uiLocale } from "@/lib/i18n/ui-text";
 
 type StaffManagementPanelProps = {
     items: StaffMember[];
@@ -18,7 +20,7 @@ type StaffManagementPanelProps = {
     deactivateAction: (formData: FormData) => Promise<void>;
     softDeleteAction: (formData: FormData) => Promise<void>;
     resetPasswordAction: (formData: FormData) => Promise<void>;
-    lang: "zh" | "en";
+    lang: UiLanguage;
 };
 
 /** 與篩選一致：僅「激活 / 停用」兩種營運狀態（其餘狀態僅在「全部」下列出） */
@@ -32,22 +34,29 @@ function statusTone(status: StaffMember["status"]) {
     return "neutral";
 }
 
-function formatListDateTime(iso: string | undefined, lang: "zh" | "en"): string {
+function formatListDateTime(iso: string | undefined, lang: UiLanguage): string {
     if (!iso || iso === "-") return "-";
     const d = Date.parse(iso);
     if (!Number.isFinite(d)) return iso;
-    return new Date(d).toLocaleString(lang === "zh" ? "zh-TW" : "en-US", { dateStyle: "short", timeStyle: "short" });
+    return new Date(d).toLocaleString(uiLocale(lang), { dateStyle: "short", timeStyle: "short" });
 }
 
-function staffStatusLabel(status: StaffMemberStatus, lang: "zh" | "en"): string {
-    const map: Record<StaffMemberStatus, { zh: string; en: string }> = {
-        active: { zh: "激活", en: "Active" },
-        inactive: { zh: "停用", en: "Inactive" },
-        pending_activation: { zh: "待啟用", en: "Pending" },
-        locked: { zh: "鎖定", en: "Locked" },
-        deleted: { zh: "已刪除", en: "Deleted" },
-    };
-    return map[status][lang];
+function staffStatusLabel(status: StaffMemberStatus, lang: UiLanguage): string {
+    const t = getUiText(lang).staffManagementPanel;
+    switch (status) {
+        case "active":
+            return t.statusActive;
+        case "inactive":
+            return t.statusInactive;
+        case "pending_activation":
+            return t.statusPending;
+        case "locked":
+            return t.statusLocked;
+        case "deleted":
+            return t.statusDeleted;
+        default:
+            return status;
+    }
 }
 
 export function StaffManagementPanel({
@@ -72,88 +81,11 @@ export function StaffManagementPanel({
         keywords: [item.name, item.email, item.phone, item.address, item.roleNameSnapshot].filter((value): value is string => Boolean(value)),
     }));
 
-    const ui =
-        lang === "zh"
-            ? {
-                  title: "員工管理",
-                  newStaff: "新增員工",
-                  deletedRecords: "員工刪除紀錄",
-                  search: "搜尋",
-                  clear: "清除",
-                  searchPlaceholder: "搜尋姓名/信箱/電話",
-                  edit: "編輯",
-                  resetPassword: "重置密碼",
-                  deactivate: "停用",
-                  activate: "激活",
-                  softDelete: "軟刪除",
-                  deleteReason: "刪除原因",
-                  resultSummary: `共 ${items.length} 位員工`,
-                  emptyTitle: "目前沒有符合條件的員工",
-                  emptyDescription: "可以先建立員工，或調整搜尋關鍵字後再試。",
-                  filteredEmptyTitle: "沒有符合篩選條件的員工",
-                  filteredEmptyDescription: "請調整狀態或維修人員篩選。",
-                  colName: "姓名",
-                  colPhone: "電話",
-                  colRole: "權限",
-                  colStatus: "狀態",
-                  filterStatus: "狀態",
-                  filterActive: "激活",
-                  filterInactive: "停用",
-                  filterRepair: "維修人員",
-                  filterAll: "全部",
-                  repairYes: "是",
-                  repairNo: "否",
-                  detailHint: "點列可展開詳細資訊與操作",
-                  detailAddress: "地址",
-                  detailEmail: "Email",
-                  detailGoogle: "Google",
-                  detailRepair: "維修人員",
-                  detailLastLogin: "最後登入",
-                  detailCreated: "建立時間",
-                  detailActions: "操作",
-                  googleLinked: "已綁定",
-                  googleNotLinked: "未綁定",
-              }
-            : {
-                  title: "Staff Management",
-                  newStaff: "Create Staff",
-                  deletedRecords: "Deleted Staff Records",
-                  search: "Search",
-                  clear: "Clear",
-                  searchPlaceholder: "Search name/email/phone",
-                  edit: "Edit",
-                  resetPassword: "Reset Password",
-                  deactivate: "Deactivate",
-                  activate: "Activate",
-                  softDelete: "Soft Delete",
-                  deleteReason: "Delete Reason",
-                  resultSummary: `${items.length} staff record(s)`,
-                  emptyTitle: "No matching staff records",
-                  emptyDescription: "Create a staff member or adjust the search keyword and try again.",
-                  filteredEmptyTitle: "No staff match the filters",
-                  filteredEmptyDescription: "Adjust status or maintenance-personnel filters.",
-                  colName: "Name",
-                  colPhone: "Phone",
-                  colRole: "Role",
-                  colStatus: "Status",
-                  filterStatus: "Status",
-                  filterActive: "Active",
-                  filterInactive: "Inactive",
-                  filterRepair: "Technician",
-                  filterAll: "All",
-                  repairYes: "Yes",
-                  repairNo: "No",
-                  detailHint: "Click a row for details and actions",
-                  detailAddress: "Address",
-                  detailEmail: "Email",
-                  detailGoogle: "Google",
-                  detailRepair: "Repair technician",
-                  detailLastLogin: "Last login",
-                  detailCreated: "Created",
-                  detailActions: "Actions",
-                  googleLinked: "Linked",
-                  googleNotLinked: "Not linked",
-              };
+    const tPanel = getUiText(lang).staffManagementPanel;
+    const ui = {
+        ...tPanel,
+        resultSummary: tPanel.resultSummary.replace("{count}", String(items.length)),
+    };
 
     const staffCountText = ui.resultSummary;
 
@@ -314,34 +246,54 @@ export function StaffManagementPanel({
                                                         </dl>
                                                         <div className="flex flex-col gap-2">
                                                             <p className="text-xs font-medium text-[rgb(var(--muted))]">{ui.detailActions}</p>
-                                                            <div className="flex flex-wrap gap-2">
+                                                            <div className="flex flex-wrap items-center gap-2">
                                                                 <IconActionButton
                                                                     href={`/staff/${encodeURIComponent(item.id)}/edit`}
                                                                     icon={Pencil}
                                                                     label={ui.edit}
                                                                     tooltip={ui.edit}
-                                                                    className="h-9 w-9"
+                                                                    className="h-9 w-9 shrink-0"
                                                                 />
-                                                                <form action={resetPasswordAction}>
+                                                                <form action={resetPasswordAction} className="inline-flex shrink-0">
                                                                     <input type="hidden" name="id" value={item.id} />
                                                                     <input type="hidden" name="newPassword" value="Temp1234A" />
                                                                     <IconActionButton type="submit" icon={KeyRound} label={ui.resetPassword} tooltip={ui.resetPassword} className="h-9 w-9" />
                                                                 </form>
                                                                 {item.status === "active" ? (
-                                                                    <form action={deactivateAction}>
+                                                                    <form action={deactivateAction} className="inline-flex shrink-0">
                                                                         <input type="hidden" name="id" value={item.id} />
                                                                         <IconActionButton type="submit" icon={UserX} label={ui.deactivate} tooltip={ui.deactivate} className="h-9 w-9" />
                                                                     </form>
                                                                 ) : item.status === "inactive" ? (
-                                                                    <form action={activateAction}>
+                                                                    <form action={activateAction} className="inline-flex shrink-0">
                                                                         <input type="hidden" name="id" value={item.id} />
                                                                         <IconActionButton type="submit" icon={UserCheck} label={ui.activate} tooltip={ui.activate} className="h-9 w-9" />
                                                                     </form>
                                                                 ) : null}
-                                                                <form action={softDeleteAction} className="flex flex-wrap items-center gap-1">
+                                                            </div>
+                                                            <div
+                                                                className="mt-4 border-t border-[rgb(var(--border))] pt-4"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            >
+                                                                <p className="mb-2 text-xs font-medium text-[rgb(var(--muted))]">{ui.deleteStaffSection}</p>
+                                                                <form
+                                                                    action={softDeleteAction}
+                                                                    className="flex max-w-md flex-wrap items-center gap-2 sm:flex-nowrap"
+                                                                >
                                                                     <input type="hidden" name="id" value={item.id} />
-                                                                    <Input name="reason" placeholder={ui.deleteReason} required className="h-7 min-w-[7rem] max-w-[12rem] text-xs" />
-                                                                    <IconActionButton type="submit" icon={Trash2} label={ui.softDelete} tooltip={ui.softDelete} className="h-9 w-9" />
+                                                                    <Input
+                                                                        name="reason"
+                                                                        placeholder={ui.deleteReason}
+                                                                        required
+                                                                        className="h-9 min-w-0 flex-1 text-sm"
+                                                                    />
+                                                                    <IconActionButton
+                                                                        type="submit"
+                                                                        icon={Trash2}
+                                                                        label={ui.softDelete}
+                                                                        tooltip={ui.softDelete}
+                                                                        className="h-9 w-9 shrink-0"
+                                                                    />
                                                                 </form>
                                                             </div>
                                                         </div>

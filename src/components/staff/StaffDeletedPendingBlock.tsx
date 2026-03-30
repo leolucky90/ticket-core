@@ -6,6 +6,7 @@ import { IconActionButton } from "@/components/ui/icon-action-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { DeleteLog } from "@/lib/schema";
+import type { UiLanguage } from "@/lib/i18n/ui-text";
 import { formatIsoForDisplay } from "@/lib/format/datetime-display";
 import { primaryReasonForLog, snapshotName, snapshotPhone } from "@/components/staff/staff-deleted-helpers";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
@@ -32,20 +33,20 @@ type PendingUi = {
     hardDeleteReason: string;
     authPassword: string;
     hardDeleteWarn: string;
+    restoreStatusLabel: string;
 };
 
 type StaffDeletedPendingBlockProps = {
     queueLogs: DeleteLog[];
     restoreAction: (formData: FormData) => Promise<void>;
     hardDeleteAction: (formData: FormData) => Promise<void>;
-    lang: "zh" | "en";
+    lang: UiLanguage;
     ui: PendingUi;
 };
 
 export function StaffDeletedPendingBlock({ queueLogs, restoreAction, hardDeleteAction, lang, ui }: StaffDeletedPendingBlockProps) {
     const [restoreLog, setRestoreLog] = useState<DeleteLog | null>(null);
     const [hardLog, setHardLog] = useState<DeleteLog | null>(null);
-    const zh = lang === "zh";
 
     useEffect(() => {
         if (!restoreLog && !hardLog) return;
@@ -166,7 +167,7 @@ export function StaffDeletedPendingBlock({ queueLogs, restoreAction, hardDeleteA
                                 <Input name="restoreReason" required placeholder={ui.restoreReason} className="h-10" />
                             </label>
                             <label className="grid gap-1 text-sm">
-                                <span className="text-[rgb(var(--muted))]">{zh ? "恢復狀態" : "Restore status"}</span>
+                                <span className="text-[rgb(var(--muted))]">{ui.restoreStatusLabel}</span>
                                 <select
                                     name="restoreMode"
                                     defaultValue="active"

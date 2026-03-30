@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
+import { getUiText } from "@/lib/i18n/ui-text";
+import type { UiLanguage } from "@/lib/i18n/ui-text";
 
 type InventoryTopNavProps = {
-    lang: "zh" | "en";
+    lang: UiLanguage;
 };
 
 type InventoryView = "stock" | "settings" | "stock-in" | "stock-out";
@@ -27,52 +29,37 @@ export function InventoryTopNav({ lang }: InventoryTopNavProps) {
     const activeView: InventoryNavItemId = onProductManagementPage
         ? "product-management"
         : toInventoryView(searchParams.get("inventoryView"));
-    const labels =
-        lang === "zh"
-            ? {
-                  stock: "庫存",
-                  settings: "庫存設置",
-                  stockIn: "入庫",
-                  stockOut: "出庫",
-                  productManagement: "品項管理",
-              }
-            : {
-                  stock: "Stock",
-                  settings: "Stock Setup",
-                  stockIn: "Stock In",
-                  stockOut: "Stock Out",
-                  productManagement: "Item Management",
-              };
+    const nav = getUiText(lang).inventoryNav;
 
     const links: Array<{ id: InventoryNavItemId; label: string; desc: string; href: string }> = [
         {
             id: "stock",
-            label: labels.stock,
-            desc: lang === "zh" ? "庫存摘要與列表" : "Summary and list",
+            label: nav.stock,
+            desc: nav.descStock,
             href: "/dashboard?tab=inventory&inventoryView=stock",
         },
         {
             id: "settings",
-            label: labels.settings,
-            desc: lang === "zh" ? "參數與資料設置" : "Configure products",
+            label: nav.settings,
+            desc: nav.descSettings,
             href: "/dashboard?tab=inventory&inventoryView=settings",
         },
         {
             id: "stock-in",
-            label: labels.stockIn,
-            desc: lang === "zh" ? "商品數量增加" : "Increase quantity",
+            label: nav.stockIn,
+            desc: nav.descStockIn,
             href: "/dashboard?tab=inventory&inventoryView=stock-in",
         },
         {
             id: "stock-out",
-            label: labels.stockOut,
-            desc: lang === "zh" ? "商品數量扣除" : "Decrease quantity",
+            label: nav.stockOut,
+            desc: nav.descStockOut,
             href: "/dashboard?tab=inventory&inventoryView=stock-out",
         },
         {
             id: "product-management",
-            label: labels.productManagement,
-            desc: lang === "zh" ? "完整品項 CRUD" : "Dedicated ITEM CRUD page",
+            label: nav.productManagement,
+            desc: nav.descProductManagement,
             href: "/dashboard/products",
         },
     ];

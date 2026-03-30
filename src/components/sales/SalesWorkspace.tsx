@@ -12,10 +12,12 @@ import { Pencil, RotateCcw, Save, Search, Trash2, X } from "lucide-react";
 import type { PaymentMethod, Sale } from "@/lib/types/sale";
 import type { SalesLabels } from "@/components/sales/sales-labels";
 import { CreateSaleModal } from "@/components/sales/CreateSaleModal";
+import type { UiLanguage } from "@/lib/i18n/ui-text";
+import { getUiText, uiLocale } from "@/lib/i18n/ui-text";
 
 type SalesWorkspaceProps = {
     labels: SalesLabels;
-    lang: "zh" | "en";
+    lang: UiLanguage;
     keyword: string;
     sales: Sale[];
     paymentText: Record<PaymentMethod, string>;
@@ -27,9 +29,8 @@ type SalesWorkspaceProps = {
     queryTs: string;
 };
 
-function formatTime(ts: number, lang: "zh" | "en"): string {
-    const locale = lang === "zh" ? "zh-TW" : "en-US";
-    return new Intl.DateTimeFormat(locale, {
+function formatTime(ts: number, lang: UiLanguage): string {
+    return new Intl.DateTimeFormat(uiLocale(lang), {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
@@ -39,9 +40,8 @@ function formatTime(ts: number, lang: "zh" | "en"): string {
     }).format(ts);
 }
 
-function formatAmount(value: number, lang: "zh" | "en"): string {
-    const locale = lang === "zh" ? "zh-TW" : "en-US";
-    return new Intl.NumberFormat(locale).format(value);
+function formatAmount(value: number, lang: UiLanguage): string {
+    return new Intl.NumberFormat(uiLocale(lang)).format(value);
 }
 
 function formatDateTimeLocal(ts: number): string {
@@ -81,6 +81,7 @@ export function SalesWorkspace({
     actionTs,
     queryTs,
 }: SalesWorkspaceProps) {
+    const emptyUi = getUiText(lang).salesWorkspace;
     const [editingId, setEditingId] = useState<string | null>(null);
     const [queryAt, setQueryAt] = useState<string>(queryTs || "");
     const queryAtRef = useRef<HTMLInputElement>(null);
@@ -184,8 +185,8 @@ export function SalesWorkspace({
                 sales.length === 0
                     ? {
                           icon: Search,
-                          title: lang === "zh" ? "尚無銷售資料" : "No sales records yet",
-                          description: lang === "zh" ? "建立或搜尋銷售資料後，結果會集中顯示在這裡。" : "Created or matched sales will appear here.",
+                          title: emptyUi.emptyTitle,
+                          description: emptyUi.emptyDescription,
                       }
                     : undefined
             }

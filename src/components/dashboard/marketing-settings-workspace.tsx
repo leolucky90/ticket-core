@@ -17,6 +17,7 @@ import { LIST_DISPLAY_OPTIONS } from "@/lib/ui/list-display";
 import type { DimensionPickerBundle } from "@/lib/types/catalog";
 import type { RepairBrand } from "@/lib/types/repair-brand";
 import type { UsedProductTypeSetting } from "@/lib/schema";
+import { getUiText } from "@/lib/i18n/ui-text";
 
 export type MarketingSectionId = "supplier" | "category" | "brand" | "used";
 
@@ -59,13 +60,6 @@ function limitRows<T>(rows: T[], size: string): T[] {
     return rows.slice(0, limit);
 }
 
-const SECTION_TABS: Array<{ id: MarketingSectionId; label: string; hint: string }> = [
-    { id: "category", label: "分類", hint: "品項分類與快速命名" },
-    { id: "supplier", label: "供應來源", hint: "供應商名單" },
-    { id: "brand", label: "品牌", hint: "品牌、類型與型號" },
-    { id: "used", label: "二手商品", hint: "規格模板" },
-];
-
 export function MarketingSettingsWorkspace(props: MarketingSettingsWorkspaceProps) {
     const {
         lang,
@@ -92,6 +86,14 @@ export function MarketingSettingsWorkspace(props: MarketingSettingsWorkspaceProp
         updateUsedProductTypeSettingAction,
         onDeleteGuard,
     } = props;
+
+    const t = getUiText(lang).marketingSettingsWorkspace;
+    const sectionTabs: Array<{ id: MarketingSectionId; label: string; hint: string }> = [
+        { id: "category", label: t.tabCategoryLabel, hint: t.tabCategoryHint },
+        { id: "supplier", label: t.tabSupplierLabel, hint: t.tabSupplierHint },
+        { id: "brand", label: t.tabBrandLabel, hint: t.tabBrandHint },
+        { id: "used", label: t.tabUsedLabel, hint: t.tabUsedHint },
+    ];
 
     const [section, setSection] = useState<MarketingSectionId>("category");
     const [supplierSearchDraft, setSupplierSearchDraft] = useState("");
@@ -141,16 +143,16 @@ export function MarketingSettingsWorkspace(props: MarketingSettingsWorkspaceProp
 
     const supplierListShell = (
         <div className="flex min-h-0 min-w-0 flex-col gap-3">
-            <div className="text-xs font-medium text-[rgb(var(--muted))]">供應商清單（{supplierItems.length}）</div>
+            <div className="text-xs font-medium text-[rgb(var(--muted))]">{t.supplierListHeader.replace("{count}", String(supplierItems.length))}</div>
             <div className="flex flex-wrap gap-2">
                 <Input
                     value={supplierSearchDraft}
                     onChange={(e) => setSupplierSearchDraft(e.target.value)}
-                    placeholder="搜尋供應商"
+                    placeholder={t.supplierSearchPlaceholder}
                     className="min-w-0 flex-1"
                     list="marketing-supplier-workspace-options"
                 />
-                <IconOnlyButton label="搜尋供應商" type="button" icon={<Search className="h-4 w-4" aria-hidden="true" />} onClick={() => setSupplierSearchTerm(supplierSearchDraft.trim())} />
+                <IconOnlyButton label={t.supplierSearchButtonLabel} type="button" icon={<Search className="h-4 w-4" aria-hidden="true" />} onClick={() => setSupplierSearchTerm(supplierSearchDraft.trim())} />
             </div>
             {supplierSearchTerm ? (
                 <button
@@ -161,11 +163,11 @@ export function MarketingSettingsWorkspace(props: MarketingSettingsWorkspaceProp
                         setSupplierSearchTerm("");
                     }}
                 >
-                    清除搜尋
+                    {t.clearSearch}
                 </button>
             ) : null}
             <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-[rgb(var(--muted))]">清單顯示</span>
+                <span className="text-xs text-[rgb(var(--muted))]">{t.listDisplayLabel}</span>
                 <Select value={marketingLookupListSize} onChange={(e) => setMarketingLookupListSize(e.currentTarget.value)} className="h-9 w-[96px]">
                     {LIST_DISPLAY_OPTIONS.map((size) => (
                         <option key={`mkt-supp-size-${size}`} value={size}>
@@ -178,8 +180,8 @@ export function MarketingSettingsWorkspace(props: MarketingSettingsWorkspaceProp
                 {visibleMarketingSupplierRows.length === 0 ? (
                     <EmptyStateCard
                         icon={Search}
-                        title="找不到供應商"
-                        description="可調整搜尋或新增供應商。"
+                        title={t.supplierEmptyTitle}
+                        description={t.supplierEmptyDescription}
                         className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
                     />
                 ) : (
@@ -207,51 +209,51 @@ export function MarketingSettingsWorkspace(props: MarketingSettingsWorkspaceProp
     const supplierEditorShell = (
         <div className="grid min-w-0 gap-4">
             <div>
-                <div className="text-sm font-semibold text-[rgb(var(--text))]">新增供應商</div>
-                <p className="mt-1 text-xs text-[rgb(var(--muted))]">建立後可在品項表單的供應商欄位選用。</p>
+                <div className="text-sm font-semibold text-[rgb(var(--text))]">{t.newSupplierTitle}</div>
+                <p className="mt-1 text-xs text-[rgb(var(--muted))]">{t.newSupplierDescription}</p>
                 <form action={createSupplierAction} className="mt-3 flex flex-wrap items-end gap-2">
                     <input type="hidden" name="tab" value="marketing" />
                     <label className="grid min-w-[200px] flex-1 gap-1">
-                        <span className="text-xs text-[rgb(var(--muted))]">名稱</span>
-                        <Input name="supplierName" placeholder="例如：Apple 授權經銷" required className="h-10" list="marketing-supplier-workspace-options" />
+                        <span className="text-xs text-[rgb(var(--muted))]">{t.nameLabel}</span>
+                        <Input name="supplierName" placeholder={t.supplierNamePlaceholder} required className="h-10" list="marketing-supplier-workspace-options" />
                     </label>
                     <Button type="submit" variant="solid" className="h-10 gap-2">
                         <Plus className="h-4 w-4" aria-hidden="true" />
-                        新增
+                        {t.addButton}
                     </Button>
                 </form>
             </div>
 
             <div className="border-t border-[rgb(var(--border))] pt-4">
-                <div className="text-sm font-semibold text-[rgb(var(--text))]">選取項目</div>
+                <div className="text-sm font-semibold text-[rgb(var(--text))]">{t.selectedSupplierTitle}</div>
                 {!selectedSupplier ? (
-                    <p className="mt-2 text-sm text-[rgb(var(--muted))]">請從左側點選一筆供應商以更新或移除。</p>
+                    <p className="mt-2 text-sm text-[rgb(var(--muted))]">{t.selectSupplierPrompt}</p>
                 ) : (
                     <div className="mt-3 grid gap-3">
                         <div className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2 text-sm">
-                            <div className="text-xs text-[rgb(var(--muted))]">目前選取</div>
+                            <div className="text-xs text-[rgb(var(--muted))]">{t.currentSelectionLabel}</div>
                             <div className="font-medium">{selectedSupplier.name}</div>
                         </div>
                         <form id="marketing-supplier-update-form" action={updateSupplierAction} className="grid gap-2">
                             <input type="hidden" name="tab" value="marketing" />
                             <input type="hidden" name="supplierId" value={selectedSupplier.id} />
                             <label className="grid gap-1">
-                                <span className="text-xs text-[rgb(var(--muted))]">供應商名稱</span>
+                                <span className="text-xs text-[rgb(var(--muted))]">{t.supplierNameLabel}</span>
                                 <Input name="supplierName" defaultValue={selectedSupplier.name} required className="h-10" />
                             </label>
                             <div className="flex justify-end">
                                 <Button form="marketing-supplier-update-form" type="submit" variant="solid" className="gap-2">
                                     <Save className="h-4 w-4" aria-hidden="true" />
-                                    儲存
+                                    {t.saveButton}
                                 </Button>
                             </div>
                         </form>
-                        <form action={deleteSupplierAction} onSubmit={onDeleteGuard} data-delete-target={`供應商 ${selectedSupplier.name}`}>
+                        <form action={deleteSupplierAction} onSubmit={onDeleteGuard} data-delete-target={t.deleteSupplierTarget.replace("{name}", selectedSupplier.name)}>
                             <input type="hidden" name="tab" value="marketing" />
                             <input type="hidden" name="supplierId" value={selectedSupplier.id} />
                             <Button type="submit" variant="ghost" className="gap-2 border border-[rgb(var(--border))]">
                                 <Trash2 className="h-4 w-4" aria-hidden="true" />
-                                移除此供應商
+                                {t.deleteSupplierButton}
                             </Button>
                         </form>
                     </div>
@@ -262,21 +264,21 @@ export function MarketingSettingsWorkspace(props: MarketingSettingsWorkspaceProp
 
     const brandListShell = (
         <div className="flex min-h-0 min-w-0 flex-col gap-3">
-            <div className="text-xs font-medium text-[rgb(var(--muted))]">品牌清單（{brands.length}）</div>
+            <div className="text-xs font-medium text-[rgb(var(--muted))]">{t.brandListHeader.replace("{count}", String(brands.length))}</div>
             <form action={createBrandAction} className="grid gap-2 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
                 <input type="hidden" name="tab" value="marketing" />
-                <div className="text-xs text-[rgb(var(--muted))]">快速新增</div>
+                <div className="text-xs text-[rgb(var(--muted))]">{t.quickAddLabel}</div>
                 <div className="flex flex-wrap gap-2">
-                    <Input name="brandName" value={newBrandNameDraft} onChange={(e) => setNewBrandNameDraft(e.target.value)} placeholder="品牌名稱" className="min-w-0 flex-1" />
+                    <Input name="brandName" value={newBrandNameDraft} onChange={(e) => setNewBrandNameDraft(e.target.value)} placeholder={t.brandNamePlaceholder} className="min-w-0 flex-1" />
                     <Button type="submit" variant="solid" disabled={newBrandNameDraft.trim().length === 0} className="shrink-0 gap-1">
                         <Plus className="h-4 w-4" aria-hidden="true" />
-                        新增
+                        {t.addButton}
                     </Button>
                 </div>
             </form>
-            <Input value={brandListFilter} onChange={(e) => setBrandListFilter(e.target.value)} placeholder="篩選品牌名稱" className="h-10" />
+            <Input value={brandListFilter} onChange={(e) => setBrandListFilter(e.target.value)} placeholder={t.filterBrandPlaceholder} className="h-10" />
             <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-[rgb(var(--muted))]">清單顯示</span>
+                <span className="text-xs text-[rgb(var(--muted))]">{t.listDisplayLabel}</span>
                 <Select value={marketingBrandListSize} onChange={(e) => setMarketingBrandListSize(e.currentTarget.value)} className="h-9 w-[96px]">
                     {LIST_DISPLAY_OPTIONS.map((size) => (
                         <option key={`mkt-brand-size-${size}`} value={size}>
@@ -289,8 +291,8 @@ export function MarketingSettingsWorkspace(props: MarketingSettingsWorkspaceProp
                 {visibleBrandRows.length === 0 ? (
                     <EmptyStateCard
                         icon={Search}
-                        title="沒有符合的品牌"
-                        description="可清除篩選或新增品牌。"
+                        title={t.brandEmptyTitle}
+                        description={t.brandEmptyDescription}
                         className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
                     />
                 ) : (
@@ -318,6 +320,7 @@ export function MarketingSettingsWorkspace(props: MarketingSettingsWorkspaceProp
     const brandEditorShell =
         selectedBrand ? (
             <MarketingBrandEditor
+                lang={lang}
                 brand={selectedBrand}
                 dimensionBundle={dimensionBundle}
                 brandTypeSuggestionPool={brandTypeSuggestionPool}
@@ -336,12 +339,12 @@ export function MarketingSettingsWorkspace(props: MarketingSettingsWorkspaceProp
             />
         ) : (
             <div className="rounded-xl border border-dashed border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-4 py-10 text-center text-sm text-[rgb(var(--muted))]">
-                請從左側選擇品牌，以編輯類型、型號與店內分類關聯。
+                {t.selectBrandPrompt}
             </div>
         );
 
     const categoryPanel = (
-        <MerchantSectionCard title="分類與命名" description="主分類／第二分類與品項自動命名規則">
+        <MerchantSectionCard title={t.categorySectionTitle} description={t.categorySectionDescription}>
             <ItemQuickNamingSettingsCard settings={itemNamingSettings} submitAction={updateItemNamingSettingsAction} />
             <div className="mt-4">
                 <MarketingCategoryManager
@@ -364,7 +367,7 @@ export function MarketingSettingsWorkspace(props: MarketingSettingsWorkspaceProp
             </datalist>
 
             <div className="flex flex-wrap gap-2 rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-2">
-                {SECTION_TABS.map((tab) => {
+                {sectionTabs.map((tab) => {
                     const active = section === tab.id;
                     return (
                         <button

@@ -1,7 +1,9 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { AiChatBallMenuToggle } from "@/components/ai/ai-chat-ball-menu-toggle";
 import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
 import type { MerchantTopbarLink } from "@/components/merchant/shell/merchant-shell.types";
+import { getUiText } from "@/lib/i18n/ui-text";
 
 type MerchantAccountMenuProps = {
     accountName: string;
@@ -11,6 +13,8 @@ type MerchantAccountMenuProps = {
     settingsLabel?: string;
     settingsLinks?: MerchantTopbarLink[];
     quickLinks?: MerchantTopbarLink[];
+    /** 商家後台：顯示與語言切換同風格之 AI 小球開關（取代下拉內「首頁」連結位置） */
+    aiChatBallMenu?: { enabled: boolean } | null;
     signOutSlot?: ReactNode;
 };
 
@@ -36,11 +40,15 @@ export function MerchantAccountMenu({
     accountEmail,
     avatarText,
     currentLang,
-    settingsLabel = "設定",
+    settingsLabel,
     settingsLinks = [],
     quickLinks = [],
+    aiChatBallMenu = null,
     signOutSlot,
 }: MerchantAccountMenuProps) {
+    const resolvedSettingsLabel = settingsLabel ?? getUiText(currentLang ?? "zh").shell.settingsMenuShort;
+    const menuUi = currentLang ? getUiText(currentLang).chatBallPreference : null;
+
     return (
         <details className="group relative">
             <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1.5 hover:border-[rgb(var(--accent))] [&::-webkit-details-marker]:hidden">
@@ -62,11 +70,17 @@ export function MerchantAccountMenu({
                     {settingsLinks.length > 0 ? (
                         <details className="rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]">
                             <summary className="flex cursor-pointer list-none items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-[rgb(var(--panel))] [&::-webkit-details-marker]:hidden">
-                                <span>{settingsLabel}</span>
+                                <span>{resolvedSettingsLabel}</span>
                                 <span className="text-xs text-[rgb(var(--muted))]">▼</span>
                             </summary>
                             <div className="grid gap-1 px-2 pb-2 pt-1">{settingsLinks.map((link) => renderMenuLink(link))}</div>
                         </details>
+                    ) : null}
+                    {aiChatBallMenu && menuUi ? (
+                        <div className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5">
+                            <span className="text-sm text-[rgb(var(--text))]">{menuUi.menuRowLabel}</span>
+                            <AiChatBallMenuToggle initialEnabled={aiChatBallMenu.enabled} />
+                        </div>
                     ) : null}
                     {quickLinks.map((link) => renderMenuLink(link))}
                     {signOutSlot}

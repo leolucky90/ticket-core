@@ -8,6 +8,8 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { StaffDeletedPendingBlock } from "@/components/staff/StaffDeletedPendingBlock";
 import { StaffDeletedVaultBlock } from "@/components/staff/StaffDeletedVaultBlock";
 import { primaryReasonForLog, snapshotName } from "@/components/staff/staff-deleted-helpers";
+import type { UiLanguage } from "@/lib/i18n/ui-text";
+import { getUiText } from "@/lib/i18n/ui-text";
 
 type StaffDeletedRecordsPanelProps = {
     queueLogs: DeleteLog[];
@@ -20,7 +22,7 @@ type StaffDeletedRecordsPanelProps = {
     restoreHardDeleteAction: (formData: FormData) => Promise<void>;
     purgeDeleteLogAction: (formData: FormData) => Promise<void>;
     flash?: string;
-    lang: "zh" | "en";
+    lang: UiLanguage;
 };
 
 function statusTone(status: DeleteLog["status"]) {
@@ -29,15 +31,11 @@ function statusTone(status: DeleteLog["status"]) {
     return "warning";
 }
 
-function logStatusLabel(status: DeleteLog["status"], lang: "zh" | "en"): string {
-    if (lang === "en") {
-        if (status === "restored") return "Restored";
-        if (status === "hard_deleted") return "Hard deleted";
-        return "Soft deleted (pending)";
-    }
-    if (status === "restored") return "已復原";
-    if (status === "hard_deleted") return "已永久刪除";
-    return "軟刪除（待處理）";
+function logStatusLabel(status: DeleteLog["status"], lang: UiLanguage): string {
+    const m = getUiText(lang).staffDeletedRecords;
+    if (status === "restored") return m.logStatusRestored;
+    if (status === "hard_deleted") return m.logStatusHardDeleted;
+    return m.logStatusSoftPending;
 }
 
 export function StaffDeletedRecordsPanel({
@@ -53,106 +51,57 @@ export function StaffDeletedRecordsPanel({
     flash,
     lang,
 }: StaffDeletedRecordsPanelProps) {
-    const zh = lang === "zh";
-    const ui = zh
-        ? {
-              searchPlaceholder: "搜尋姓名 / 信箱 / 電話",
-              search: "搜尋",
-              clearSearch: "清除搜尋",
-              clearSearchTip: "清除搜尋條件",
-              pendingTitle: "待處理（軟刪除）",
-              pendingDesc: (n: number) => `共 ${n} 筆待恢復或永久刪除`,
-              pendingEmptyTitle: "沒有待處理的軟刪除員工",
-              pendingEmptyDesc: "軟刪除後尚未恢復或永久刪除的紀錄會出現在此；操作完成後會從此清單移除。",
-              historyTitle: "操作歷史",
-              historyDesc: (n: number) => `共 ${n} 筆紀錄（僅供查閱）`,
-              historyScrollHint: "資料多時可於下方區域捲動瀏覽。",
-              historyEmpty: "尚無紀錄",
-              historyColStaff: "員工",
-              historyColStatus: "紀錄狀態",
-              historyColReason: "原因",
-              historyColOperationTime: "操作時間",
-              historyColRestored: "恢復時間",
-              historyColHard: "永久刪除時間",
-              vaultTitle: "Lv9 · 永久刪除存檔",
-              vaultDesc: (n: number) => `共 ${n} 筆（可復原員工資料或移除紀錄）`,
-              vaultEmpty: "沒有永久刪除存檔",
-              vaultPurgeNote: "僅移除刪除紀錄文件，不影響已不存在的員工資料檔。",
-              restoreReason: "恢復原因",
-              restoreModeActive: "恢復為啟用 (active)",
-              restoreModeInactive: "恢復為停用 (inactive)",
-              hardDeleteReason: "永久刪除原因",
-              authPassword: "授權密碼",
-              hardDeleteWarn: "此操作將永久移除員工資料，僅限授權人員。請於視窗內填寫原因與授權密碼。",
-              pendingScrollHint: "資料多時可於下方區域捲動瀏覽；操作請點圖示並於彈出視窗填寫。",
-              restoreTooltip: "恢復員工",
-              hardDeleteTooltip: "永久刪除員工",
-              restoreModalTitle: "恢復員工",
-              hardModalTitle: "永久刪除員工",
-              modalCancel: "取消",
-              modalSubmitRestore: "確認恢復",
-              modalSubmitHard: "確認永久刪除",
-              phone: "電話",
-              email: "Email",
-              deletedBy: "刪除者",
-              actions: "操作",
-              vaultScrollHint: "可於區域內捲動；操作請點圖示並於視窗確認。",
-              vaultRestoreTooltip: "復原員工資料",
-              vaultPurgeTooltip: "移除刪除紀錄",
-              vaultRestoreModalTitle: "從存檔復原員工",
-              vaultPurgeModalTitle: "移除刪除紀錄",
-              vaultPurgeModalBody: "將從資料庫刪除此筆刪除紀錄文件，無法還原此紀錄本身。確定要繼續嗎？",
-              modalSubmitPurge: "確認移除",
-          }
-        : {
-              searchPlaceholder: "Search name / email / phone",
-              search: "Search",
-              clearSearch: "Clear",
-              clearSearchTip: "Clear search",
-              pendingTitle: "Pending (soft-deleted)",
-              pendingDesc: (n: number) => `${n} pending — restore or hard-delete`,
-              pendingEmptyTitle: "No pending soft-deleted staff",
-              pendingEmptyDesc: "Records appear here until restored or hard-deleted; then they leave this list.",
-              historyTitle: "History",
-              historyDesc: (n: number) => `${n} record(s) (read-only)`,
-              historyScrollHint: "Scroll the area below when there are many rows.",
-              historyEmpty: "No history yet",
-              historyColStaff: "Staff",
-              historyColStatus: "Log status",
-              historyColReason: "Reason",
-              historyColOperationTime: "Operation time",
-              historyColRestored: "Restored at",
-              historyColHard: "Hard-deleted at",
-              vaultTitle: "Lv9 · Hard-delete archive",
-              vaultDesc: (n: number) => `${n} in archive — restore data or purge log`,
-              vaultEmpty: "No hard-delete archive entries",
-              vaultPurgeNote: "Removes only the delete-log document.",
-              restoreReason: "Restore reason",
-              restoreModeActive: "Restore as active",
-              restoreModeInactive: "Restore as inactive",
-              hardDeleteReason: "Hard delete reason",
-              authPassword: "Authorization password",
-              hardDeleteWarn: "This permanently removes the staff document. Enter reason and authorization password below.",
-              pendingScrollHint: "Scroll the list below when needed. Use icons — a dialog will ask for details.",
-              restoreTooltip: "Restore staff",
-              hardDeleteTooltip: "Hard-delete staff",
-              restoreModalTitle: "Restore staff",
-              hardModalTitle: "Hard-delete staff",
-              modalCancel: "Cancel",
-              modalSubmitRestore: "Confirm restore",
-              modalSubmitHard: "Confirm hard delete",
-              phone: "Phone",
-              email: "Email",
-              deletedBy: "Deleted by",
-              actions: "Actions",
-              vaultScrollHint: "Scroll inside the frame. Use icons to open confirmation dialogs.",
-              vaultRestoreTooltip: "Restore staff data",
-              vaultPurgeTooltip: "Remove log entry",
-              vaultRestoreModalTitle: "Restore from archive",
-              vaultPurgeModalTitle: "Remove delete log",
-              vaultPurgeModalBody: "This deletes the delete-log document from the database. This cannot be undone. Continue?",
-              modalSubmitPurge: "Remove log",
-          };
+    const t = getUiText(lang).staffDeletedRecords;
+    const ui = {
+        searchPlaceholder: t.searchPlaceholder,
+        search: t.search,
+        clearSearch: t.clearSearch,
+        clearSearchTip: t.clearSearchTip,
+        pendingTitle: t.pendingTitle,
+        pendingDesc: (n: number) => t.pendingDesc.replace("{count}", String(n)),
+        pendingEmptyTitle: t.pendingEmptyTitle,
+        pendingEmptyDesc: t.pendingEmptyDesc,
+        historyTitle: t.historyTitle,
+        historyDesc: (n: number) => t.historyDesc.replace("{count}", String(n)),
+        historyScrollHint: t.historyScrollHint,
+        historyEmpty: t.historyEmpty,
+        historyEmptyDescription: t.historyEmptyDescription,
+        historyColStaff: t.historyColStaff,
+        historyColStatus: t.historyColStatus,
+        historyColReason: t.historyColReason,
+        historyColOperationTime: t.historyColOperationTime,
+        historyColRestored: t.historyColRestored,
+        historyColHard: t.historyColHard,
+        vaultTitle: t.vaultTitle,
+        vaultDesc: (n: number) => t.vaultDesc.replace("{count}", String(n)),
+        vaultEmpty: t.vaultEmpty,
+        vaultPurgeNote: t.vaultPurgeNote,
+        restoreReason: t.restoreReason,
+        restoreModeActive: t.restoreModeActive,
+        restoreModeInactive: t.restoreModeInactive,
+        hardDeleteReason: t.hardDeleteReason,
+        authPassword: t.authPassword,
+        hardDeleteWarn: t.hardDeleteWarn,
+        pendingScrollHint: t.pendingScrollHint,
+        restoreTooltip: t.restoreTooltip,
+        hardDeleteTooltip: t.hardDeleteTooltip,
+        restoreModalTitle: t.restoreModalTitle,
+        hardModalTitle: t.hardModalTitle,
+        modalCancel: t.modalCancel,
+        modalSubmitRestore: t.modalSubmitRestore,
+        modalSubmitHard: t.modalSubmitHard,
+        phone: t.phone,
+        email: t.email,
+        deletedBy: t.deletedBy,
+        actions: t.actions,
+        vaultScrollHint: t.vaultScrollHint,
+        vaultRestoreTooltip: t.vaultRestoreTooltip,
+        vaultPurgeTooltip: t.vaultPurgeTooltip,
+        vaultRestoreModalTitle: t.vaultRestoreModalTitle,
+        vaultPurgeModalTitle: t.vaultPurgeModalTitle,
+        vaultPurgeModalBody: t.vaultPurgeModalBody,
+        modalSubmitPurge: t.modalSubmitPurge,
+    };
 
     const pendingUi = {
         historyColStaff: ui.historyColStaff,
@@ -176,6 +125,7 @@ export function StaffDeletedRecordsPanel({
         hardDeleteReason: ui.hardDeleteReason,
         authPassword: ui.authPassword,
         hardDeleteWarn: ui.hardDeleteWarn,
+        restoreStatusLabel: t.restoreStatusLabel,
     };
 
     const vaultUi = {
@@ -197,6 +147,7 @@ export function StaffDeletedRecordsPanel({
         restoreModeActive: ui.restoreModeActive,
         restoreModeInactive: ui.restoreModeInactive,
         vaultPurgeNote: ui.vaultPurgeNote,
+        restoreStatusLabel: t.restoreStatusLabel,
     };
 
     const allForSearch = historyLogs;
@@ -282,7 +233,7 @@ export function StaffDeletedRecordsPanel({
                     ? {
                           icon: Search,
                           title: ui.historyEmpty,
-                          description: zh ? "符合搜尋條件的紀錄會顯示於此。" : "Matching records appear here.",
+                          description: ui.historyEmptyDescription,
                       }
                     : undefined
             }

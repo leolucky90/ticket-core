@@ -27,7 +27,8 @@ import type { KnownTicketStatus, QuoteStatus, Ticket } from "@/lib/types/ticket"
 import type { UsedProductTypeSetting } from "@/lib/schema";
 import type { ItemNamingSettings } from "@/lib/schema/itemNamingSettings";
 import { LIST_DISPLAY_OPTIONS } from "@/lib/ui/list-display";
-import { getUiText } from "@/lib/i18n/ui-text";
+import type { UiLanguage } from "@/lib/i18n/ui-text";
+import { getUiText, uiLocale } from "@/lib/i18n/ui-text";
 import { buildFinancialPeriodSummaryFromSales } from "@/lib/reporting/financial-summary";
 
 export type DashboardTab = "dashboard" | "customers" | "cases" | "activities" | "inventory" | "marketing";
@@ -48,7 +49,7 @@ type ActivityPurchaseRow = {
 };
 
 type CompanyDashboardWorkspaceProps = {
-    lang: "zh" | "en";
+    lang: UiLanguage;
     tab: DashboardTab;
     inventoryView: InventoryView;
     flash: string;
@@ -232,15 +233,13 @@ function getCaseStatusTransitionOptions(currentStatus: string, caseStatusOptions
     return dedupeStatuses([currentStatus, ...knownFlow, ...caseStatusOptions]);
 }
 
-function formatMoney(value: number, lang: "zh" | "en") {
-    const locale = lang === "zh" ? "zh-TW" : "en-US";
-    return new Intl.NumberFormat(locale).format(value);
+function formatMoney(value: number, lang: UiLanguage) {
+    return new Intl.NumberFormat(uiLocale(lang)).format(value);
 }
 
-function formatTime(value: number, lang: "zh" | "en") {
+function formatTime(value: number, lang: UiLanguage) {
     if (!Number.isFinite(value) || value <= 0) return "-";
-    const locale = lang === "zh" ? "zh-TW" : "en-US";
-    return new Intl.DateTimeFormat(locale, {
+    return new Intl.DateTimeFormat(uiLocale(lang), {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
@@ -249,10 +248,9 @@ function formatTime(value: number, lang: "zh" | "en") {
     }).format(value);
 }
 
-function formatTimeShort(value: number, lang: "zh" | "en") {
+function formatTimeShort(value: number, lang: UiLanguage) {
     if (!Number.isFinite(value) || value <= 0) return "-";
-    const locale = lang === "zh" ? "zh-TW" : "en-US";
-    return new Intl.DateTimeFormat(locale, {
+    return new Intl.DateTimeFormat(uiLocale(lang), {
         month: "2-digit",
         day: "2-digit",
         hour: "2-digit",
@@ -413,7 +411,7 @@ function CaseCardList({
     updateCaseAction,
 }: {
     tickets: Ticket[];
-    lang: "zh" | "en";
+    lang: UiLanguage;
     caseStatusOptions: string[];
     quoteStatusOptions: string[];
     repairTechnicians: Array<{

@@ -1,175 +1,216 @@
-// src/components/ai/chat-ball.tsx
-"use client"; // 這個元件需要拖曳與狀態，所以必須是 client component
+"use client";
 
-import { useEffect, useMemo, useRef, useState } from "react"; // 引入 React hooks
-import { Card } from "@/components/ui/card"; // 引入 UI Card
-import { Button } from "@/components/ui/button"; // 引入 UI Button
-import { askChat } from "@/lib/ai/chat"; // 引入 AI layer（不在 UI 寫 AI 呼叫）
-import { cn } from "@/components/ui/cn"; // 引入 cn
+import { Sparkles } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useUiLanguage } from "@/components/layout/ui-language-provider";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { cn } from "@/components/ui/cn";
+import { useAiChatBallVisibility } from "@/components/ai/ai-chat-ball-visibility-provider";
+import { getUiText } from "@/lib/i18n/ui-text";
+import { askChat } from "@/lib/ai/chat";
 
-type ChatLine = { // 定義每一行對話的資料結構
-    role: "user" | "ai"; // 角色：使用者或 AI
-    text: string; // 文字內容
-}; // 型別結束
+type ChatLine = { role: "user" | "ai"; text: string };
 
-export function ChatBall() { // ChatBall：漂浮可拖移小球 + 對話面板
-    const [open, setOpen] = useState(false); // open：控制面板開關
-    const [lines, setLines] = useState<ChatLine[]>([]); // lines：對話內容（human-in-loop：只暫存，不改資料）
-    const [input, setInput] = useState(""); // input：輸入框文字
-    const [loading, setLoading] = useState(false); // loading：送出中狀態
+/** 超過此位移視為拖曳，鬆開後不觸發按鈕 click（避免拖完誤開面板） */
+const DRAG_CLICK_SUPPRESS_PX = 6;
 
-    const ballRef = useRef<HTMLDivElement | null>(null); // ballRef：用於操作小球 DOM
-    const draggingRef = useRef(false); // draggingRef：是否正在拖曳（用 ref 避免頻繁 re-render）
-    const offsetRef = useRef({ x: 0, y: 0 }); // offsetRef：記錄滑鼠相對小球左上角的偏移
+type ChatBallProps = {
+    /** false：不渲染（由帳號設定關閉） */
+    enabled?: boolean;
+};
 
-    const storageKey = "ticket-core:chatball:pos"; // localStorage key：儲存小球位置（純 UI 狀態）
+export function ChatBall({ enabled: enabledProp = true }: ChatBallProps) {
+    const ctx = useAiChatBallVisibility();
+    const enabled = ctx ? ctx.enabled : enabledProp;
 
-    const defaultPos = useMemo(() => ({ x: 24, y: 24 }), []); // defaultPos：預設位置（以 px 為單位，非顏色）
+    const lang = useUiLanguage();
+    const t = getUiText(lang).chatBall;
 
-    useEffect(() => { // 掛載時讀取上次位置
-        const raw = localStorage.getItem(storageKey); // 讀 localStorage
-        if (!raw) return; // 沒資料就保持預設
-        try { // try 解析 JSON
-            const parsed = JSON.parse(raw) as { x: number; y: number }; // 套用型別
-            const el = ballRef.current; // 取得 DOM
-            if (!el) return; // 沒 DOM 就結束
-            el.style.left = `${parsed.x}px`; // 設定 left（這是 DOM style 設定，不是 inline style 寫在 JSX）
-            el.style.bottom = `${parsed.y}px`; // 設定 bottom（用 bottom 方便貼右下角概念）
-        } catch { // 解析失敗就忽略
-            return; // 不做任何事
-        } // try/catch 結束
-    }, []); // 只在第一次執行
+    const [open, setOpen] = useState(false);
+    const [lines, setLines] = useState<ChatLine[]>([]);
+    const [input, setInput] = useState("");
+    const [loading, setLoading] = useState(false);
 
-    useEffect(() => { // 初始化預設位置（只做一次）
-        const el = ballRef.current; // 取得 DOM
-        if (!el) return; // 沒 DOM 就結束
-        if (el.style.left || el.style.bottom) return; // 若已被 storage 還原就不覆蓋
-        el.style.left = `${defaultPos.x}px`; // 設定預設 left
-        el.style.bottom = `${defaultPos.y}px`; // 設定預設 bottom
-    }, [defaultPos]); // 依 defaultPos（固定）
+    const ballRef = useRef<HTMLDivElement | null>(null);
+    const draggingRef = useRef(false);
+    const offsetRef = useRef({ x: 0, y: 0 });
+    const pointerDownRef = useRef<{ x: number; y: number } | null>(null);
+    const dragExceededThresholdRef = useRef(false);
 
-    useEffect(() => { // 註冊全域滑鼠事件，支援拖曳
-        const onMove = (e: MouseEvent) => { // 滑鼠移動事件
-            if (!draggingRef.current) return; // 沒在拖曳就跳過
-            const el = ballRef.current; // 取得 DOM
-            if (!el) return; // 沒 DOM 就跳過
+    const storageKey = "ticket-core:chatball:pos";
+    const defaultPos = useMemo(() => ({ x: 24, y: 24 }), []);
 
-            const x = e.clientX - offsetRef.current.x; // 計算新的 left
-            const yFromBottom = window.innerHeight - e.clientY - offsetRef.current.y; // 計算新的 bottom（以底部為基準）
+    useEffect(() => {
+        const raw = localStorage.getItem(storageKey);
+        if (!raw) return;
+        try {
+            const parsed = JSON.parse(raw) as { x: number; y: number };
+            const el = ballRef.current;
+            if (!el) return;
+            el.style.left = `${parsed.x}px`;
+            el.style.bottom = `${parsed.y}px`;
+        } catch {
+            return;
+        }
+    }, []);
 
-            const clampedX = Math.max(8, Math.min(x, window.innerWidth - 72)); // 限制在視窗內（72 約等於球寬）
-            const clampedY = Math.max(8, Math.min(yFromBottom, window.innerHeight - 72)); // 限制在視窗內
+    useEffect(() => {
+        const el = ballRef.current;
+        if (!el) return;
+        if (el.style.left || el.style.bottom) return;
+        el.style.left = `${defaultPos.x}px`;
+        el.style.bottom = `${defaultPos.y}px`;
+    }, [defaultPos]);
 
-            el.style.left = `${clampedX}px`; // 寫入 left
-            el.style.bottom = `${clampedY}px`; // 寫入 bottom
+    useEffect(() => {
+        const onMove = (e: MouseEvent) => {
+            if (!draggingRef.current) return;
+            const el = ballRef.current;
+            if (!el) return;
 
-            localStorage.setItem(storageKey, JSON.stringify({ x: clampedX, y: clampedY })); // 存回 localStorage
-        }; // onMove 結束
+            if (pointerDownRef.current) {
+                const dx = Math.abs(e.clientX - pointerDownRef.current.x);
+                const dy = Math.abs(e.clientY - pointerDownRef.current.y);
+                if (dx > DRAG_CLICK_SUPPRESS_PX || dy > DRAG_CLICK_SUPPRESS_PX) {
+                    dragExceededThresholdRef.current = true;
+                }
+            }
 
-        const onUp = () => { // 滑鼠放開事件
-            draggingRef.current = false; // 結束拖曳
-        }; // onUp 結束
+            const x = e.clientX - offsetRef.current.x;
+            const yFromBottom = window.innerHeight - e.clientY - offsetRef.current.y;
 
-        window.addEventListener("mousemove", onMove); // 監聽滑鼠移動
-        window.addEventListener("mouseup", onUp); // 監聽滑鼠放開
+            const clampedX = Math.max(8, Math.min(x, window.innerWidth - 72));
+            const clampedY = Math.max(8, Math.min(yFromBottom, window.innerHeight - 72));
 
-        return () => { // 清理監聽避免 memory leak
-            window.removeEventListener("mousemove", onMove); // 移除移動監聽
-            window.removeEventListener("mouseup", onUp); // 移除放開監聽
-        }; // cleanup 結束
-    }, []); // 只註冊一次
+            el.style.left = `${clampedX}px`;
+            el.style.bottom = `${clampedY}px`;
 
-    const onBallMouseDown = (e: React.MouseEvent) => { // 按下小球開始拖曳
-        const el = ballRef.current; // 取得 DOM
-        if (!el) return; // 沒 DOM 就結束
+            localStorage.setItem(storageKey, JSON.stringify({ x: clampedX, y: clampedY }));
+        };
 
-        const rect = el.getBoundingClientRect(); // 取得小球位置與大小
-        offsetRef.current = { x: e.clientX - rect.left, y: rect.bottom - e.clientY }; // 記錄偏移（y 用 bottom 系統）
-        draggingRef.current = true; // 標記正在拖曳
-    }; // onBallMouseDown 結束
+        const onUp = () => {
+            draggingRef.current = false;
+            pointerDownRef.current = null;
+        };
 
-    const onSend = async () => { // 送出訊息
-        const text = input.trim(); // 去除空白
-        if (!text) return; // 空字串不送
-        setInput(""); // 清空輸入框
-        setLines((prev) => [...prev, { role: "user", text }]); // 追加使用者訊息
-        setLoading(true); // 進入 loading
-        try { // 呼叫 AI layer
-            const res = await askChat({ message: text, version: "v1" }); // 呼叫 askChat（versioned）
-            setLines((prev) => [...prev, { role: "ai", text: res.reply }]); // 追加 AI 回覆
-        } finally { // 不論成功失敗都結束 loading
-            setLoading(false); // 關閉 loading
-        } // try/finally 結束
-    }; // onSend 結束
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
 
-    return ( // 回傳 UI
-        <> {/* fragment 包住球與面板 */}
+        return () => {
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup", onUp);
+        };
+    }, []);
+
+    const onBallMouseDown = (e: React.MouseEvent) => {
+        const el = ballRef.current;
+        if (!el) return;
+
+        dragExceededThresholdRef.current = false;
+        pointerDownRef.current = { x: e.clientX, y: e.clientY };
+
+        const rect = el.getBoundingClientRect();
+        offsetRef.current = { x: e.clientX - rect.left, y: rect.bottom - e.clientY };
+        draggingRef.current = true;
+    };
+
+    const onBallButtonClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+        if (dragExceededThresholdRef.current) {
+            e.preventDefault();
+            e.stopPropagation();
+            dragExceededThresholdRef.current = false;
+            return;
+        }
+        setOpen((v) => !v);
+    };
+
+    const onSend = async () => {
+        const text = input.trim();
+        if (!text) return;
+        setInput("");
+        setLines((prev) => [...prev, { role: "user", text }]);
+        setLoading(true);
+        try {
+            const res = await askChat({ message: text, version: "v1" });
+            setLines((prev) => [...prev, { role: "ai", text: res.reply }]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (!enabled) {
+        return null;
+    }
+
+    return (
+        <>
             <div
-                ref={ballRef} // 綁定 ref
-                className={cn( // 小球的 class
-                    "fixed z-50 select-none", // 固定定位 + 最上層 + 不可選取文字
-                )} // className 結束
-                onMouseDown={onBallMouseDown} // 支援拖曳
+                ref={ballRef}
+                className={cn("fixed z-50 select-none", open && "hidden")}
+                onMouseDown={onBallMouseDown}
+                aria-hidden={open}
             >
                 <button
-                    type="button" // button 類型
-                    onClick={() => setOpen((v) => !v)} // 點擊切換面板
-                    className={cn( // 小球外觀（只用 CSS variables）
-                        "h-14 w-14 rounded-full border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] text-[rgb(var(--text))] shadow-sm", // 不用 hard-coded 顏色
-                    )} // className 結束
-                    aria-label="Open AI Chat" // 無障礙 label
+                    type="button"
+                    onClick={onBallButtonClick}
+                    className={cn(
+                        "flex h-14 w-14 items-center justify-center rounded-full border-2 border-[rgb(var(--accent))]/40 bg-[rgb(var(--panel2))] text-[rgb(var(--accent))] shadow-md transition hover:bg-[rgb(var(--panel))] hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--accent))] focus-visible:ring-offset-2 focus-visible:ring-offset-[rgb(var(--bg))]",
+                    )}
+                    aria-label={t.toggleLabel}
                 >
-                    AI {/* 小球文字 */}
-                </button> {/* button 結束 */}
-            </div> {/* 小球容器結束 */}
+                    <Sparkles className="h-6 w-6 shrink-0" aria-hidden />
+                </button>
+            </div>
 
-            {open ? ( // 若 open 為 true 顯示面板
+            {open ? (
                 <div
-                    className={cn( // 面板固定在右下角附近（不跟著球移動，避免太複雜）
-                        "fixed bottom-24 right-6 z-50 w-[320px] max-w-[calc(100vw-48px)]", // 版型用 Tailwind，允許
-                    )} // className 結束
+                    className="fixed right-6 bottom-24 z-50 w-[min(320px,calc(100vw-48px))]"
+                    onClick={(e) => e.stopPropagation()}
                 >
-                    <Card> {/* 面板用 Card */}
-                        <div className="space-y-3"> {/* 只做間距 */}
-                            <div className="flex items-center justify-between"> {/* 標題列 */}
-                                <p className="font-semibold text-[rgb(var(--text))]">AI 對話</p> {/* 標題 */}
-                                <Button variant="ghost" type="button" onClick={() => setOpen(false)}>關閉</Button> {/* 關閉 */}
-                            </div> {/* 標題列結束 */}
+                    <Card>
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between gap-2">
+                                <p className="font-semibold text-[rgb(var(--text))]">{t.panelTitle}</p>
+                                <Button variant="ghost" type="button" onClick={() => setOpen(false)}>
+                                    {t.close}
+                                </Button>
+                            </div>
 
-                            <div className="max-h-64 space-y-2 overflow-auto rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3"> {/* 訊息區 */}
-                                {lines.length === 0 ? ( // 沒訊息時顯示提示
-                                    <p className="text-sm text-[rgb(var(--muted))]">輸入一句話開始。AI 只給建議，不會自動改資料。</p> // human-in-loop 提示
+                            <div className="max-h-64 space-y-2 overflow-auto rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
+                                {lines.length === 0 ? (
+                                    <p className="text-sm text-[rgb(var(--muted))]">{t.emptyHint}</p>
                                 ) : (
-                                    lines.map((l, i) => ( // 渲染每一行
-                                        <div key={i}> {/* key 用 index（短列表可接受） */}
-                                            <p className="text-xs text-[rgb(var(--muted))]">{l.role === "user" ? "你" : "AI"}</p> {/* 角色標籤 */}
-                                            <p className="text-sm text-[rgb(var(--text))]">{l.text}</p> {/* 內容 */}
-                                        </div> // 一行結束
+                                    lines.map((l, i) => (
+                                        <div key={i}>
+                                            <p className="text-xs text-[rgb(var(--muted))]">{l.role === "user" ? t.you : t.ai}</p>
+                                            <p className="text-sm text-[rgb(var(--text))]">{l.text}</p>
+                                        </div>
                                     ))
-                                )} {/* 條件渲染結束 */}
-                            </div> {/* 訊息區結束 */}
+                                )}
+                            </div>
 
-                            <div className="flex gap-2"> {/* 輸入列 */}
+                            <div className="flex gap-2">
                                 <input
-                                    value={input} // 綁定 input 狀態
-                                    onChange={(e) => setInput(e.target.value)} // 更新狀態
-                                    onKeyDown={(e) => { // Enter 送出
-                                        if (e.key === "Enter") { // 若按下 Enter
-                                            e.preventDefault(); // 防止 form 行為
-                                            void onSend(); // 呼叫送出（void 避免未處理 Promise 警告）
-                                        } // if 結束
-                                    }} // onKeyDown 結束
-                                    className="flex-1 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-3 py-2 text-sm text-[rgb(var(--text))] placeholder:text-[rgb(var(--muted))]" // 顏色用 variables
-                                    placeholder="輸入訊息…" // placeholder 文字
-                                /> {/* input 結束 */}
-                                <Button type="button" onClick={() => void onSend()} disabled={loading}> {/* 送出按鈕 */}
-                                    {loading ? "送出中" : "送出"} {/* loading 狀態文字 */}
-                                </Button> {/* Button 結束 */}
-                            </div> {/* 輸入列結束 */}
-                        </div> {/* space-y 結束 */}
-                    </Card> {/* Card 結束 */}
-                </div> // 面板容器結束
-            ) : null} {/* open 為 false 不渲染 */}
-        </> // fragment 結束
-    ); // return 結束
-} // ChatBall 結束
+                                    value={input}
+                                    onChange={(e) => setInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                            e.preventDefault();
+                                            void onSend();
+                                        }
+                                    }}
+                                    className="flex-1 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-3 py-2 text-sm text-[rgb(var(--text))] placeholder:text-[rgb(var(--muted))]"
+                                    placeholder={t.placeholder}
+                                />
+                                <Button type="button" onClick={() => void onSend()} disabled={loading}>
+                                    {loading ? t.sending : t.send}
+                                </Button>
+                            </div>
+                        </div>
+                    </Card>
+                </div>
+            ) : null}
+        </>
+    );
+}

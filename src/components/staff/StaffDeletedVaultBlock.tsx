@@ -6,6 +6,7 @@ import { IconActionButton } from "@/components/ui/icon-action-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { DeleteLog } from "@/lib/schema";
+import type { UiLanguage } from "@/lib/i18n/ui-text";
 import { formatIsoForDisplay } from "@/lib/format/datetime-display";
 import { primaryReasonForLog, snapshotName } from "@/components/staff/staff-deleted-helpers";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
@@ -29,13 +30,14 @@ type VaultUi = {
     restoreModeActive: string;
     restoreModeInactive: string;
     vaultPurgeNote: string;
+    restoreStatusLabel: string;
 };
 
 type StaffDeletedVaultBlockProps = {
     vaultLogs: DeleteLog[];
     restoreHardDeleteAction: (formData: FormData) => Promise<void>;
     purgeDeleteLogAction: (formData: FormData) => Promise<void>;
-    lang: "zh" | "en";
+    lang: UiLanguage;
     ui: VaultUi;
 };
 
@@ -139,7 +141,7 @@ export function StaffDeletedVaultBlock({ vaultLogs, restoreHardDeleteAction, pur
                                 <Input name="restoreReason" required placeholder={ui.restoreReason} className="h-10" />
                             </label>
                             <label className="grid gap-1 text-sm">
-                                <span className="text-[rgb(var(--muted))]">{lang === "zh" ? "恢復狀態" : "Restore status"}</span>
+                                <span className="text-[rgb(var(--muted))]">{ui.restoreStatusLabel}</span>
                                 <select
                                     name="restoreMode"
                                     defaultValue="active"

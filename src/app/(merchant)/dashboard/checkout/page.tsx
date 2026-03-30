@@ -1,5 +1,7 @@
+import { cookies } from "next/headers";
 import { CheckoutWorkspace } from "@/components/dashboard/CheckoutWorkspace";
 import { MerchantPageShell } from "@/components/merchant/shell";
+import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
 import { listActivities } from "@/lib/services/merchant/activity-read-model.service";
 import { listCompanyCustomers } from "@/lib/services/merchant/customer-read-model.service";
 import { listProducts } from "@/lib/services/merchant/inventory-read-model.service";
@@ -14,6 +16,8 @@ type CheckoutPageProps = {
 
 export default async function DashboardCheckoutPage({ searchParams }: CheckoutPageProps) {
     const sp = await searchParams;
+    const lang = getUiLanguage((await cookies()).get("lang")?.value);
+    const p = getUiText(lang).merchantStandalonePages.checkout;
     const [customers, tickets, products, activities, usedProducts, companyProfile] = await Promise.all([
         listCompanyCustomers(),
         listTickets(),
@@ -26,7 +30,7 @@ export default async function DashboardCheckoutPage({ searchParams }: CheckoutPa
     const sellableUsedProducts = usedProducts.filter((row) => row.isSellable && row.saleStatus !== "sold" && row.saleStatus !== "archived");
 
     return (
-        <MerchantPageShell title="結帳" subtitle="交易工作流頁面，聚焦收款與訂單建立。" width="default">
+        <MerchantPageShell title={p.title} subtitle={p.subtitle} width="default">
             <CheckoutWorkspace
                 customers={customers}
                 tickets={tickets}

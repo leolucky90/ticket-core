@@ -7,7 +7,7 @@ import type { BossAdminCompanyRecord, CompanyDashboardStats } from "@/lib/types/
 import type { BusinessHomepageContentState } from "@/features/business/services/businessHomepageContent";
 import { BossAdminHomepageBuilder } from "@/components/dashboard/BossAdminHomepageBuilder";
 import type { UiLanguage } from "@/lib/i18n/ui-text";
-import { getUiText } from "@/lib/i18n/ui-text";
+import { getUiText, uiLocale } from "@/lib/i18n/ui-text";
 
 type BossAdminWorkspaceProps = {
     lang: UiLanguage;
@@ -19,12 +19,12 @@ type BossAdminWorkspaceProps = {
 };
 
 function formatMoney(value: number, lang: UiLanguage) {
-    return new Intl.NumberFormat(lang === "zh" ? "zh-TW" : "en-US").format(value);
+    return new Intl.NumberFormat(uiLocale(lang)).format(value);
 }
 
 function formatTime(ts: number, lang: UiLanguage) {
     if (!Number.isFinite(ts) || ts <= 0) return "-";
-    return new Intl.DateTimeFormat(lang === "zh" ? "zh-TW" : "en-US", {
+    return new Intl.DateTimeFormat(uiLocale(lang), {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",

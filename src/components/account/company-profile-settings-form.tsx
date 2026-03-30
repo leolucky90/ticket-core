@@ -8,7 +8,9 @@ import { IconActionButton } from "@/components/ui/icon-action-button";
 import { IconTextActionButton } from "@/components/ui/icon-text-action-button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useUiLanguage } from "@/components/layout/ui-language-provider";
 import type { CompanyProfile } from "@/lib/schema";
+import { getUiText } from "@/lib/i18n/ui-text";
 
 type CompanyProfileSettingsFormProps = {
     profile: CompanyProfile | null;
@@ -36,14 +38,16 @@ function buildCopyText(profile: CompanyProfile | null): string {
 }
 
 export function CompanyProfileSettingsForm({ profile, saveAction }: CompanyProfileSettingsFormProps) {
+    const lang = useUiLanguage();
+    const t = getUiText(lang).companyProfileSettings;
     const [editing, setEditing] = useState(false);
     const copyText = useMemo(() => buildCopyText(profile), [profile]);
     const actions = (
         <div className="flex flex-wrap items-center gap-2">
             <IconActionButton
                 icon={Copy}
-                label="複製資訊"
-                tooltip="複製公司帳戶資訊"
+                label={t.copyLabel}
+                tooltip={t.copyTooltip}
                 onClick={async () => {
                     if (!copyText) return;
                     try {
@@ -54,15 +58,15 @@ export function CompanyProfileSettingsForm({ profile, saveAction }: CompanyProfi
                 }}
             />
             {!editing ? (
-                <IconTextActionButton icon={Pencil} label="編輯" tooltip="編輯公司帳戶資訊" onClick={() => setEditing(true)} />
+                <IconTextActionButton icon={Pencil} label={t.editLabel} tooltip={t.editTooltip} onClick={() => setEditing(true)} />
             ) : (
                 <>
-                    <IconTextActionButton icon={Save} type="submit" label="儲存" tooltip="儲存公司帳戶資訊" />
+                    <IconTextActionButton icon={Save} type="submit" label={t.saveLabel} tooltip={t.saveTooltip} />
                     <IconTextActionButton
                         icon={X}
                         type="button"
-                        label="取消"
-                        tooltip="取消編輯"
+                        label={t.cancelLabel}
+                        tooltip={t.cancelTooltip}
                         onClick={() => {
                             setEditing(false);
                             window.location.reload();
@@ -75,11 +79,7 @@ export function CompanyProfileSettingsForm({ profile, saveAction }: CompanyProfi
 
     return (
         <form action={saveAction} className="grid gap-4">
-            <MerchantSectionCard
-                title="公司帳戶資訊"
-                description="收據、報價、客戶預設帶入資料來源（可擴充地區欄位）。"
-                actions={actions}
-            >
+            <MerchantSectionCard title={t.sectionTitle} description={t.sectionDescription} actions={actions}>
                 <div className="grid gap-3 md:grid-cols-2">
                     <FormField label="companyName" required>
                         <Input name="companyName" defaultValue={profile?.companyName ?? ""} disabled={!editing} required={editing} />

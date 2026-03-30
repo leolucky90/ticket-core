@@ -14,8 +14,10 @@ import {
 } from "@/lib/marketing/brand-catalog-helpers";
 import type { DimensionPickerBundle } from "@/lib/types/catalog";
 import type { RepairBrand } from "@/lib/types/repair-brand";
+import { getUiText } from "@/lib/i18n/ui-text";
 
 export type MarketingBrandEditorProps = {
+    lang: "zh" | "en";
     brand: RepairBrand;
     dimensionBundle: DimensionPickerBundle;
     brandTypeSuggestionPool: string[];
@@ -34,6 +36,7 @@ export type MarketingBrandEditorProps = {
 };
 
 export function MarketingBrandEditor({
+    lang,
     brand,
     dimensionBundle,
     brandTypeSuggestionPool,
@@ -50,6 +53,7 @@ export function MarketingBrandEditor({
     deleteModelAction,
     onDeleteGuard,
 }: MarketingBrandEditorProps) {
+    const t = getUiText(lang).marketingBrandEditor;
     const brandCategoryOptions = getBrandCategoryNames(brand);
     const brandTypeOptions = getBrandTypeNames(brand);
     const selectedModelType = brandModelTypeById[brand.id] ?? brandTypeOptions[0] ?? "";
@@ -64,7 +68,7 @@ export function MarketingBrandEditor({
                     <div className="text-lg font-semibold text-[rgb(var(--text))]">{brand.name}</div>
                     {brandCategoryOptions.length > 0 ? (
                         <div className="flex flex-wrap items-center gap-1 text-xs text-[rgb(var(--muted))]">
-                            <span className="text-[10px] uppercase tracking-[0.14em]">分類</span>
+                            <span className="text-[10px] uppercase tracking-[0.14em]">{t.categoryTag}</span>
                             {brandCategoryOptions.map((categoryName) => (
                                 <span key={`${brand.id}-category-${categoryName}`} className="rounded border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-1.5 py-0.5">
                                     {categoryName}
@@ -80,7 +84,7 @@ export function MarketingBrandEditor({
                                 </span>
                             ))
                         ) : (
-                            <span>{brandCategoryOptions.length > 0 ? "未設定裝置類型" : "未指定商品類型"}</span>
+                            <span>{brandCategoryOptions.length > 0 ? t.noDeviceTypeSet : t.noProductTypeSet}</span>
                         )}
                     </div>
                 </div>
@@ -90,17 +94,17 @@ export function MarketingBrandEditor({
                         <input type="hidden" name="brandId" value={brand.id} />
                         <input type="hidden" name="brandName" value={brand.name} />
                         <IconOnlyButton
-                            label="修改品牌"
+                            label={t.editBrand}
                             type="button"
                             variant="solid"
                             icon={<Pencil className="h-4 w-4" aria-hidden="true" />}
                             onClick={(event) => submitBrandRename(event, brand.name)}
                         />
                     </form>
-                    <form action={deleteBrandAction} onSubmit={onDeleteGuard} data-delete-target={`品牌 ${brand.name}`} onClick={(event) => event.stopPropagation()}>
+                    <form action={deleteBrandAction} onSubmit={onDeleteGuard} data-delete-target={t.deleteBrandTarget.replace("{name}", brand.name)} onClick={(event) => event.stopPropagation()}>
                         <input type="hidden" name="tab" value="marketing" />
                         <input type="hidden" name="brandId" value={brand.id} />
-                        <IconOnlyButton label="移除品牌" type="submit" icon={<Trash2 className="h-4 w-4" aria-hidden="true" />} />
+                        <IconOnlyButton label={t.removeBrand} type="submit" icon={<Trash2 className="h-4 w-4" aria-hidden="true" />} />
                     </form>
                 </div>
             </div>
@@ -115,8 +119,8 @@ export function MarketingBrandEditor({
                     <input type="hidden" name="nextTypeName" value="" />
                     <div className="grid gap-3 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-3">
                         <div className="grid gap-1">
-                            <div className="text-sm font-medium">店內商品分類</div>
-                            <div className="text-xs text-[rgb(var(--muted))]">通用商品、維修零件、配件品牌都可以勾選；Apple、Samsung 這種品牌也能同時勾這裡，再另外管理裝置類型與型號。</div>
+                            <div className="text-sm font-medium">{t.inStoreCategoriesTitle}</div>
+                            <div className="text-xs text-[rgb(var(--muted))]">{t.inStoreCategoriesDescription}</div>
                         </div>
                         <div className="flex flex-wrap gap-2">
                             {dimensionBundle.categories.length > 0 ? (
@@ -133,12 +137,12 @@ export function MarketingBrandEditor({
                                     </label>
                                 ))
                             ) : (
-                                <div className="text-xs text-[rgb(var(--muted))]">尚未建立商品分類，請先到「分類」分頁新增。</div>
+                                <div className="text-xs text-[rgb(var(--muted))]">{t.noCategoriesYet}</div>
                             )}
                         </div>
                     </div>
                     <div className="text-xs text-[rgb(var(--muted))]">
-                        裝置類型由這裡集中管理；適合 Apple / Samsung 這類品牌的 iPhone、iPad、Galaxy 等系列。勾選「啟用二手商品設定」後，該類型才會出現在二手商品規格模板。
+                        {t.deviceTypesExplainer}
                     </div>
                     <div className="grid gap-2">
                         {brandTypeOptions.length > 0 ? (
@@ -150,7 +154,7 @@ export function MarketingBrandEditor({
                                     <div className="flex items-center gap-2">
                                         <div className="font-medium text-[rgb(var(--text))]">{typeName}</div>
                                         <IconOnlyButton
-                                            label={`修改品牌類型：${typeName}`}
+                                            label={t.renameBrandType.replace("{name}", typeName)}
                                             type="submit"
                                             formAction={renameBrandTypeAction}
                                             className="h-8 w-8"
@@ -158,7 +162,7 @@ export function MarketingBrandEditor({
                                             onClick={(event) => prepareBrandTypeRename(event, typeName)}
                                         />
                                         <IconOnlyButton
-                                            label={`移除品牌類型：${typeName}`}
+                                            label={t.removeBrandType.replace("{name}", typeName)}
                                             type="submit"
                                             formAction={deleteBrandTypeAction}
                                             className="h-8 w-8"
@@ -176,22 +180,22 @@ export function MarketingBrandEditor({
                                                 defaultChecked={(brand.usedProductTypes ?? []).some((row) => row.toLowerCase() === typeName.toLowerCase())}
                                                 className="h-4 w-4 accent-[rgb(var(--accent))]"
                                             />
-                                            啟用二手商品設定
+                                            {t.usedProductToggle}
                                         </label>
                                     </div>
                                 </div>
                             ))
                         ) : (
-                            <div className="text-xs text-[rgb(var(--muted))]">尚未建立任何裝置類型；如果這個品牌只做配件或維修零件，可以只勾上面的店內商品分類。</div>
+                            <div className="text-xs text-[rgb(var(--muted))]">{t.noDeviceTypesYet}</div>
                         )}
                     </div>
                     <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
                         <label className="grid gap-1">
-                            <span className="text-xs text-[rgb(var(--muted))]">新增類型</span>
+                            <span className="text-xs text-[rgb(var(--muted))]">{t.newTypeLabel}</span>
                             <Input
                                 name="newBrandTypeName"
                                 list={`brand-type-suggestions-${brand.id}`}
-                                placeholder="例如：手機配件 / 車用配件 / iPhone"
+                                placeholder={t.newTypePlaceholder}
                                 value={brandTypeDraft}
                                 onChange={(event) => {
                                     const nextValue = event.currentTarget.value;
@@ -209,12 +213,12 @@ export function MarketingBrandEditor({
                             </datalist>
                         </label>
                         <div className="flex justify-end">
-                            <IconOnlyButton label="儲存品牌類型設定" type="submit" variant="solid" icon={<Save className="h-4 w-4" aria-hidden="true" />} />
+                            <IconOnlyButton label={t.saveBrandTypes} type="submit" variant="solid" icon={<Save className="h-4 w-4" aria-hidden="true" />} />
                         </div>
                     </div>
                     {brandTypeSuggestions.length > 0 ? (
                         <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-xs text-[rgb(var(--muted))]">建議：</span>
+                            <span className="text-xs text-[rgb(var(--muted))]">{t.suggestionsLabel}</span>
                             {brandTypeSuggestions.map((suggestion) => (
                                 <button
                                     key={`${brand.id}-suggestion-chip-${suggestion}`}
@@ -237,7 +241,7 @@ export function MarketingBrandEditor({
                 <div className="grid gap-2 rounded-lg border border-[rgb(var(--border))] p-3">
                     <div className="grid gap-2 sm:grid-cols-[minmax(0,220px)_1fr] sm:items-end">
                         <label className="grid gap-1">
-                            <span className="text-xs text-[rgb(var(--muted))]">型號類型</span>
+                            <span className="text-xs text-[rgb(var(--muted))]">{t.modelTypeLabel}</span>
                             <Select
                                 value={selectedModelType}
                                 onChange={(event) => {
@@ -249,7 +253,7 @@ export function MarketingBrandEditor({
                                 }}
                                 disabled={brandTypeOptions.length === 0}
                             >
-                                <option value="">{brandTypeOptions.length > 0 ? "請選擇商品類型" : "請先新增商品類型"}</option>
+                                <option value="">{brandTypeOptions.length > 0 ? t.selectProductType : t.addProductTypeFirst}</option>
                                 {brandTypeOptions.map((typeName) => (
                                     <option key={`${brand.id}-model-type-${typeName}`} value={typeName}>
                                         {typeName}
@@ -258,11 +262,11 @@ export function MarketingBrandEditor({
                             </Select>
                         </label>
                         <div className="text-xs text-[rgb(var(--muted))]">
-                            {selectedModelType ? `目前只顯示「${selectedModelType}」的型號，新增時也會存到這個類型。` : "請先選擇品牌類型，再管理該類型的型號。"}
+                            {selectedModelType ? t.modelScopeWithType.replace("{type}", selectedModelType) : t.modelScopePickTypeFirst}
                         </div>
                     </div>
 
-                    <div className="text-xs text-[rgb(var(--muted))]">目前型號</div>
+                    <div className="text-xs text-[rgb(var(--muted))]">{t.modelsCurrentLabel}</div>
                     {selectedModelType ? (
                         <div className="flex flex-wrap gap-2">
                             {visibleModels.map((model) => {
@@ -282,22 +286,22 @@ export function MarketingBrandEditor({
                                                 <Input name="modelName" defaultValue={model} required className="min-w-[160px]" />
                                             </form>
                                             <div className="flex items-center justify-end gap-2 rounded-lg bg-[rgb(var(--panel))] px-2 py-2">
-                                                <div className="text-[11px] text-[rgb(var(--muted))]">操作</div>
+                                                <div className="text-[11px] text-[rgb(var(--muted))]">{t.operationsLabel}</div>
                                                 <IconOnlyButton
-                                                    label="修改型號"
+                                                    label={t.editModel}
                                                     form={updateFormId}
                                                     type="submit"
                                                     variant="solid"
                                                     className="h-9 w-9"
                                                     icon={<Save className="h-4 w-4" aria-hidden="true" />}
                                                 />
-                                                <form action={deleteModelAction} onSubmit={onDeleteGuard} data-delete-target={`型號 ${model}`}>
+                                                <form action={deleteModelAction} onSubmit={onDeleteGuard} data-delete-target={t.deleteModelTarget.replace("{name}", model)}>
                                                     <input type="hidden" name="tab" value="marketing" />
                                                     <input type="hidden" name="brandId" value={brand.id} />
                                                     <input type="hidden" name="modelTypeName" value={selectedModelType} />
                                                     <input type="hidden" name="modelName" value={model} />
                                                     <IconOnlyButton
-                                                        label="移除型號"
+                                                        label={t.removeModel}
                                                         type="submit"
                                                         className="h-9 w-9 border border-[rgb(var(--border))] bg-[rgb(var(--panel2))]"
                                                         icon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
@@ -308,10 +312,10 @@ export function MarketingBrandEditor({
                                     </details>
                                 );
                             })}
-                            {visibleModels.length === 0 ? <div className="text-xs text-[rgb(var(--muted))]">這個類型目前還沒有型號。</div> : null}
+                            {visibleModels.length === 0 ? <div className="text-xs text-[rgb(var(--muted))]">{t.noModelsInType}</div> : null}
                         </div>
                     ) : (
-                        <div className="text-xs text-[rgb(var(--muted))]">請先新增並儲存品牌類型，再選擇要管理的類型。</div>
+                        <div className="text-xs text-[rgb(var(--muted))]">{t.addTypesFirst}</div>
                     )}
 
                     <form action={createModelAction} className="flex flex-wrap items-center gap-2">
@@ -320,12 +324,12 @@ export function MarketingBrandEditor({
                         <input type="hidden" name="modelTypeName" value={selectedModelType} />
                         <Input
                             name="modelName"
-                            placeholder={selectedModelType ? `新增 ${selectedModelType} 型號` : "請先選擇商品類型"}
+                            placeholder={selectedModelType ? t.addModelPlaceholder.replace("{type}", selectedModelType) : t.selectProductType}
                             required
                             disabled={!selectedModelType}
                             className="w-full sm:w-80"
                         />
-                        <IconOnlyButton label="新增型號" type="submit" variant="solid" disabled={!selectedModelType} icon={<Plus className="h-4 w-4" aria-hidden="true" />} />
+                        <IconOnlyButton label={t.addModel} type="submit" variant="solid" disabled={!selectedModelType} icon={<Plus className="h-4 w-4" aria-hidden="true" />} />
                     </form>
                 </div>
             </div>

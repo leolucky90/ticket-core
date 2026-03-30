@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { MerchantPageShell } from "@/components/merchant/shell";
 import { StaffManagementPanel } from "@/components/staff/StaffManagementPanel";
+import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
 import { activateStaff, deactivateStaff, listStaffMembers, resetStaffPassword, softDeleteStaff } from "@/lib/services/staff.service";
 
 type StaffPageProps = {
@@ -19,65 +20,67 @@ function redirectWithFlash(message: string): never {
 
 export default async function StaffPage({ searchParams }: StaffPageProps) {
     const cookieStore = await cookies();
-    const langCookie = cookieStore.get("lang")?.value;
-    const lang: "zh" | "en" = langCookie === "en" ? "en" : "zh";
+    const lang = getUiLanguage(cookieStore.get("lang")?.value);
+    const staffUi = getUiText(lang).merchantStaff;
     const sp = await searchParams;
     const keyword = (sp.keyword ?? "").trim();
     const items = await listStaffMembers({ keyword });
-    const title = lang === "zh" ? "員工管理" : "Staff Management";
-    const subtitle = lang === "zh" ? "員工管理、權限與帳號安全操作。" : "Manage staff records, permissions, and account security operations.";
+    const title = staffUi.pageTitle;
+    const subtitle = staffUi.pageSubtitle;
 
     async function deactivateAction(formData: FormData): Promise<void> {
         "use server";
+        const m = getUiText(getUiLanguage((await cookies()).get("lang")?.value)).merchantStaff;
         try {
             await deactivateStaff(String(formData.get("id") ?? ""));
-            redirectWithFlash("員工已停用");
+            redirectWithFlash(m.flashDeactivated);
         } catch (error) {
             if (isRedirectError(error)) throw error;
-            redirectWithFlash(error instanceof Error ? error.message : "停用失敗");
+            redirectWithFlash(error instanceof Error ? error.message : m.flashDeactivateFailed);
         }
     }
 
     async function activateAction(formData: FormData): Promise<void> {
         "use server";
-        const cookieStore = await cookies();
-        const flashLang: "zh" | "en" = cookieStore.get("lang")?.value === "en" ? "en" : "zh";
+        const m = getUiText(getUiLanguage((await cookies()).get("lang")?.value)).merchantStaff;
         try {
             await activateStaff(String(formData.get("id") ?? ""));
-            redirectWithFlash(flashLang === "zh" ? "員工已激活" : "Staff member has been activated.");
+            redirectWithFlash(m.flashActivated);
         } catch (error) {
             if (isRedirectError(error)) throw error;
-            redirectWithFlash(error instanceof Error ? error.message : flashLang === "zh" ? "激活失敗" : "Activation failed");
+            redirectWithFlash(error instanceof Error ? error.message : m.flashActivateFailed);
         }
     }
 
     async function softDeleteAction(formData: FormData): Promise<void> {
         "use server";
+        const m = getUiText(getUiLanguage((await cookies()).get("lang")?.value)).merchantStaff;
         try {
             await softDeleteStaff({
                 id: String(formData.get("id") ?? ""),
                 reason: String(formData.get("reason") ?? ""),
                 confirmPassword: String(formData.get("confirmPassword") ?? ""),
             });
-            redirectWithFlash("員工已軟刪除");
+            redirectWithFlash(m.flashSoftDeleted);
         } catch (error) {
             if (isRedirectError(error)) throw error;
-            redirectWithFlash(error instanceof Error ? error.message : "刪除失敗");
+            redirectWithFlash(error instanceof Error ? error.message : m.flashDeleteFailed);
         }
     }
 
     async function resetPasswordAction(formData: FormData): Promise<void> {
         "use server";
+        const m = getUiText(getUiLanguage((await cookies()).get("lang")?.value)).merchantStaff;
         try {
             await resetStaffPassword({
                 id: String(formData.get("id") ?? ""),
                 newPassword: String(formData.get("newPassword") ?? ""),
                 requirePasswordChange: true,
             });
-            redirectWithFlash("員工密碼已重置，並要求下次登入改密碼");
+            redirectWithFlash(m.flashPasswordReset);
         } catch (error) {
             if (isRedirectError(error)) throw error;
-            redirectWithFlash(error instanceof Error ? error.message : "重置密碼失敗");
+            redirectWithFlash(error instanceof Error ? error.message : m.flashResetPasswordFailed);
         }
     }
 

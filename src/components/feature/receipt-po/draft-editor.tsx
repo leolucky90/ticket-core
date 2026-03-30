@@ -5,43 +5,12 @@ import { DimensionPicker } from "@/components/feature/product/dimension-picker";
 import type { PoDraft } from "@/lib/schema/ai/po-draft";
 import type { PoDraftProductSearchHit } from "@/lib/schema/poDraftProduct";
 import type { DimensionPickerBundle } from "@/lib/types/catalog";
+import type { UiLanguage } from "@/lib/i18n/ui-text";
+import { getUiText } from "@/lib/i18n/ui-text";
 
 export function emptyDimensionBundle(): DimensionPickerBundle {
     return { categories: [], brands: [], models: [] };
 }
-
-type Lang = "zh" | "en";
-
-const copy = {
-    zh: {
-        dims: "目錄篩選（主分類／第二分類／品牌／型號）",
-        nameEntryHint: "品項關鍵字（對應 name entry，可選）",
-        searchProduct: "搜尋商品",
-        pickOrCustom: "選擇商品或手改說明",
-        linked: "已連結商品",
-        unlink: "改為自訂",
-        customLine: "自訂品項",
-        qty: "數量",
-        unit: "單價",
-        amt: "金額",
-        addLine: "新增列",
-        remove: "刪除",
-    },
-    en: {
-        dims: "Catalog filter (category / secondary / brand / model)",
-        nameEntryHint: "Name-entry keyword (optional)",
-        searchProduct: "Search products",
-        pickOrCustom: "Pick a product or edit description",
-        linked: "Linked product",
-        unlink: "Switch to custom",
-        customLine: "Custom line",
-        qty: "Qty",
-        unit: "Unit price",
-        amt: "Amount",
-        addLine: "Add line",
-        remove: "Remove",
-    },
-} as const;
 
 function parseRef(raw: string | undefined): { id: string } {
     const value = (raw ?? "").trim();
@@ -63,14 +32,14 @@ type DimensionFilterValue = {
 };
 
 export type PoDraftLineItemsEditorProps = {
-    lang: Lang;
+    lang: UiLanguage;
     dimensionBundle: DimensionPickerBundle;
     items: PoDraft["items"];
     onItemsChange: (items: PoDraft["items"]) => void;
 };
 
 export function PoDraftLineItemsEditor({ lang, dimensionBundle, items, onItemsChange }: PoDraftLineItemsEditorProps) {
-    const t = copy[lang];
+    const t = getUiText(lang).receiptPoLineEditor;
     const [dimValue, setDimValue] = useState<DimensionFilterValue>({});
     const [nameEntryHint, setNameEntryHint] = useState("");
 
@@ -154,7 +123,7 @@ export function PoDraftLineItemsEditor({ lang, dimensionBundle, items, onItemsCh
 }
 
 type RowProps = {
-    lang: Lang;
+    lang: UiLanguage;
     row: PoDraft["items"][number];
     index: number;
     filter: { categoryId: string; brandId: string; modelId: string };
@@ -165,7 +134,7 @@ type RowProps = {
 };
 
 function PoDraftLineRow({ lang, row, index, filter, nameEntryHint, onSetItem, onRemove, canRemove }: RowProps) {
-    const t = copy[lang];
+    const t = getUiText(lang).receiptPoLineEditor;
     const [query, setQuery] = useState("");
     const [open, setOpen] = useState(false);
     const [hits, setHits] = useState<PoDraftProductSearchHit[]>([]);
@@ -294,7 +263,7 @@ function PoDraftLineRow({ lang, row, index, filter, nameEntryHint, onSetItem, on
             )}
 
             <label className="block text-xs font-medium text-[rgb(var(--muted))]">
-                {lang === "zh" ? "品項說明" : "Description"}
+                {t.lineDescription}
                 <input
                     value={row.description}
                     onChange={(e) => onSetItem(index, { description: e.target.value })}

@@ -8,6 +8,7 @@ import {
 
 type UpdateDashboardPreferencesBody = {
     theme?: unknown;
+    aiChatBallEnabled?: boolean;
 };
 
 export async function GET() {
@@ -41,14 +42,15 @@ export async function PUT(req: Request) {
         return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    if (body.theme === undefined) {
+    if (body.theme === undefined && body.aiChatBallEnabled === undefined) {
         return NextResponse.json({ error: "No updatable fields" }, { status: 400 });
     }
 
     const preferences = await saveDashboardPreferences({
         tenantId: companyId,
         updatedBy: session.uid,
-        theme: body.theme,
+        ...(body.theme !== undefined ? { theme: body.theme } : {}),
+        ...(body.aiChatBallEnabled !== undefined ? { aiChatBallEnabled: body.aiChatBallEnabled } : {}),
     });
 
     return NextResponse.json({ ok: true, preferences });

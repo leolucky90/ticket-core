@@ -3,10 +3,11 @@ import type { CSSProperties } from "react";
 import { SignOutButton } from "@/components/layout/SignOutButton";
 import type { Product } from "@/lib/types/merchant-product";
 import type { ShowThemeColors, StorefrontSettings } from "@/features/showcase/types/showTheme";
+import type { UiLanguage } from "@/lib/i18n/ui-text";
+import { uiLocale } from "@/lib/i18n/ui-text";
 
-function formatMoney(value: number, lang: "zh" | "en") {
-    const locale = lang === "zh" ? "zh-TW" : "en-US";
-    return new Intl.NumberFormat(locale).format(value);
+function formatMoney(value: number, lang: UiLanguage) {
+    return new Intl.NumberFormat(uiLocale(lang)).format(value);
 }
 
 export function TenantShopPage({
@@ -18,7 +19,7 @@ export function TenantShopPage({
     navAccountType,
 }: {
     tenantId: string;
-    lang: "zh" | "en";
+    lang: UiLanguage;
     products: Product[];
     showThemeColors: ShowThemeColors;
     storefrontSettings: StorefrontSettings;

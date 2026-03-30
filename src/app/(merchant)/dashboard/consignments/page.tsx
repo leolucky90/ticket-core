@@ -1,31 +1,37 @@
+import { cookies } from "next/headers";
 import { AlertTriangle, PackageCheck, Timer, TrendingUp } from "lucide-react";
 import { MerchantPageShell, MerchantSectionCard, MerchantStatGrid } from "@/components/merchant/shell";
+import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
 import { getConsignmentOverviewData } from "@/lib/services/merchant/consignment-overview-service";
 
 export default async function DashboardConsignmentsPage() {
+    const lang = getUiLanguage((await cookies()).get("lang")?.value);
+    const ui = getUiText(lang);
+    const shell = ui.merchantStandalonePages.consignments;
+    const co = ui.consignmentsOverview;
     const data = await getConsignmentOverviewData();
 
     const stats = [
-        { id: "active", label: "進行中寄店", value: data.kpi.activeCount, hint: "active + partially redeemed" },
-        { id: "remaining", label: "剩餘寄店量", value: data.kpi.remainingQty, hint: "所有寄店 remainingQty 合計" },
-        { id: "expiring", label: "7 日內到期", value: data.kpi.expiringSoonCount, hint: "需優先通知客戶" },
-        { id: "completed", label: "已完成", value: data.kpi.completedCount, hint: "remainingQty = 0" },
-        { id: "expired", label: "已過期", value: data.kpi.expiredCount, hint: "過期未兌換記錄" },
+        { id: "active", label: co.kpiActive, value: data.kpi.activeCount, hint: co.kpiActiveHint },
+        { id: "remaining", label: co.kpiRemaining, value: data.kpi.remainingQty, hint: co.kpiRemainingHint },
+        { id: "expiring", label: co.kpiExpiring, value: data.kpi.expiringSoonCount, hint: co.kpiExpiringHint },
+        { id: "completed", label: co.kpiCompleted, value: data.kpi.completedCount, hint: co.kpiCompletedHint },
+        { id: "expired", label: co.kpiExpired, value: data.kpi.expiredCount, hint: co.kpiExpiredHint },
     ];
 
     return (
-        <MerchantPageShell title="寄店總覽" subtitle="寄店/活動兌換的 KPI、熱門活動、待兌換與庫存風險基礎。" width="overview">
-            <MerchantSectionCard title="寄店摘要" description="campaign end 與 fully closed 分離，待兌換仍持續追蹤。">
+        <MerchantPageShell title={shell.title} subtitle={shell.subtitle} width="overview">
+            <MerchantSectionCard title={co.summaryTitle} description={co.summaryDescription}>
                 <MerchantStatGrid items={stats} />
             </MerchantSectionCard>
 
             <MerchantSectionCard
-                title="庫存風險提醒"
-                description="規則式提醒：零庫存、低庫存、寄店待兌換缺貨風險。"
+                title={co.riskTitle}
+                description={co.riskDescription}
                 emptyState={{
                     icon: AlertTriangle,
-                    title: "目前沒有高風險提醒",
-                    description: "庫存與寄店待兌換狀態目前安全。",
+                    title: co.riskEmptyTitle,
+                    description: co.riskEmptyDescription,
                 }}
             >
                 {data.riskReminders.length === 0 ? null : (
@@ -42,12 +48,12 @@ export default async function DashboardConsignmentsPage() {
 
             <div className="grid gap-4 xl:grid-cols-2">
                 <MerchantSectionCard
-                    title="熱門活動"
-                    description="按 entitlement/consignment 熱度與剩餘量排序。"
+                    title={co.hotTitle}
+                    description={co.hotDescription}
                     emptyState={{
                         icon: TrendingUp,
-                        title: "尚無活動資料",
-                        description: "建立活動後會顯示熱門活動統計。",
+                        title: co.hotEmptyTitle,
+                        description: co.hotEmptyDescription,
                     }}
                 >
                     {data.hotCampaigns.length === 0 ? null : (
@@ -66,12 +72,12 @@ export default async function DashboardConsignmentsPage() {
                 </MerchantSectionCard>
 
                 <MerchantSectionCard
-                    title="熱門寄店品類"
-                    description="追蹤常見寄店類型與客戶覆蓋。"
+                    title={co.popularTitle}
+                    description={co.popularDescription}
                     emptyState={{
                         icon: PackageCheck,
-                        title: "尚無寄店品類資料",
-                        description: "建立寄店後會累積品類趨勢。",
+                        title: co.popularEmptyTitle,
+                        description: co.popularEmptyDescription,
                     }}
                 >
                     {data.popularStoredItemTypes.length === 0 ? null : (
@@ -90,12 +96,12 @@ export default async function DashboardConsignmentsPage() {
             </div>
 
             <MerchantSectionCard
-                title="活動關閉狀態"
-                description="結束日期與 fully closed 分開：有待兌換量時維持 ended_pending_redemption。"
+                title={co.closureTitle}
+                description={co.closureDescription}
                 emptyState={{
                     icon: Timer,
-                    title: "尚無活動關閉資料",
-                    description: "活動建立後會顯示 lifecycle 狀態。",
+                    title: co.closureEmptyTitle,
+                    description: co.closureEmptyDescription,
                 }}
             >
                 {data.campaignClosures.length === 0 ? null : (
@@ -103,10 +109,10 @@ export default async function DashboardConsignmentsPage() {
                         <table className="min-w-full text-sm">
                             <thead>
                                 <tr className="text-left text-[rgb(var(--muted))]">
-                                    <th className="px-2 py-2">活動</th>
-                                    <th className="px-2 py-2">狀態</th>
-                                    <th className="px-2 py-2">Lifecycle</th>
-                                    <th className="px-2 py-2">剩餘量</th>
+                                    <th className="px-2 py-2">{co.colCampaign}</th>
+                                    <th className="px-2 py-2">{co.colStatus}</th>
+                                    <th className="px-2 py-2">{co.colLifecycle}</th>
+                                    <th className="px-2 py-2">{co.colRemaining}</th>
                                 </tr>
                             </thead>
                             <tbody>

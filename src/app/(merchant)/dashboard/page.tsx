@@ -22,6 +22,7 @@ import {
     updateUsedProductTypeSetting,
 } from "@/lib/services/used-product-type-settings.service";
 import type { ItemNamingToken } from "@/lib/types/catalog";
+import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
 
 type DashboardSearchParams = {
     tab?: string;
@@ -142,8 +143,8 @@ function parseSpecTemplateOptions(value: FormDataEntryValue | null): string[] {
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<DashboardSearchParams> }) {
     const c = await cookies();
-    const langCookie = c.get("lang")?.value;
-    const lang: "zh" | "en" = langCookie === "en" ? "en" : "zh";
+    const lang = getUiLanguage(c.get("lang")?.value);
+    const ui = getUiText(lang);
 
     const sp = await searchParams;
     const tab = toTab(sp.tab);
@@ -210,14 +211,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         ...bundle.stockLogs.map((log) => log.createdAt),
     ].reduce((max, value) => (value > max ? value : max), 0);
     const snapshotTs = Number.isFinite(parsedActionTs) && parsedActionTs > 0 ? parsedActionTs : derivedSnapshotTs;
-    const tabLabels: Record<ReturnType<typeof toTab>, { title: string; subtitle: string }> = {
-        dashboard: { title: "儀表板", subtitle: "營運概覽、關鍵指標與近期動態。" },
-        customers: { title: "客戶", subtitle: "固定結構的客戶名單與關聯資訊，不使用自由排序卡片。" },
-        cases: { title: "案件", subtitle: "案件查詢、過濾、排序與明細編輯。" },
-        activities: { title: "活動促銷", subtitle: "活動清單與編輯面板，維持營運型列表流程。" },
-        inventory: { title: "庫存管理", subtitle: "庫存摘要與操作列表，優先支援搜尋、過濾與異動紀錄。" },
-        marketing: { title: "商店營銷設定", subtitle: "品牌型號與營運資料設定。" },
-    };
+    const tabLabels = ui.dashboardWorkspaceTabs;
     const currentTabLabel = tabLabels[tab];
 
     async function updateUsedProductTypeSettingAction(formData: FormData): Promise<void> {

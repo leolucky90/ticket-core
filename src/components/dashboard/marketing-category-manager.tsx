@@ -2,11 +2,13 @@
 
 import { type FormEvent, useCallback, useMemo, useState } from "react";
 import { ChevronRight, Plus, Save, Search, Trash2 } from "lucide-react";
+import { useUiLanguage } from "@/components/layout/ui-language-provider";
 import { EmptyStateCard } from "@/components/merchant/shell";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { getUiText } from "@/lib/i18n/ui-text";
 import type { DimensionOption } from "@/lib/types/catalog";
 
 export type MarketingCategoryManagerProps = {
@@ -24,6 +26,8 @@ export function MarketingCategoryManager({
     deleteCategoryAction,
     onDeleteGuard,
 }: MarketingCategoryManagerProps) {
+    const lang = useUiLanguage();
+    const t = getUiText(lang).marketingCategory;
     const [searchDraft, setSearchDraft] = useState("");
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
@@ -115,19 +119,19 @@ export function MarketingCategoryManager({
 
             <div className="min-w-0 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
                 <div className="mb-2 text-xs font-medium text-[rgb(var(--muted))]">
-                    分類清單（{categories.length}）· 點主分類列可展開第二分類
+                    {t.listHeader.replace("{count}", String(categories.length))}
                 </div>
                 <div className="mb-2 flex flex-wrap gap-2">
                     <Input
                         value={searchDraft}
                         onChange={(e) => setSearchDraft(e.target.value)}
-                        placeholder="搜尋分類名稱或路徑"
+                        placeholder={t.searchPlaceholder}
                         className="min-w-0 flex-1"
                         list={datalistId}
                     />
                     <Button type="button" variant="ghost" className="shrink-0 px-3" onClick={() => setSearchTerm(searchDraft.trim())}>
                         <Search className="mr-1 h-4 w-4" aria-hidden="true" />
-                        搜尋
+                        {t.search}
                     </Button>
                 </div>
                 {searchTerm ? (
@@ -139,7 +143,7 @@ export function MarketingCategoryManager({
                             setSearchTerm("");
                         }}
                     >
-                        清除搜尋
+                        {t.clearSearch}
                     </button>
                 ) : null}
 
@@ -147,8 +151,8 @@ export function MarketingCategoryManager({
                     {visibleMains.length === 0 ? (
                         <EmptyStateCard
                             icon={Search}
-                            title="找不到符合條件的分類"
-                            description="可清除搜尋或建立新分類。"
+                            title={t.noResultsTitle}
+                            description={t.noResultsDescription}
                             className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))]"
                         />
                     ) : (
@@ -162,10 +166,10 @@ export function MarketingCategoryManager({
                                         <div className="flex min-w-0 items-stretch gap-0">
                                             <button
                                                 type="button"
-                                                title={open ? "收合子分類" : "展開子分類"}
+                                                title={open ? t.collapseSubcategories : t.expandSubcategories}
                                                 className="group relative flex w-9 shrink-0 items-center justify-center border-r border-[rgb(var(--border))] text-[rgb(var(--muted))] hover:bg-[rgb(var(--panel2))]"
                                                 aria-expanded={open}
-                                                aria-label={open ? "收合子分類" : "展開子分類"}
+                                                aria-label={open ? t.collapseSubcategories : t.expandSubcategories}
                                                 onClick={() =>
                                                     setExpandedMainIds((prev) => ({
                                                         ...prev,
@@ -178,7 +182,7 @@ export function MarketingCategoryManager({
                                                     aria-hidden="true"
                                                 />
                                                 <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                                                    {open ? "收合子分類" : "展開子分類"}
+                                                    {open ? t.collapseSubcategories : t.expandSubcategories}
                                                 </span>
                                             </button>
                                             <button
@@ -192,8 +196,8 @@ export function MarketingCategoryManager({
                                             >
                                                 <div className="truncate">{main.name}</div>
                                                 <div className="text-[11px] text-[rgb(var(--muted))]">
-                                                    主分類
-                                                    {subCount > 0 ? ` · ${subCount} 個第二分類` : ""}
+                                                    {t.mainCategoryLabel}
+                                                    {subCount > 0 ? t.secondaryCount.replace("{count}", String(subCount)) : ""}
                                                 </div>
                                             </button>
                                         </div>
@@ -212,8 +216,9 @@ export function MarketingCategoryManager({
                                                     >
                                                         <div className="truncate">{sub.name}</div>
                                                         <div className="break-words text-[11px] leading-snug text-[rgb(var(--muted))]">
-                                                            第二分類 · 上層：{main.name}
-                                                            {sub.fullPath && sub.fullPath !== sub.name ? ` · ${sub.fullPath}` : ""}
+                                                            {sub.fullPath && sub.fullPath !== sub.name
+                                                                ? t.secondaryPath.replace("{path}", sub.fullPath)
+                                                                : t.secondaryParent.replace("{name}", main.name)}
                                                         </div>
                                                     </button>
                                                 ))}
@@ -221,7 +226,7 @@ export function MarketingCategoryManager({
                                         ) : null}
                                         {open && subCount === 0 ? (
                                             <div className="border-t border-[rgb(var(--border))] px-3 py-2 text-xs text-[rgb(var(--muted))]">
-                                                尚未建立第二分類；選取此主分類後，可在右側於其下新增。
+                                                {t.emptySecondaryHint}
                                             </div>
                                         ) : null}
                                     </div>
@@ -234,13 +239,11 @@ export function MarketingCategoryManager({
 
             <div className="grid min-w-0 gap-4 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3 sm:p-4">
                 <div>
-                    <div className="text-sm font-semibold text-[rgb(var(--text))]">新增分類</div>
-                    <p className="mt-1 text-xs text-[rgb(var(--muted))]">
-                        「上層主分類」留空表示建立主分類；選擇某主分類表示在其下新增第二分類。點左側列可快速帶入上層。
-                    </p>
+                    <div className="text-sm font-semibold text-[rgb(var(--text))]">{t.createTitle}</div>
+                    <p className="mt-1 text-xs text-[rgb(var(--muted))]">{t.createHint}</p>
                     <form action={createCategoryAction} className="mt-3 grid gap-3">
                         <input type="hidden" name="tab" value="marketing" />
-                        <FormField label="上層主分類（可選）" htmlFor="marketing-cat-create-parent">
+                        <FormField label={t.parentField} htmlFor="marketing-cat-create-parent">
                             <Select
                                 id="marketing-cat-create-parent"
                                 name="parentCategoryId"
@@ -248,20 +251,20 @@ export function MarketingCategoryManager({
                                 onChange={(e) => setCreateParentId(e.currentTarget.value)}
                                 className="h-10 w-full"
                             >
-                                <option value="">建立為主分類（最上層）</option>
+                                <option value="">{t.parentRoot}</option>
                                 {mainCategories.map((c) => (
                                     <option key={`create-under-${c.id}`} value={c.id}>
-                                        在「{c.name}」底下新增第二分類
+                                        {t.parentUnder.replace("{name}", c.name)}
                                     </option>
                                 ))}
                             </Select>
                         </FormField>
-                        <FormField label="新分類名稱" htmlFor="marketing-cat-create-name" required>
+                        <FormField label={t.newNameField} htmlFor="marketing-cat-create-name" required>
                             <Input
                                 id="marketing-cat-create-name"
                                 name="categoryName"
                                 list={datalistId}
-                                placeholder="例如：手機零件、LCD 螢幕"
+                                placeholder={t.newNamePlaceholder}
                                 required
                                 className="h-10 w-full"
                             />
@@ -269,28 +272,36 @@ export function MarketingCategoryManager({
                         <div className="flex justify-end">
                             <Button type="submit" variant="solid" className="gap-2">
                                 <Plus className="h-4 w-4" aria-hidden="true" />
-                                新增分類
+                                {t.createSubmit}
                             </Button>
                         </div>
                     </form>
                 </div>
 
                 <div className="border-t border-[rgb(var(--border))] pt-4">
-                    <div className="text-sm font-semibold text-[rgb(var(--text))]">選取項目的內容</div>
+                    <div className="text-sm font-semibold text-[rgb(var(--text))]">{t.selectedTitle}</div>
                     {!selectedCategory ? (
-                        <p className="mt-2 text-sm text-[rgb(var(--muted))]">請從左側點選一筆主分類或第二分類，以檢視路徑並進行更新或刪除。</p>
+                        <p className="mt-2 text-sm text-[rgb(var(--muted))]">{t.selectPrompt}</p>
                     ) : (
                         <div className="mt-3 grid gap-3">
                             <div className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-3 py-2 text-sm">
-                                <div className="text-xs text-[rgb(var(--muted))]">目前選取</div>
+                                <div className="text-xs text-[rgb(var(--muted))]">{t.currentBadge}</div>
                                 <div className="font-medium text-[rgb(var(--text))]">{selectedCategory.name}</div>
                                 <div className="mt-1 text-xs text-[rgb(var(--muted))]">
-                                    {(selectedCategory.categoryLevel ?? 1) === 1 ? "主分類" : "第二分類"}
+                                    {(selectedCategory.categoryLevel ?? 1) === 1 ? t.kindPrimary : t.kindSecondary}
                                     {selectedCategory.fullPath && selectedCategory.fullPath !== selectedCategory.name ? (
-                                        <> · 路徑：{selectedCategory.fullPath}</>
+                                        <>
+                                            {t.pathLabel}
+                                            {selectedCategory.fullPath}
+                                        </>
                                     ) : null}
-                                    {(selectedCategory.categoryLevel ?? 1) === 2 && selectedCategory.parentCategoryName ? (
-                                        <> · 上層主分類：{selectedCategory.parentCategoryName}</>
+                                    {(selectedCategory.categoryLevel ?? 1) === 2 &&
+                                    selectedCategory.parentCategoryName &&
+                                    !(selectedCategory.fullPath && selectedCategory.fullPath !== selectedCategory.name) ? (
+                                        <>
+                                            {t.parentPrimaryLabel}
+                                            {selectedCategory.parentCategoryName}
+                                        </>
                                     ) : null}
                                 </div>
                             </div>
@@ -298,7 +309,7 @@ export function MarketingCategoryManager({
                             <form key={selectedCategory.id} id={updateFormId} action={updateCategoryAction} className="grid gap-3">
                                 <input type="hidden" name="tab" value="marketing" />
                                 <input type="hidden" name="categoryId" value={selectedCategory.id} />
-                                <FormField label="分類名稱" htmlFor="marketing-cat-update-name" required>
+                                <FormField label={t.nameField} htmlFor="marketing-cat-update-name" required>
                                     <Input
                                         id="marketing-cat-update-name"
                                         name="categoryName"
@@ -307,14 +318,14 @@ export function MarketingCategoryManager({
                                         className="h-10 w-full"
                                     />
                                 </FormField>
-                                <FormField label="上層主分類（可調整）" htmlFor="marketing-cat-update-parent">
+                                <FormField label={t.parentAdjustField} htmlFor="marketing-cat-update-parent">
                                     <Select
                                         id="marketing-cat-update-parent"
                                         name="parentCategoryId"
                                         defaultValue={selectedCategory.parentCategoryId ?? ""}
                                         className="h-10 w-full"
                                     >
-                                        <option value="">作為主分類（最上層）</option>
+                                        <option value="">{t.parentAsPrimary}</option>
                                         {mainCategories
                                             .filter((c) => c.id !== selectedCategory.id)
                                             .map((c) => (
@@ -327,17 +338,21 @@ export function MarketingCategoryManager({
                                 <div className="flex flex-wrap justify-end gap-2">
                                     <Button form={updateFormId} type="submit" variant="solid" className="gap-2">
                                         <Save className="h-4 w-4" aria-hidden="true" />
-                                        儲存變更
+                                        {t.saveChanges}
                                     </Button>
                                 </div>
                             </form>
 
-                            <form action={deleteCategoryAction} onSubmit={onDeleteGuard} data-delete-target={`分類 ${selectedCategory.name}`}>
+                            <form
+                                action={deleteCategoryAction}
+                                onSubmit={onDeleteGuard}
+                                data-delete-target={t.deleteTarget.replace("{name}", selectedCategory.name)}
+                            >
                                 <input type="hidden" name="tab" value="marketing" />
                                 <input type="hidden" name="categoryId" value={selectedCategory.id} />
                                 <Button type="submit" variant="ghost" className="gap-2 border border-[rgb(var(--border))]">
                                     <Trash2 className="h-4 w-4" aria-hidden="true" />
-                                    移除此分類
+                                    {t.removeCategory}
                                 </Button>
                             </form>
                         </div>

@@ -8,133 +8,20 @@ import { formatIsoForDisplay } from "@/lib/format/datetime-display";
 import type { DimensionPickerBundle } from "@/lib/types/catalog";
 import type { PurchaseOrderDraft } from "@/lib/types/purchase-order";
 import { createManualPurchaseOrderDraftAction } from "@/app/(merchant)/dashboard/purchase-orders/actions";
+import type { UiLanguage } from "@/lib/i18n/ui-text";
+import { getUiText } from "@/lib/i18n/ui-text";
 
 type PurchaseOrdersWorkspaceProps = {
     drafts: PurchaseOrderDraft[];
-    lang: "zh" | "en";
+    lang: UiLanguage;
     flash?: string;
     reviewDraft?: PurchaseOrderDraft | null;
     dimensionBundle: DimensionPickerBundle;
 };
 
-const copy = {
-    zh: {
-        listTitle: "訂購單草稿",
-        listDesc: "人工建立與 AI 上傳佇列；確認後後續將串接入庫與物流追蹤。",
-        emptyTitle: "尚無訂購單草稿",
-        emptyDesc: "使用右側「人工建立」或「上傳檔案給 AI」新增一筆。",
-        colId: "編號",
-        colSource: "來源",
-        colSupplier: "供應商／摘要",
-        colStatus: "狀態",
-        colExpected: "預計到貨",
-        colTracking: "追蹤／備註",
-        colActions: "操作",
-        sourceManual: "人工",
-        sourceAi: "AI 上傳",
-        statusDraft: "草稿",
-        statusPendingAi: "待 AI 解析",
-        statusReady: "待審核",
-        statusConfirmed: "已確認",
-        statusReceiving: "收貨中",
-        statusClosed: "結案",
-        overdue: "已逾預計到貨日",
-        btnConfirmInbound: "確認收貨入庫",
-        btnConfirmInboundHint: "預留：待收貨比對與庫存寫入接通",
-        reviewSectionTitle: "審核草稿（人工確認）",
-        reviewSectionDesc: "儲存變更後再確認建立正式採購單；未確認前不會寫入採購單主檔。",
-        createTitle: "建立訂購單",
-        createDesc: "可從檔案交給 AI 解析（預留），或直接人工填寫。",
-        aiCardTitle: "上傳檔案（OCR + AI 草稿）",
-        aiCardDesc: "收據影像（JPEG／PNG／WebP／GIF）。會先 OCR，再結構化為草稿；請於下方確認後才建立正式採購單。",
-        aiSubmit: "送出 AI 解析（預留）",
-        aiFiles: "選擇檔案",
-        manualCardTitle: "人工建立訂購單",
-        manualCardDesc: "不依賴 AI，直接建立草稿供後續確認。",
-        supplier: "供應商／抬頭",
-        note: "備註",
-        expected: "預計到貨日",
-        tracking: "追蹤碼（可填多個，空白或逗號分隔）",
-        lineProduct: "品項說明",
-        lineQty: "數量",
-        addLine: "至少一列品項與數量",
-        manualSubmit: "建立草稿",
-        logisticsTitle: "物流追蹤（預留）",
-        logisticsDesc: "未來將由追蹤碼自動查狀態；逾期將於此列表提醒。",
-        colLogisticsTracking: "追蹤碼",
-        colLogisticsStatus: "狀態",
-        colLogisticsEta: "預計／更新",
-        logisticsEmpty: "尚無追蹤資料（待承運 API 與 AI 抽碼接通）",
-        logisticsPlaceholder: "—",
-        flashCreated: "已建立人工草稿。",
-        flashAiQueued: "已加入 AI 上傳佇列（解析尚未接通）。",
-        flashPoConfirmed: "已確認採購單（Firestore）。",
-        flashMissingSupplier: "請填寫供應商／抬頭。",
-        flashMissingLines: "請至少填寫一列有效品項與數量。",
-        flashMissingFiles: "請選擇至少一個檔案。",
-        flashError: "操作失敗，請稍後再試。",
-    },
-    en: {
-        listTitle: "Purchase order drafts",
-        listDesc: "Manual drafts and AI upload queue; confirmation will later tie to inbound and tracking.",
-        emptyTitle: "No drafts yet",
-        emptyDesc: "Use “Manual create” or “Upload for AI” on the right.",
-        colId: "ID",
-        colSource: "Source",
-        colSupplier: "Supplier",
-        colStatus: "Status",
-        colExpected: "ETA",
-        colTracking: "Tracking / notes",
-        colActions: "Actions",
-        sourceManual: "Manual",
-        sourceAi: "AI upload",
-        statusDraft: "Draft",
-        statusPendingAi: "Pending AI",
-        statusReady: "Review",
-        statusConfirmed: "Confirmed",
-        statusReceiving: "Receiving",
-        statusClosed: "Closed",
-        overdue: "Past ETA",
-        btnConfirmInbound: "Confirm receipt",
-        btnConfirmInboundHint: "Reserved: inbound reconciliation not wired yet",
-        reviewSectionTitle: "Review draft (human confirm)",
-        reviewSectionDesc: "Save edits or confirm to create a purchase order; nothing is finalized until you confirm.",
-        createTitle: "Create purchase order",
-        createDesc: "Upload for AI (placeholder) or fill the manual form.",
-        aiCardTitle: "Upload (OCR + AI draft)",
-        aiCardDesc: "Receipt images (JPEG/PNG/WebP/GIF). We OCR then structure a draft; confirm to create a PO.",
-        aiSubmit: "Send to AI (reserved)",
-        aiFiles: "Choose files",
-        manualCardTitle: "Manual purchase order",
-        manualCardDesc: "Create a draft without AI.",
-        supplier: "Supplier / title",
-        note: "Notes",
-        expected: "Expected arrival date",
-        tracking: "Tracking numbers (space or comma separated)",
-        lineProduct: "Line description",
-        lineQty: "Qty",
-        addLine: "At least one line with qty",
-        manualSubmit: "Create draft",
-        logisticsTitle: "Shipment tracking (reserved)",
-        logisticsDesc: "Future: carrier lookup by tracking code; overdue alerts here.",
-        colLogisticsTracking: "Tracking",
-        colLogisticsStatus: "Status",
-        colLogisticsEta: "ETA / updated",
-        logisticsEmpty: "No tracking rows yet (carrier API + AI extraction pending)",
-        logisticsPlaceholder: "—",
-        flashCreated: "Manual draft created.",
-        flashAiQueued: "Queued for AI upload (parser not connected yet).",
-        flashPoConfirmed: "Purchase order confirmed (Firestore).",
-        flashMissingSupplier: "Supplier / title is required.",
-        flashMissingLines: "Add at least one valid line with quantity.",
-        flashMissingFiles: "Select at least one file.",
-        flashError: "Something went wrong. Try again.",
-    },
-} as const;
+type PoWorkspaceCopy = ReturnType<typeof getUiText>["purchaseOrdersWorkspace"];
 
-type CopyUi = (typeof copy)[keyof typeof copy];
-
-function statusLabel(draft: PurchaseOrderDraft, ui: CopyUi): string {
+function statusLabel(draft: PurchaseOrderDraft, ui: PoWorkspaceCopy): string {
     switch (draft.status) {
         case "draft":
             return ui.statusDraft;
@@ -153,7 +40,7 @@ function statusLabel(draft: PurchaseOrderDraft, ui: CopyUi): string {
     }
 }
 
-function sourceLabel(draft: PurchaseOrderDraft, ui: CopyUi): string {
+function sourceLabel(draft: PurchaseOrderDraft, ui: PoWorkspaceCopy): string {
     return draft.source === "ai_upload" ? ui.sourceAi : ui.sourceManual;
 }
 
@@ -169,7 +56,7 @@ function isOverdueEta(draft: PurchaseOrderDraft): boolean {
 }
 
 export function PurchaseOrdersWorkspace({ drafts, lang, flash, reviewDraft, dimensionBundle }: PurchaseOrdersWorkspaceProps) {
-    const ui = copy[lang];
+    const ui = getUiText(lang).purchaseOrdersWorkspace;
 
     const flashText = useMemo(() => {
         if (!flash) return null;
@@ -405,7 +292,7 @@ export function PurchaseOrdersWorkspace({ drafts, lang, flash, reviewDraft, dime
                 )}
                 <div className="mt-4 flex items-center gap-2 text-xs text-[rgb(var(--muted))]">
                     <Truck className="h-4 w-4 shrink-0" aria-hidden />
-                    <span>{lang === "zh" ? "承運商查詢與郵件抽追蹤碼尚未接通。" : "Carrier lookup and email parsing not connected yet."}</span>
+                    <span>{ui.carrierNotConnected}</span>
                 </div>
             </MerchantSectionCard>
         </div>

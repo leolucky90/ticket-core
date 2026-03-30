@@ -39,6 +39,9 @@ import type { ShowThemeColorRole, ShowThemeColors, StorefrontSettings } from "@/
 
 type ShowcaseBuilderLabels = {
     title: string;
+    introBadge: string;
+    introTitle: string;
+    introBody: string;
     hint: string;
     save: string;
     saving: string;
@@ -877,12 +880,10 @@ export function ShowcaseBuilder({
                     <div className="grid gap-3">
                         <div className="inline-flex w-fit items-center gap-2 rounded-full border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-3 py-1 text-[11px] font-semibold tracking-[0.12em] text-[rgb(var(--muted))] uppercase">
                             <span className="biz-pulse h-2 w-2 rounded-full bg-[rgb(var(--accent))]" />
-                            Showcase Studio
+                            {labels.introBadge}
                         </div>
-                        <div className="text-2xl font-semibold text-[rgb(var(--text))]">把前台展示頁的品牌感、區塊順序與內容編輯整合進同一個後台工作台</div>
-                        <div className="max-w-3xl text-sm leading-relaxed text-[rgb(var(--muted))]">
-                            這裡沿用和首頁相同的版面邏輯：左側是 block list，中間是 live canvas，右側是 inspector。這樣前台看到的視覺節奏與後台編輯體驗會更像同一套產品，而不是兩個分離系統。
-                        </div>
+                        <div className="text-2xl font-semibold text-[rgb(var(--text))]">{labels.introTitle}</div>
+                        <div className="max-w-3xl text-sm leading-relaxed text-[rgb(var(--muted))]">{labels.introBody}</div>
                     </div>
 
                     <div className="grid gap-3 sm:grid-cols-3">

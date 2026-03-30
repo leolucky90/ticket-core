@@ -3,12 +3,15 @@ import { MerchantPageShell } from "@/components/merchant/shell";
 import { ShowcaseBuilder } from "@/features/showcase/components/ShowcaseBuilder";
 import { getShowcasePreferences } from "@/features/showcase/services/showcasePreferences.server";
 import { getLocaleFromHeader } from "@/lib/i18n/authIndex";
+import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
 import { getCurrentSessionAccountContext } from "@/lib/services/staff.service";
 
 export default async function ShowcaseBuilderPage() {
     const h = await headers();
     const c = await cookies();
     const langCookie = c.get("lang")?.value;
+    const uiLang = getUiLanguage(langCookie);
+    const shellSubtitle = getUiText(uiLang).merchantStandalonePages.showcaseBuilderShellSubtitle;
     const locale = langCookie === "en" ? "en" : getLocaleFromHeader(h.get("accept-language"));
     const accountContext = await getCurrentSessionAccountContext();
     const tenantId = accountContext?.tenantId ?? null;
@@ -345,14 +348,22 @@ export default async function ShowcaseBuilderPage() {
                   variantAdCardRail: "卡片橫列",
               };
 
+    const intro = getUiText(uiLang).showcaseBuilderIntro;
+    const showcaseLabels = {
+        ...labels,
+        introBadge: intro.badge,
+        introTitle: intro.title,
+        introBody: intro.body,
+    };
+
     return (
         <MerchantPageShell
             title={labels.title}
-            subtitle="以同一套作品頁 / 品牌頁設計語言編輯內容、樣式、storefront 與 schema。"
+            subtitle={shellSubtitle}
             width="builder"
         >
             <ShowcaseBuilder
-                labels={labels}
+                labels={showcaseLabels}
                 initialContent={preferences.content}
                 initialThemeColors={preferences.themeColors}
                 initialStorefront={preferences.storefront}

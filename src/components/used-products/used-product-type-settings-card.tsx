@@ -13,6 +13,7 @@ import type {
     UsedProductTypeSpecificationTemplate,
 } from "@/lib/schema";
 import { LIST_DISPLAY_OPTIONS } from "@/lib/ui/list-display";
+import { getUiText } from "@/lib/i18n/ui-text";
 
 type UsedProductTypeSettingsCardProps = {
     lang: "zh" | "en";
@@ -239,6 +240,7 @@ function TypeSpecificationEditorPanel({
     setting: UsedProductTypeSetting;
     updateTypeAction: (formData: FormData) => Promise<void>;
 }) {
+    const usageHint = getUiText(lang).usedProductTypeSettings.templatesUsageHint;
     return (
         <div className="grid min-h-0 min-w-0 gap-4">
             <div className="text-sm font-semibold text-[rgb(var(--text))]">{setting.name}</div>
@@ -247,11 +249,7 @@ function TypeSpecificationEditorPanel({
                 <div className="text-xs text-[rgb(var(--muted))]">
                     {text.templates}（{setting.specificationTemplates.length}）
                 </div>
-                <div className="text-xs text-[rgb(var(--muted))]">
-                    {lang === "en"
-                        ? "Product create/edit pages will only fill these template values."
-                        : "商品新增 / 編輯頁只會填寫這些模板值，不會再自由新增規格欄位。"}
-                </div>
+                <div className="text-xs text-[rgb(var(--muted))]">{usageHint}</div>
 
                 {setting.specificationTemplates.length === 0 ? (
                     <div className="text-xs text-[rgb(var(--muted))]">{text.noTemplates}</div>
