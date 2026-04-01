@@ -45,6 +45,7 @@
 - merchant / platform read-side import path 已開始從大型聚合 service 抽離
 - Firebase reset / seed baseline 已補齊到 `scripts/reset-firebase-data.mjs`
 - demo account / tenant baseline 已整合到 `docs/multi-tenant-data-flow.md`
+- official homepage demo/test account section 已補上 A / B 公司首頁 public route 直達連結，且官方首頁入口會依目前 request host 顯示，不再寫死 `localhost`
 - `BossAdmin` reset 邊界已明確維持在 hidden cookie login，不進 `users/{uid}`
 - shared shell / layout baseline 已集中到 `src/components/merchant/shell`
 - official / merchant / customer backend 已開始共用同一套 topbar / sidebar / account area 結構
@@ -62,6 +63,7 @@
 - Phase 6 loading / processing UX baseline 已開始收斂到 shared processing indicator / state / overlay 與 route progress bar
 - merchant route change / page transition / server action submit 已對齊 shared overlay + loading baseline
 - auth login / reset / forgot password / Google link flows 已補齊一致 spinner 與 processing feedback
+- 官方 `/register/company` 已固定為用戶（merchant/company admin）註冊入口；`/register/customer` 只保留 tenant-scoped 商家客戶註冊，平台 `/login` 不再提供一般客戶公開註冊 CTA
 - builder save / image upload / theme sync 已補齊 visible processing state，避免 silent async actions
 - Phase 7 i18n consistency baseline 已開始收斂到 shared UI vocabulary 與 UI language provider
 - shared shell / processing / settings / delete logs / boss admin builder 已開始共用同一套 bilingual UI keys，減少 page-local hard-coded framework text

@@ -26,8 +26,13 @@ export default async function CustomerRegisterPage({ searchParams }: { searchPar
     const sp = await searchParams;
     const tenantId = normalizeTenantId(sp?.tenant);
     const authTenantId = normalizeAuthTenantId(sp?.authTenant);
+    const scopedTenantId = tenantId ?? authTenantId;
     const lang = getUiLanguage((await cookies()).get("lang")?.value);
     const ui = getUiText(lang).authPages;
+
+    if (!scopedTenantId) {
+        redirect("/register/company");
+    }
 
     const session = await getSessionUser();
     if (session) {
@@ -35,7 +40,7 @@ export default async function CustomerRegisterPage({ searchParams }: { searchPar
         if (accountContext?.accountType === "company") {
             redirect("/dashboard");
         }
-        const targetTenantId = authTenantId ?? tenantId ?? accountContext?.tenantId ?? null;
+        const targetTenantId = scopedTenantId ?? accountContext?.tenantId ?? null;
         if (targetTenantId) {
             redirect(`/${encodeURIComponent(targetTenantId)}/dashboard`);
         }
@@ -59,7 +64,7 @@ export default async function CustomerRegisterPage({ searchParams }: { searchPar
                         googleLabel={ui.googleSignIn}
                         modeOverride="signUp"
                         signUpAccountType="customer"
-                        tenantContextId={tenantId}
+                        tenantContextId={scopedTenantId}
                         firebaseAuthTenantId={authTenantId}
                     />
                     <div className="pt-2 text-center text-xs text-[rgb(var(--muted))]">

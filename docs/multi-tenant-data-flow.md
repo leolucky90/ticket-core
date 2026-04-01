@@ -47,9 +47,11 @@ For canonical naming, role-boundary, architecture, and refactor glossary, see:
 ## Registration binding
 
 - Company sign-up:
+  - Public / official registration entry is `/register/company`.
   - Creates/updates `users/{uid}` with role `company_admin`, `companyId`.
   - Ensures `companies/{companyId}` exists.
 - Customer sign-up:
+  - Only available from a tenant/company-scoped merchant entry point (`/register/customer?tenant={companyId}` or equivalent storefront flow).
   - Requires tenant/company context.
   - Creates/updates `users/{uid}` with role `customer`, `companyId`, `customerId`.
   - Creates/updates `companies/{companyId}/customers/{customerId}`.

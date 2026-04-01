@@ -33,7 +33,7 @@
 | --- | --- |
 | `(platform)/page.tsx` | 入口首頁（portfolio／敘事） |
 | `(platform)/login`、`forgot-password`、`reset-password` | 認證流程頁 |
-| `(platform)/register/company`、`register/customer` | 註冊 |
+| `(platform)/register/company`、`register/customer` | 註冊；前者為官方用戶／商家註冊，後者僅限 tenant-scoped 商家客戶註冊 |
 | `(platform)/business` | 商業／提案相關落地 |
 | `(platform)/bossadmin` | **BossAdmin** 官方後台（hidden cookie login） |
 | `(platform)/bosadmin` | 拼字相容路由，導向 bossadmin |

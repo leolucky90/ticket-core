@@ -68,16 +68,13 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <div className="pt-1 text-center">
             <Link
               className="inline-flex rounded-full border border-[rgb(var(--accent))] px-4 py-1.5 text-xs font-semibold text-[rgb(var(--accent))] hover:bg-[rgb(var(--accent))] hover:text-[#191815]"
-              href={withAuthContext("/register/customer", tenantId, authTenantId)}
+              href="/register/company"
             >
-              {ui.registerCustomerAccount}
+              {ui.goCompanyRegister}
             </Link>
           </div>
           <div className="pt-1 text-center text-xs text-[rgb(var(--muted))]">
-            {ui.needCompanyAccount}
-            <Link className="ml-1 text-[rgb(var(--accent))] hover:underline" href="/register/company">
-              {ui.goCompanyRegister}
-            </Link>
+            {ui.customerRegisterTenantHint}
           </div>
         </AuthShell>
       </AuthPageShell>

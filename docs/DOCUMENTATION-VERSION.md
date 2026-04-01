@@ -15,8 +15,8 @@
 
 | 項目 | 值 |
 | --- | --- |
-| **版本** | **V1.15** |
-| **最後更正** | **2026-03-31** |
+| **版本** | **V1.18** |
+| **最後更正** | **2026-04-01** |
 
 ---
 
@@ -34,6 +34,9 @@
 
 | 版本 | 日期 | 摘要 |
 | --- | --- | --- |
+| V1.18 | 2026-04-01 | official homepage demo/test account section 的官方入口 URL 改為依目前 request host 動態顯示，不再寫死 `localhost`；同步更新 `project-summary` |
+| V1.17 | 2026-04-01 | official homepage demo/test account section 補上 Company A / B public route 直達連結，方便外部測試租戶首頁；同步更新 `project-summary` |
+| V1.16 | 2026-04-01 | auth 註冊邊界收斂：官方 `/register/company` 固定為用戶註冊，`/register/customer` 僅保留 tenant-scoped 商家客戶註冊；同步更新 `project-summary`／`codebase-map`／`multi-tenant-data-flow` |
 | V1.15 | 2026-03-31 | `project-rules` / `project-summary` 補充 i18n guardrail：之後任何 visible UI 編輯都必須同輪完成 i18n，且要連 shared child components / dropdown / empty state / prompt 一併檢查 |
 | V1.14 | 2026-03-31 | 補完 merchant dashboard / customers / cases / campaigns / items i18n 收斂；`DimensionPicker`、predictive search dropdown/error、`CustomerDashboardPanel` 也改走 shared `ui-text.ts`，修正 `ReceiptWorkspace` server/client 邊界後續補漏 |
 | V1.13 | 2026-03-31 | page-level i18n 收斂：auth、二手商品、customer detail、receipts、relationships、error pages、`settings/showcase` 與 staff/dashboard flash 改走 `ui-text.ts`；customer linkage 移除 plain-name fallback；activity purchase / checkout search 改為 id-first linkage；`project-summary`／`codebase-map` 同步更新 |

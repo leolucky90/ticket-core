@@ -37,6 +37,7 @@ type BusinessLandingPageProps = {
     isAuthenticated?: boolean;
     dashboardHref?: string;
     homepageContent?: BusinessHomepageContentState;
+    demoEntryValue?: string;
 };
 
 type LandingCopy = {
@@ -106,7 +107,8 @@ type LandingCopy = {
     demoEntryValue: string;
     demoPasswordLabel: string;
     demoPasswordValue: string;
-    demoGroups: Array<{ title: string; accounts: Array<{ label: string; email: string }> }>;
+    demoHomepageLabel: string;
+    demoGroups: Array<{ title: string; homepagePath: string; accounts: Array<{ label: string; email: string }> }>;
     aboutEyebrow: string;
     aboutTitle: string;
     aboutDesc: string;
@@ -376,14 +378,16 @@ const copyByLang: Record<"zh" | "en", LandingCopy> = {
         ],
         demoEyebrow: "Demo / Test Access",
         demoTitle: "首頁直接提供測試帳號，方便觀察者快速體驗 A / B 端與客戶端情境",
-        demoDesc: "這個作品頁也同時作為 demo 入口。若要直接測試，請從首頁登入入口進入，以下帳號目前密碼皆為同一組。",
-        demoEntryLabel: "用戶登入入口",
+        demoDesc: "這個作品頁也同時作為 demo 入口。若要直接測試，請先從下方官方首頁入口進入，以下帳號目前密碼皆為同一組。",
+        demoEntryLabel: "官方首頁入口",
         demoEntryValue: "http://localhost:3000",
         demoPasswordLabel: "測試密碼",
         demoPasswordValue: DEMO_ACCOUNT_PASSWORD,
+        demoHomepageLabel: "公司首頁路徑",
         demoGroups: [
             {
                 title: "A 組租戶",
+                homepagePath: "/company_a",
                 accounts: [
                     { label: "用戶 A 端", email: "admina@gmail.com" },
                     { label: "A 用戶客戶端", email: "cxa@gmail.com" },
@@ -391,6 +395,7 @@ const copyByLang: Record<"zh" | "en", LandingCopy> = {
             },
             {
                 title: "B 組租戶",
+                homepagePath: "/company_b",
                 accounts: [
                     { label: "用戶 B 端", email: "adminb@gmail.com" },
                     { label: "B 用戶客戶端", email: "cxb@gmail.com" },
@@ -694,14 +699,16 @@ const copyByLang: Record<"zh" | "en", LandingCopy> = {
         ],
         demoEyebrow: "Demo / Test Access",
         demoTitle: "Test accounts are available on the homepage so reviewers can try both tenant-side and customer-side flows quickly",
-        demoDesc: "This page also acts as a demo entry. To test the system, start from the main login entry below. All demo accounts currently use the same password.",
-        demoEntryLabel: "Login entry",
+        demoDesc: "This page also acts as a demo entry. To test the system, start from the official homepage entry below. All demo accounts currently use the same password.",
+        demoEntryLabel: "Official homepage",
         demoEntryValue: "http://localhost:3000",
         demoPasswordLabel: "Test password",
         demoPasswordValue: DEMO_ACCOUNT_PASSWORD,
+        demoHomepageLabel: "Tenant homepage path",
         demoGroups: [
             {
                 title: "Tenant Group A",
+                homepagePath: "/company_a",
                 accounts: [
                     { label: "Tenant A admin", email: "admina@gmail.com" },
                     { label: "Tenant A customer", email: "cxa@gmail.com" },
@@ -709,6 +716,7 @@ const copyByLang: Record<"zh" | "en", LandingCopy> = {
             },
             {
                 title: "Tenant Group B",
+                homepagePath: "/company_b",
                 accounts: [
                     { label: "Tenant B admin", email: "adminb@gmail.com" },
                     { label: "Tenant B customer", email: "cxb@gmail.com" },
@@ -956,6 +964,7 @@ export function BusinessLandingPage({
     isAuthenticated = false,
     dashboardHref = "/dashboard",
     homepageContent,
+    demoEntryValue,
 }: BusinessLandingPageProps) {
     const ui = copyByLang[lang];
     const editable = resolveEditableCopy(lang, ui, homepageContent);
@@ -965,6 +974,7 @@ export function BusinessLandingPage({
     const entryLabel = isAuthenticated ? ui.navDashboard : ui.navLogin;
     const heroEntryLabel = isAuthenticated ? ui.navDashboard : ui.navLogin;
     const heroModules = [...ui.heroFlowModules, ...ui.heroFlowModules];
+    const resolvedDemoEntryValue = demoEntryValue ?? ui.demoEntryValue;
 
     return (
         <div style={pageStyle} className="relative min-h-dvh overflow-x-hidden bg-[var(--biz-page-bg)] text-[var(--biz-text)]">
@@ -1437,7 +1447,7 @@ export function BusinessLandingPage({
                             <div className="grid gap-4">
                                 <div className="rounded-[1.4rem] border border-[var(--biz-border)] bg-[var(--biz-surface)] p-4">
                                     <p className="text-xs font-semibold tracking-[0.12em] text-[var(--biz-muted)] uppercase">{ui.demoEntryLabel}</p>
-                                    <p className="mt-2 break-all text-base font-semibold text-[var(--biz-heading)]">{ui.demoEntryValue}</p>
+                                    <p className="mt-2 break-all text-base font-semibold text-[var(--biz-heading)]">{resolvedDemoEntryValue}</p>
                                 </div>
                                 <div className="rounded-[1.4rem] border border-[var(--biz-border)] bg-[var(--biz-surface)] p-4">
                                     <p className="text-xs font-semibold tracking-[0.12em] text-[var(--biz-muted)] uppercase">{ui.demoPasswordLabel}</p>
@@ -1473,6 +1483,15 @@ export function BusinessLandingPage({
                                                 <p className="mt-2 break-all text-base font-semibold text-[var(--biz-heading)]">{account.email}</p>
                                             </div>
                                         ))}
+                                        <div className="rounded-[1.25rem] border border-[var(--biz-border)] bg-[var(--biz-surface)] p-4">
+                                            <p className="text-xs font-semibold tracking-[0.12em] text-[var(--biz-muted)] uppercase">{ui.demoHomepageLabel}</p>
+                                            <Link
+                                                href={group.homepagePath}
+                                                className="mt-2 inline-flex break-all text-base font-semibold text-[var(--biz-heading)] underline decoration-[var(--biz-accent)] underline-offset-4 transition hover:text-[var(--biz-accent)]"
+                                            >
+                                                {group.homepagePath}
+                                            </Link>
+                                        </div>
                                     </div>
                                 </article>
                             ))}
