@@ -50,6 +50,9 @@ Platform（營運方／BossAdmin 視角）
 
 ```text
 Company（companies/{companyId}）
+ ├─ settings/businessProfile
+ ├─ settings/regionalReceiptSettings
+ ├─ settings/invoiceSettings
  ├─ stores/{storeId}                    — 分店
  │   └─ （倉庫見下，與 store 以 storeId 關聯）
  ├─ warehouses/{warehouseId}          — 倉庫（含 storeId）
@@ -59,6 +62,12 @@ Company（companies/{companyId}）
  ├─ transfers/{id}                      — 跨倉調貨單（選用）
  ├─ products/{productId}              — 品項（canonical：Product）
  ├─ sales/{saleId}                      — 銷售／POS 結帳紀錄
+ ├─ invoiceTrackSettings/{trackId}      — 字軌 / 文件號碼策略
+ ├─ invoiceDrafts/{draftId}             — 草稿
+ ├─ receiptDocuments/{documentId}       — canonical 單據主資料（TW 電子發票 / AU Receipt / Invoice / Tax Invoice）
+ ├─ invoiceVoids/{voidId}               — 作廢 request / response
+ ├─ invoiceCarriers/{carrierId}         — 載具
+ ├─ invoiceLogs/{logId}                 — 單據流程 log
  ├─ inventory/{productId}               — 公司層庫存彙總（既有主線）
  ├─ inventoryMovements/{id}             — 公司層異動紀錄（既有）
  ├─ cases/{caseId}                      — 案件（UI：Ticket；legacy collection 名 cases）
@@ -279,7 +288,7 @@ if (event.type === "checkout.session.completed") {
 
 產品化 onboarding 可延伸為：
 
-1. 註冊後引導填寫 **公司名稱／聯絡方式**（`settings/companyProfile` 等既有路徑）。
+1. 註冊後引導填寫 **公司名稱／聯絡方式**（`settings/businessProfile`，必要時再帶 `settings/regionalReceiptSettings`）。
 2. 選用：建立 **預設分店／倉**（`stores`、`warehouses`）— 與多倉 schema 一致時再自動 seed，避免與既有 demo reset 邏輯重複維護兩套。
 3. 選用：導向 **採購／品項** 或 **Dashboard** 空態 CTA。
 

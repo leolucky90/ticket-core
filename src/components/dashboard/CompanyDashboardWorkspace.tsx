@@ -3,9 +3,10 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ItemFormFields } from "@/components/dashboard/ItemFormFields";
-import { MarketingSettingsWorkspace } from "@/components/dashboard/marketing-settings-workspace";
+import { MarketingSettingsWorkspace, type MarketingSectionId } from "@/components/dashboard/marketing-settings-workspace";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { IconTextActionButton } from "@/components/ui/icon-text-action-button";
 import { IconOnlyButton } from "@/components/ui/icon-only-button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -14,7 +15,7 @@ import { EmptyStateCard, MerchantListPagination, MerchantListShell, MerchantSect
 import { MerchantPredictiveSearchInput } from "@/components/merchant/search";
 import { TechnicianAutocomplete } from "@/components/used-products";
 import type { MerchantStatItem } from "@/components/merchant/shell";
-import { ArrowLeft, ArrowRight, Pencil, Plus, Save, Search, ShieldCheck, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Pencil, Plus, RotateCcw, Save, Search, ShieldCheck, X } from "lucide-react";
 import type { DimensionPickerBundle } from "@/lib/types/catalog";
 import type { CustomerProfile, CustomerProfileListRow } from "@/lib/types/customer";
 import type { InventoryStockLog } from "@/lib/types/inventory";
@@ -54,6 +55,7 @@ type CompanyDashboardWorkspaceProps = {
     lang: UiLanguage;
     tab: DashboardTab;
     inventoryView: InventoryView;
+    marketingSection?: MarketingSectionId;
     flash: string;
     actionTs: string;
     snapshotTs: number;
@@ -554,6 +556,7 @@ export function CompanyDashboardWorkspace({
     lang,
     tab,
     inventoryView,
+    marketingSection,
     flash,
     actionTs,
     snapshotTs,
@@ -2240,13 +2243,20 @@ export function CompanyDashboardWorkspace({
                                             targets={["inventory"]}
                                             className="w-full"
                                         />
-                                        <Button type="submit">{inv.search}</Button>
-                                        <Link
-                                            href={`/dashboard?tab=inventory&inventoryView=${encodeURIComponent(inventoryView)}`}
-                                            className="text-sm text-[rgb(var(--accent))] hover:underline"
-                                        >
-                                            {inv.clear}
-                                        </Link>
+                                        <div className="flex shrink-0 flex-wrap items-center gap-2">
+                                            <IconTextActionButton
+                                                type="submit"
+                                                icon={Search}
+                                                label={inv.search}
+                                                tooltip={inv.searchTooltip}
+                                            />
+                                            <IconTextActionButton
+                                                href={`/dashboard?tab=inventory&inventoryView=${encodeURIComponent(inventoryView)}`}
+                                                icon={RotateCcw}
+                                                label={inv.clear}
+                                                tooltip={inv.clearTooltip}
+                                            />
+                                        </div>
                                     </form>
                                 }
                             />
@@ -2530,6 +2540,7 @@ export function CompanyDashboardWorkspace({
                 {tab === "marketing" ? (
                     <MarketingSettingsWorkspace
                         lang={lang}
+                        initialMarketingSection={marketingSection}
                         dimensionBundle={dimensionBundle}
                         itemNamingSettings={itemNamingSettings}
                         supplierItems={supplierItems}

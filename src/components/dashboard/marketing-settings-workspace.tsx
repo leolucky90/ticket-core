@@ -29,6 +29,7 @@ type MarketingLookupRow = {
 
 export type MarketingSettingsWorkspaceProps = {
     lang: "zh" | "en";
+    initialMarketingSection?: MarketingSectionId;
     dimensionBundle: DimensionPickerBundle;
     itemNamingSettings: ItemNamingSettings;
     supplierItems: { id: string; name: string; status?: string }[];
@@ -63,6 +64,7 @@ function limitRows<T>(rows: T[], size: string): T[] {
 export function MarketingSettingsWorkspace(props: MarketingSettingsWorkspaceProps) {
     const {
         lang,
+        initialMarketingSection,
         dimensionBundle,
         itemNamingSettings,
         supplierItems,
@@ -95,7 +97,7 @@ export function MarketingSettingsWorkspace(props: MarketingSettingsWorkspaceProp
         { id: "used", label: t.tabUsedLabel, hint: t.tabUsedHint },
     ];
 
-    const [section, setSection] = useState<MarketingSectionId>("category");
+    const [section, setSection] = useState<MarketingSectionId>(() => initialMarketingSection ?? "category");
     const [supplierSearchDraft, setSupplierSearchDraft] = useState("");
     const [supplierSearchTerm, setSupplierSearchTerm] = useState("");
     const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
@@ -213,6 +215,7 @@ export function MarketingSettingsWorkspace(props: MarketingSettingsWorkspaceProp
                 <p className="mt-1 text-xs text-[rgb(var(--muted))]">{t.newSupplierDescription}</p>
                 <form action={createSupplierAction} className="mt-3 flex flex-wrap items-end gap-2">
                     <input type="hidden" name="tab" value="marketing" />
+                    <input type="hidden" name="marketingSection" value={section} />
                     <label className="grid min-w-[200px] flex-1 gap-1">
                         <span className="text-xs text-[rgb(var(--muted))]">{t.nameLabel}</span>
                         <Input name="supplierName" placeholder={t.supplierNamePlaceholder} required className="h-10" list="marketing-supplier-workspace-options" />
@@ -236,6 +239,7 @@ export function MarketingSettingsWorkspace(props: MarketingSettingsWorkspaceProp
                         </div>
                         <form id="marketing-supplier-update-form" action={updateSupplierAction} className="grid gap-2">
                             <input type="hidden" name="tab" value="marketing" />
+                            <input type="hidden" name="marketingSection" value={section} />
                             <input type="hidden" name="supplierId" value={selectedSupplier.id} />
                             <label className="grid gap-1">
                                 <span className="text-xs text-[rgb(var(--muted))]">{t.supplierNameLabel}</span>
@@ -250,6 +254,7 @@ export function MarketingSettingsWorkspace(props: MarketingSettingsWorkspaceProp
                         </form>
                         <form action={deleteSupplierAction} onSubmit={onDeleteGuard} data-delete-target={t.deleteSupplierTarget.replace("{name}", selectedSupplier.name)}>
                             <input type="hidden" name="tab" value="marketing" />
+                            <input type="hidden" name="marketingSection" value={section} />
                             <input type="hidden" name="supplierId" value={selectedSupplier.id} />
                             <Button type="submit" variant="ghost" className="gap-2 border border-[rgb(var(--border))]">
                                 <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -267,6 +272,7 @@ export function MarketingSettingsWorkspace(props: MarketingSettingsWorkspaceProp
             <div className="text-xs font-medium text-[rgb(var(--muted))]">{t.brandListHeader.replace("{count}", String(brands.length))}</div>
             <form action={createBrandAction} className="grid gap-2 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
                 <input type="hidden" name="tab" value="marketing" />
+                <input type="hidden" name="marketingSection" value={section} />
                 <div className="text-xs text-[rgb(var(--muted))]">{t.quickAddLabel}</div>
                 <div className="flex flex-wrap gap-2">
                     <Input name="brandName" value={newBrandNameDraft} onChange={(e) => setNewBrandNameDraft(e.target.value)} placeholder={t.brandNamePlaceholder} className="min-w-0 flex-1" />
@@ -321,6 +327,7 @@ export function MarketingSettingsWorkspace(props: MarketingSettingsWorkspaceProp
         selectedBrand ? (
             <MarketingBrandEditor
                 lang={lang}
+                marketingSection={section}
                 brand={selectedBrand}
                 dimensionBundle={dimensionBundle}
                 brandTypeSuggestionPool={brandTypeSuggestionPool}
@@ -345,9 +352,10 @@ export function MarketingSettingsWorkspace(props: MarketingSettingsWorkspaceProp
 
     const categoryPanel = (
         <MerchantSectionCard title={t.categorySectionTitle} description={t.categorySectionDescription}>
-            <ItemQuickNamingSettingsCard settings={itemNamingSettings} submitAction={updateItemNamingSettingsAction} />
+            <ItemQuickNamingSettingsCard marketingSection={section} settings={itemNamingSettings} submitAction={updateItemNamingSettingsAction} />
             <div className="mt-4">
                 <MarketingCategoryManager
+                    marketingSection={section}
                     categories={dimensionBundle.categories}
                     createCategoryAction={createCategoryAction}
                     updateCategoryAction={updateCategoryAction}
@@ -396,7 +404,12 @@ export function MarketingSettingsWorkspace(props: MarketingSettingsWorkspaceProp
             {section === "brand" ? <MerchantBuilderShell sectionList={brandListShell} editor={brandEditorShell} /> : null}
 
             {section === "used" ? (
-                <UsedProductTypeSettingsCard lang={lang} settings={usedProductTypeSettings} updateTypeAction={updateUsedProductTypeSettingAction} />
+                <UsedProductTypeSettingsCard
+                    lang={lang}
+                    marketingSection={section}
+                    settings={usedProductTypeSettings}
+                    updateTypeAction={updateUsedProductTypeSettingAction}
+                />
             ) : null}
         </div>
     );

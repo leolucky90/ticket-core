@@ -44,11 +44,11 @@
 
 | 路徑片段 | 主題 |
 | --- | --- |
-| `dashboard/` | 儀表板、結帳、收據、`purchase-orders`（採購草稿／AI 預留）、客戶詳情、關聯總覽、寄售、品項列表等 |
+| `dashboard/` | 儀表板、結帳、收據／發票清單與詳情、`purchase-orders`（採購草稿／AI 預留）、客戶詳情、關聯總覽、寄售、品項列表等 |
 | `sales/` | 銷售／結帳相關工作區 |
 | `staff/`、`staff/new`、`staff/[id]/edit`、`staff/deleted` | 員工管理、軟刪待處理／歷史 |
 | `products/used/` | 二手商品 |
-| `settings/` | 帳戶、儀表板偏好、展示頁、安全、刪除控制、刪除紀錄、**操作稽核**（`security/audit-logs`）、角色權限等 |
+| `settings/` | 帳戶、發票設定、字軌設定、儀表板偏好、展示頁、安全、刪除控制、刪除紀錄、**操作稽核**（`security/audit-logs`）、角色權限等 |
 | `account/security` | 帳戶安全（與 settings 分工並存時以實際頁面為準） |
 | `company-home/` | 商家前台相關（若與 showcase 並存，以路由為準） |
 
@@ -74,6 +74,7 @@
 | `demo/receipt-po` | 收據 OCR → AI 草稿 Demo 頁（API 需商家 session） |
 | `src/app/ai/chat` | AI 聊天入口（遵守 project-rules：AI 不直接覆寫正式資料） |
 | `src/app/api/**` | Route Handlers（auth、bootstrap、merchant search、showcase upload、ticket-attributes、`document-intake` OCR+AI 收據、`products/search` 品項搜尋、`po/confirm`／`po/draft` 採購草稿確認 等） |
+| `src/app/demo/builder` | Builder 模組預覽頁（官方／租戶 hero + carousel + 媒體欄位 URL／上傳預留 UI） |
 
 ---
 
@@ -82,14 +83,16 @@
 | 目錄 | 職責 |
 | --- | --- |
 | `components/ui/` | **純展示**可重用元件（button、processing、overlay 等）；無業務規則 |
+| `components/ui/builder/` | 首頁 Builder 共用 UI：`HeroBackgroundMedia`、`AutoCarouselBanner`、`BuilderMediaField`（URL／上傳預留）、`BuilderUploadNotice`、輪播子元件與 `background/AnimatedBackground` |
 | `components/merchant/shell/` | **商家 shell 基線**：`MerchantPageShell`、`MerchantSectionCard`、`MerchantListShell`、`SearchToolbar`、sidebar／topbar 等 |
 | `components/merchant/search/` | 商家預測／搜尋輸入；dropdown loading / empty / error copy 已收斂到 `lib/i18n/ui-text.ts` |
 | `components/merchant/catalog/` | 目錄維度選擇等共用 UI；`DimensionPicker` 已走 shared i18n，不在 page / form 內各自硬編欄位文案 |
 | `components/layout/` | `ProtectedShell`、`ui-language-provider`、`navigation-progress` 等全站版面 |
-| `components/dashboard/` | 儀表板大型 workspace（結帳、營銷設定、BossAdmin、品項等） |
+| `components/dashboard/` | 儀表板大型 workspace（結帳、營銷設定、BossAdmin、品項等）；`components/dashboard/checkout/` 已拆出 checkout customer / case selector / items / document settings / preview cards |
 | `components/staff/` | 員工列表、表單、軟刪／保險庫區塊等 |
 | `components/settings/` | 刪除控制、刪除紀錄、**操作稽核**（`AuditLogsPanel`）、票務屬性、密碼表單等 |
-| `components/account/` | 帳戶／安全相關面板 |
+| `components/account/` | 帳戶／安全相關面板；`AccountSummaryCard`、`BusinessProfileForm`、`RegionalReceiptSettingsCard`、`ReceiptTemplatePreview` 已將登入摘要、公司主資料、地區單據設定分離 |
+| `components/invoices/` | 發票／單據模組 UI：checkout 共用欄位、狀態 badge、作廢 dialog、設定表單、字軌設定、document detail panel |
 | `components/auth/` | 登入、Google、重設密碼等表單 |
 | `components/sales/` | 銷售工作區 |
 | `components/used-products/` | 二手商品管理 UI |
@@ -128,24 +131,25 @@ Showcase 擴充時優先動：`showBlockRegistry.ts`、`showContentPreferences.t
 
 集中 **entity／業務型別**；新共用型別優先獨立模組，**不要**再擴散塞入 `types/commerce.ts`（該檔為 compatibility barrel）。
 
-常用 canonical 模組包含：`customer.ts`、`ticket.ts`、`merchant-product.ts`、`catalog.ts`、`promotion.ts`、`inventory.ts`、`repair-brand.ts`、`reporting.ts`、`purchase-order.ts`（採購草稿，Firestore）等。多店面／多倉：`merchant-store.ts`、`warehouse.ts`、`warehouse-inventory.ts`、`stock-item.ts`、`inventory-log.ts`（倉別時間軸）、`inventory-transfer.ts`。
+常用 canonical 模組包含：`customer.ts`、`ticket.ts`、`merchant-product.ts`、`catalog.ts`、`promotion.ts`、`inventory.ts`、`repair-brand.ts`、`reporting.ts`、`purchase-order.ts`（採購草稿，Firestore）、`builder.ts`（官方／租戶首頁 builder 結構化設定與媒體欄位語意）等。多店面／多倉：`merchant-store.ts`、`warehouse.ts`、`warehouse-inventory.ts`、`stock-item.ts`、`inventory-log.ts`（倉別時間軸）、`inventory-transfer.ts`。
 
 ### Schema `lib/schema/`
 
-Firestore／資料形狀與 bridge；例如 `cases.ts`（ticket legacy）、`deleteLogs.ts`、`staffMembers.ts`、`itemNamingSettings.ts`、`ai/po-draft.ts`（OCR+AI 結構化草稿）、`receiptPoIntake.ts`（公司範圍 intake／po 路徑）等。`schema/index.ts` 匯出索引。
+Firestore／資料形狀與 bridge；例如 `cases.ts`（ticket legacy）、`deleteLogs.ts`、`staffMembers.ts`、`itemNamingSettings.ts`、`business-profile.schema.ts`（公司主資料）、`regional-receipt-settings.schema.ts`（地區單據設定）、`receipt-template.schema.ts`（單據預覽 model）、`checkout-document.schema.ts`（checkout 單據欄位）、`invoice-settings.schema.ts`、`invoice-track-settings.schema.ts`、`invoice-draft.schema.ts`、`invoice.schema.ts`、`invoice-void.schema.ts`、`invoice-log.schema.ts`、`invoice-carrier.schema.ts`、`receipt-document.schema.ts`（單據主資料）、`ai/po-draft.ts`（OCR+AI 結構化草稿）、`receiptPoIntake.ts`（公司範圍 intake／po 路徑）等。`schema/index.ts` 匯出索引。
 
 ### 服務 `lib/services/`
 
 | 區域 | 說明 |
 | --- | --- |
-| 根層各 `*.service.ts` / 模組 | 跨域或尚未下沉之服務（`user`、`staff`、`delete-log`、`ticket`、`sales`、`company-profile` 等） |
-| `services/merchant/` | **商家 read-model／catalog／write wrapper** 優先入口（`*-read-model.service.ts`、`*-write.service.ts`、`catalog-service.ts`、`product-service.ts`、`purchase-order-draft.service.ts` 採購草稿 Firestore 等）；`inventory-write.service.ts` 另 re-export 多倉調貨／倉別 log／IMEI／AI 補貨建議（實作於 `services/inventory/*`、`services/ai/reorder-service`）；**`audit-log-read-model.service.ts`** 讀取 `auditLogs`；customer/activity linkage 與 activity purchase read-model 也優先集中在此層，避免 route/page 直接用名稱比對資料流 |
+| 根層各 `*.service.ts` / 模組 | 跨域或尚未下沉之服務（`user`、`staff`、`delete-log`、`ticket`、`sales`、`business-profile`、`regional-receipt-settings`、compat sync 等） |
+| `services/merchant/` | **商家 read-model／catalog／write wrapper** 優先入口（`*-read-model.service.ts`、`*-write.service.ts`、`catalog-service.ts`、`product-service.ts`、`purchase-order-draft.service.ts` 採購草稿 Firestore 等）；`account-settings-read-model.service.ts` / `account-settings-write.service.ts` 已作為 `/settings/account` 的 canonical route-data / write 入口；`invoice-admin-read-model.service.ts` / `invoice-admin-write.service.ts` 已作為 `/settings/account/invoices`、`/settings/account/invoice-tracks`、`/dashboard/receipts*` 的 canonical route-data / write 入口；`checkout-route-data.service.ts` / `checkout-case-selector.service.ts` 已作為 `/dashboard/checkout` 的 canonical route-data / case eligibility 入口；`inventory-write.service.ts` 另 re-export 多倉調貨／倉別 log／IMEI／AI 補貨建議（實作於 `services/inventory/*`、`services/ai/reorder-service`）；**`audit-log-read-model.service.ts`** 讀取 `auditLogs`；customer/activity linkage 與 activity purchase read-model 也優先集中在此層，避免 route/page 直接用名稱比對資料流 |
+| `invoice-*.service.ts`、`receipt-document.service.ts` | 單據核心流程：settings / tracks / drafts / issue / void / carriers / logs / platform adapter / receipt document persistence |
 | `services/documents/` | 收據 intake、Po 確認／更新（`intake-document`、`save-document`、`confirm-po`、`update-po-draft`） |
 | `services/ocr/`、`services/ai/` | Google Vision OCR、`extract-po-draft`（OpenAI JSON） |
 | `services/db/firestore.ts` | Firestore 共用寫入／查詢 helper（`fbAdminDb`） |
 | `services/platform/` | 平台層（如 `bossadmin-reporting.service.ts`） |
 | `services/commerce.ts` | **Compatibility**：新程式碼勿新增直接依賴，除非做收斂遷移 |
-| `checkout/`、`inventory/`（含 `inventory/timeline-service`、`transfer-service`、`imei-service`）、`services/ai/reorder-service`（補貨建議，不直寫庫存）、`entitlements/`、`pickupReservations/`、`promotions/` | 領域子模組 |
+| `checkout/`、`inventory/`（含 `inventory/timeline-service`、`transfer-service`、`imei-service`）、`services/ai/reorder-service`（補貨建議，不直寫庫存）、`entitlements/`、`pickupReservations/`、`promotions/` | 領域子模組；`services/checkout/document-service.ts` 提供 checkout document default / form parse / preview model，避免 TW/AU 規則散落在 UI |
 
 ### 其他 `lib/`
 
@@ -181,7 +185,7 @@ Firestore／資料形狀與 bridge；例如 `cases.ts`（ticket legacy）、`del
 ## 開發時快速對照
 
 1. **改列表／工具列／分頁**：`components/merchant/shell`、`lib/pagination`、`lib/ui/list-display`。
-2. **改 Firestore 規則或寫入路徑**：對應 `lib/services`（優先 `merchant/*-write.service.ts`），並檢查 cache invalidation（若有 warm cache）。
+2. **改 Firestore 規則或寫入路徑**：對應 `lib/services`（優先 `merchant/*-write.service.ts`）；若是單據模組則先看 `invoice-*.service.ts` / `receipt-document.service.ts`，並檢查 cache invalidation（若有 warm cache）。
 3. **改展示頁 builder**：`features/showcase/`。
 4. **改員工／刪除紀錄**：`staff.service.ts`、`delete-log.service.ts`、`app/(merchant)/staff/**`、`components/staff/**`。
 5. **改 i18n 框架字串**：`lib/i18n/ui-text.ts`，避免在單一 page 硬編中英分支擴散。

@@ -1,66 +1,55 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { CirclePlus, Eye, ShoppingCart, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Eye, ShoppingCart } from "lucide-react";
+import { CheckoutCaseSelectorCard } from "@/components/dashboard/checkout/CheckoutCaseSelectorCard";
+import { CheckoutCustomerCard } from "@/components/dashboard/checkout/CheckoutCustomerCard";
+import { CheckoutDocumentSettingsCard } from "@/components/dashboard/checkout/CheckoutDocumentSettingsCard";
+import { CheckoutItemsCard } from "@/components/dashboard/checkout/CheckoutItemsCard";
+import { CheckoutReceiptPreviewCard } from "@/components/dashboard/checkout/CheckoutReceiptPreviewCard";
+import type {
+    CheckoutCustomerMode,
+    CheckoutLineDraft,
+    CheckoutPromotionSelectionDraft,
+} from "@/components/dashboard/checkout/checkout-workspace.types";
 import { MerchantSectionCard } from "@/components/merchant/shell";
+import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { IconActionButton } from "@/components/ui/icon-action-button";
 import { IconTextActionButton } from "@/components/ui/icon-text-action-button";
-import { UsedProductStatusBadge } from "@/components/used-products";
-import { MerchantPredictiveSearchInput } from "@/components/merchant/search";
 import { getUiText, uiLocale, type UiLanguage } from "@/lib/i18n/ui-text";
 import { useUiLanguage } from "@/components/layout/ui-language-provider";
-import { isTicketLinkedToCustomer } from "@/lib/services/customerRelationships";
+import {
+    createCheckoutDocumentState,
+    syncCheckoutDocumentWithCustomer,
+} from "@/lib/services/checkout/document-service";
+import { getCheckoutEligibleCasesForCustomer } from "@/lib/services/merchant/checkout-case-selector.service";
 import type { CustomerProfile } from "@/lib/types/customer";
 import type { Product } from "@/lib/types/merchant-product";
 import type { Activity } from "@/lib/types/promotion";
 import type { Ticket } from "@/lib/types/ticket";
-import type { CompanyProfile, UsedProduct } from "@/lib/schema";
+import type { PredictiveSearchSuggestion } from "@/lib/types/search";
+import {
+    createEmptyRegionalReceiptSettings,
+    type BusinessProfile,
+    type CheckoutDocument,
+    type RegionalReceiptSettings,
+    type UsedProduct,
+} from "@/lib/schema";
 
 type CheckoutWorkspaceProps = {
     customers: CustomerProfile[];
     tickets: Ticket[];
     products: Product[];
     usedProducts: UsedProduct[];
-    companyProfile: CompanyProfile | null;
+    businessProfile: BusinessProfile | null;
+    regionalReceiptSettings: RegionalReceiptSettings | null;
     activeActivities: Activity[];
     createCheckoutAction: (formData: FormData) => Promise<void>;
     flash: string;
     actionTs: string;
     initialCustomerId?: string;
     initialUsedProductId?: string;
-};
-
-type LineDraft = {
-    id: string;
-    productId: string;
-    qty: number;
-    isUsedProduct: boolean;
-    usedProductId?: string;
-};
-
-type PromotionSelectionDraft = {
-    promotionId: string;
-    promotionName: string;
-    note: string;
-    effectType: Activity["effectType"];
-    scopeType: "category" | "product";
-    entitlementType: "replacement" | "gift" | "discount" | "service";
-    categoryId: string;
-    categoryName: string;
-    productId: string;
-    productName: string;
-    discountAmount: number;
-    bundlePriceDiscount: number;
-    giftProductId: string;
-    giftProductName: string;
-    giftQty: number;
-    entitlementQty: number;
-    entitlementExpiresAt?: number;
-    reservationQty: number;
-    reservationExpiresAt?: number;
 };
 
 function formatDateTimeLocal(ts: number): string {
@@ -90,24 +79,6 @@ function normalizeComparable(value: string): string {
     return value.trim().toLowerCase();
 }
 
-function toCaseNo(ticket: Ticket): string {
-    const d = new Date(ticket.createdAt > 0 ? ticket.createdAt : Date.now());
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    const suffix = ticket.id.replace(/[^a-zA-Z0-9]/g, "").slice(-4).toUpperCase() || "0000";
-    return `CASE-${yyyy}${mm}${dd}-${suffix}`;
-}
-
-function statusText(status: string, ui: ReturnType<typeof getUiText>["checkoutWorkspace"]): string {
-    if (status === "new") return ui.ticketStatusNew;
-    if (status === "in_progress") return ui.ticketStatusInProgress;
-    if (status === "waiting_customer") return ui.ticketStatusWaitingCustomer;
-    if (status === "resolved") return ui.ticketStatusResolved;
-    if (status === "closed") return ui.ticketStatusClosed;
-    return status;
-}
-
 function activityEffectText(effectType: Activity["effectType"], ui: ReturnType<typeof getUiText>["checkoutWorkspace"]): string {
     if (effectType === "bundle_price") return ui.effectBundlePrice;
     if (effectType === "gift_item") return ui.effectGift;
@@ -121,7 +92,8 @@ export function CheckoutWorkspace({
     tickets,
     products,
     usedProducts,
-    companyProfile,
+    businessProfile,
+    regionalReceiptSettings,
     activeActivities,
     createCheckoutAction,
     flash,
@@ -131,6 +103,12 @@ export function CheckoutWorkspace({
 }: CheckoutWorkspaceProps) {
     const lang = useUiLanguage();
     const ui = getUiText(lang).checkoutWorkspace;
+    const resolvedReceiptSettings = useMemo(
+        () =>
+            regionalReceiptSettings ??
+            createEmptyRegionalReceiptSettings(businessProfile?.companyId || "company", "system"),
+        [regionalReceiptSettings, businessProfile?.companyId],
+    );
 
     const hasInitialCustomer = Boolean(initialCustomerId && customers.some((item) => item.id === initialCustomerId));
     const initialCustomerQuery = hasInitialCustomer
@@ -140,17 +118,19 @@ export function CheckoutWorkspace({
               return `${hit.name} / ${hit.phone || "-"} / ${hit.email || "-"}`;
           })()
         : "";
-    const [customerMode, setCustomerMode] = useState<"walkin" | "customer">(hasInitialCustomer ? "customer" : "walkin");
+    const [customerMode, setCustomerMode] = useState<CheckoutCustomerMode>(hasInitialCustomer ? "customer" : "walkin");
     const [customerId, setCustomerId] = useState(hasInitialCustomer ? initialCustomerId ?? "" : "");
     const [customerQuery, setCustomerQuery] = useState(initialCustomerQuery);
     const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
-    const [selectedPromotions, setSelectedPromotions] = useState<PromotionSelectionDraft[]>([]);
+    const [selectedPromotions, setSelectedPromotions] = useState<CheckoutPromotionSelectionDraft[]>([]);
     const [closeCase, setCloseCase] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState<"cash" | "card">("cash");
     const [paymentStatus, setPaymentStatus] = useState<"unpaid" | "paid" | "deposit" | "installment">("paid");
     const [checkoutAt, setCheckoutAt] = useState("");
     const [usedProductQuery, setUsedProductQuery] = useState("");
-    const [lines, setLines] = useState<LineDraft[]>(() => {
+    const [usedPickerOpen, setUsedPickerOpen] = useState(false);
+    const [promotionsPickerOpen, setPromotionsPickerOpen] = useState(false);
+    const [lines, setLines] = useState<CheckoutLineDraft[]>(() => {
         if (initialUsedProductId && usedProducts.some((row) => row.id === initialUsedProductId)) {
             return [
                 {
@@ -173,6 +153,8 @@ export function CheckoutWorkspace({
             },
         ];
     });
+    const [casesLoading, setCasesLoading] = useState(false);
+    const caseLoadingTimeoutRef = useRef<number | null>(null);
 
     useEffect(() => {
         if (!flash) return;
@@ -191,19 +173,51 @@ export function CheckoutWorkspace({
         return () => window.cancelAnimationFrame(frame);
     }, []);
 
+    useEffect(() => {
+        if (!usedPickerOpen) return;
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") setUsedPickerOpen(false);
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [usedPickerOpen]);
+
+    useEffect(() => {
+        if (!promotionsPickerOpen) return;
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") setPromotionsPickerOpen(false);
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [promotionsPickerOpen]);
+
+    useEffect(() => {
+        return () => {
+            if (caseLoadingTimeoutRef.current !== null) {
+                window.clearTimeout(caseLoadingTimeoutRef.current);
+            }
+        };
+    }, []);
+
     const selectedCustomer = useMemo(() => customers.find((item) => item.id === customerId) ?? null, [customers, customerId]);
     const defaultCompanyCustomer = useMemo(
         () => ({
-            name: companyProfile?.displayName || companyProfile?.companyName || ui.walkin,
-            phone: companyProfile?.phone || "",
-            email: companyProfile?.email || "",
+            name: businessProfile?.displayName || businessProfile?.companyName || ui.walkin,
+            phone: businessProfile?.phone || "",
+            email: businessProfile?.email || "",
         }),
-        [companyProfile, ui.walkin],
+        [businessProfile, ui.walkin],
+    );
+    const [checkoutDocument, setCheckoutDocument] = useState<CheckoutDocument>(() =>
+        createCheckoutDocumentState({
+            settings: resolvedReceiptSettings,
+            buyerName: hasInitialCustomer ? customers.find((item) => item.id === initialCustomerId)?.name ?? "" : defaultCompanyCustomer.name,
+        }),
     );
 
     const filteredCustomers = useMemo(() => {
         const q = normalizeComparable(customerQuery);
-        if (!q) return customers.slice(0, 20);
+        if (!q) return [];
         return customers
             .filter((customer) =>
                 [customer.name, customer.phone, customer.email]
@@ -212,19 +226,54 @@ export function CheckoutWorkspace({
             )
             .slice(0, 20);
     }, [customers, customerQuery]);
+    const shouldShowCustomerSuggestions = customerMode === "customer" && customerId === "" && normalizeComparable(customerQuery).length > 0;
 
-    const availableCases = useMemo(() => {
-        if (!selectedCustomer) return [];
-        return tickets
-            .filter((ticket) => isTicketLinkedToCustomer(selectedCustomer, ticket))
-            .filter((ticket) => ticket.status !== "closed")
-            .sort((a, b) => b.updatedAt - a.updatedAt);
-    }, [selectedCustomer, tickets]);
-    const selectedCases = useMemo(
-        () => availableCases.filter((ticket) => selectedCaseIds.includes(ticket.id)),
-        [availableCases, selectedCaseIds],
+    const availableCases = useMemo(
+        () =>
+            getCheckoutEligibleCasesForCustomer({
+                customer: customerMode === "customer" ? selectedCustomer : null,
+                tickets,
+            }),
+        [customerMode, selectedCustomer, tickets],
+    );
+    const availableCaseIdSet = useMemo(() => new Set(availableCases.map((ticket) => ticket.caseId)), [availableCases]);
+    const hasCheckoutEligibleCases = availableCases.length > 0;
+    const visibleSelectedCaseIds = useMemo(
+        () => selectedCaseIds.filter((caseId) => availableCaseIdSet.has(caseId)),
+        [availableCaseIdSet, selectedCaseIds],
     );
     const selectedActivityIdSet = useMemo(() => new Set(selectedPromotions.map((activity) => activity.promotionId)), [selectedPromotions]);
+    const clearSelectedCases = useCallback(() => {
+        setSelectedCaseIds([]);
+        setCloseCase(false);
+    }, []);
+    const triggerCaseLoading = useCallback((enabled: boolean) => {
+        if (caseLoadingTimeoutRef.current !== null) {
+            window.clearTimeout(caseLoadingTimeoutRef.current);
+            caseLoadingTimeoutRef.current = null;
+        }
+        if (!enabled) {
+            setCasesLoading(false);
+            return;
+        }
+        setCasesLoading(true);
+        caseLoadingTimeoutRef.current = window.setTimeout(() => {
+            setCasesLoading(false);
+            caseLoadingTimeoutRef.current = null;
+        }, 180);
+    }, []);
+    const syncDocumentBuyerName = useCallback(
+        (buyerName: string) => {
+            setCheckoutDocument((current) =>
+                syncCheckoutDocumentWithCustomer({
+                    document: current,
+                    settings: resolvedReceiptSettings,
+                    buyerName,
+                }),
+            );
+        },
+        [resolvedReceiptSettings],
+    );
     const appendLine = (productId?: string, options?: { isUsedProduct?: boolean; usedProductId?: string }) => {
         setLines((prev) => [
             ...prev,
@@ -242,6 +291,20 @@ export function CheckoutWorkspace({
         if (exists) return;
         appendLine(usedProductId, { isUsedProduct: true, usedProductId });
     };
+
+    const resolveProductFromSuggestion = useCallback(
+        (item: PredictiveSearchSuggestion): Product | null => {
+            const metaProductId = typeof item.meta?.productId === "string" ? item.meta.productId : "";
+            const exactNameMatches = products.filter((product) => product.name === item.value || product.name === item.title);
+            return (
+                products.find((product) => product.id === metaProductId) ??
+                products.find((product) => product.id === item.id) ??
+                (exactNameMatches.length === 1 ? exactNameMatches[0] : null) ??
+                null
+            );
+        },
+        [products],
+    );
 
     const productMap = useMemo(() => {
         const map = new Map<string, Product>();
@@ -317,9 +380,14 @@ export function CheckoutWorkspace({
             return prev.filter((row) => row.promotionId !== activity.id);
         });
     };
-    const updateSelectedPromotion = (promotionId: string, updater: (row: PromotionSelectionDraft) => PromotionSelectionDraft) => {
+    const updateSelectedPromotion = (
+        promotionId: string,
+        updater: (row: CheckoutPromotionSelectionDraft) => CheckoutPromotionSelectionDraft,
+    ) => {
         setSelectedPromotions((prev) => prev.map((row) => (row.promotionId === promotionId ? updater(row) : row)));
     };
+
+    const shouldShowCaseSelector = customerMode === "customer" && Boolean(selectedCustomer) && (casesLoading || hasCheckoutEligibleCases);
 
     return (
         <div className="space-y-4">
@@ -336,31 +404,18 @@ export function CheckoutWorkspace({
                 }
                 bodyClassName="space-y-3"
             >
-                <form action={createCheckoutAction} className="grid gap-3">
-                    <div className="grid gap-2 md:grid-cols-3">
-                        <label className="grid gap-1 text-sm">
-                            <span className="text-xs text-[rgb(var(--muted))]">{ui.checkoutTime}</span>
-                            <Input
-                                type="datetime-local"
-                                name="checkoutAt"
-                                value={checkoutAt}
-                                onChange={(event) => setCheckoutAt(event.target.value)}
-                                required
-                            />
-                        </label>
-                        <label className="grid gap-1 text-sm">
-                            <span className="text-xs text-[rgb(var(--muted))]">{ui.paymentMethod}</span>
-                            <Select
-                                name="paymentMethod"
-                                value={paymentMethod}
-                                onChange={(event) => setPaymentMethod(event.target.value as "cash" | "card")}
-                            >
+                <form action={createCheckoutAction} className="grid gap-4">
+                    <div className="grid gap-3 md:grid-cols-3">
+                        <FormField label={ui.checkoutTime}>
+                            <Input type="datetime-local" name="checkoutAt" value={checkoutAt} onChange={(event) => setCheckoutAt(event.target.value)} required />
+                        </FormField>
+                        <FormField label={ui.paymentMethod}>
+                            <Select name="paymentMethod" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as "cash" | "card")}>
                                 <option value="cash">{ui.paymentCash}</option>
                                 <option value="card">{ui.paymentCard}</option>
                             </Select>
-                        </label>
-                        <label className="grid gap-1 text-sm">
-                            <span className="text-xs text-[rgb(var(--muted))]">{ui.paymentStatus}</span>
+                        </FormField>
+                        <FormField label={ui.paymentStatus}>
                             <Select
                                 name="paymentStatus"
                                 value={paymentStatus}
@@ -371,625 +426,137 @@ export function CheckoutWorkspace({
                                 <option value="deposit">{ui.statusDeposit}</option>
                                 <option value="installment">{ui.statusInstallment}</option>
                             </Select>
-                        </label>
+                        </FormField>
                     </div>
 
-                    <MerchantSectionCard title={ui.customerSection} bodyClassName="space-y-2">
-                        <div className="grid gap-2 md:grid-cols-3">
-                            <label className="grid gap-1 text-sm">
-                                <span className="text-xs text-[rgb(var(--muted))]">{ui.customerType}</span>
-                                <Select
-                                    value={customerMode}
-                                    onChange={(event) => {
-                                        const nextMode = event.target.value === "customer" ? "customer" : "walkin";
-                                        setCustomerMode(nextMode);
-                                        if (nextMode === "walkin") {
-                                            setCustomerId("");
-                                            setCustomerQuery("");
-                                            setSelectedCaseIds([]);
-                                        }
-                                    }}
-                                >
-                                    <option value="walkin">{ui.walkin}</option>
-                                    <option value="customer">{ui.selectCustomer}</option>
-                                </Select>
-                            </label>
+                    <CheckoutCustomerCard
+                        ui={ui}
+                        customerMode={customerMode}
+                        customerId={customerId}
+                        customerQuery={customerQuery}
+                        selectedCustomer={selectedCustomer}
+                        defaultCustomer={defaultCompanyCustomer}
+                        shouldShowSuggestions={shouldShowCustomerSuggestions}
+                        suggestions={filteredCustomers}
+                        onModeChange={(nextMode) => {
+                            setCustomerMode(nextMode);
+                            if (nextMode === "walkin") {
+                                setCustomerId("");
+                                setCustomerQuery("");
+                                clearSelectedCases();
+                                triggerCaseLoading(false);
+                                syncDocumentBuyerName(defaultCompanyCustomer.name);
+                            }
+                        }}
+                        onQueryChange={(value) => {
+                            setCustomerQuery(value);
+                            setCustomerId("");
+                            clearSelectedCases();
+                            triggerCaseLoading(false);
+                            syncDocumentBuyerName("");
+                        }}
+                        onCustomerSelect={(customer) => {
+                            setCustomerId(customer.id);
+                            setCustomerQuery(`${customer.name} / ${customer.phone || "-"} / ${customer.email || "-"}`);
+                            clearSelectedCases();
+                            triggerCaseLoading(true);
+                            syncDocumentBuyerName(customer.name);
+                        }}
+                    />
 
-                            <label className="grid gap-1 text-sm md:col-span-2">
-                                <span className="text-xs text-[rgb(var(--muted))]">{ui.searchCustomerLabel}</span>
-                                <Input
-                                    value={customerQuery}
-                                    onChange={(event) => {
-                                        setCustomerQuery(event.target.value);
-                                        if (customerMode === "customer") setCustomerId("");
-                                    }}
-                                    placeholder={ui.searchCustomerPlaceholder}
-                                    disabled={customerMode !== "customer"}
-                                />
-                            </label>
-                        </div>
-
-                        {customerMode === "customer" ? (
-                            <div className="mt-2 grid max-h-52 gap-2 overflow-y-auto">
-                                {filteredCustomers.length === 0 ? (
-                                    <div className="text-sm text-[rgb(var(--muted))]">{ui.noMatchingCustomers}</div>
-                                ) : (
-                                    filteredCustomers.map((customer) => (
-                                        <button
-                                            key={customer.id}
-                                            type="button"
-                                            onClick={() => {
-                                                setCustomerId(customer.id);
-                                                setCustomerQuery(`${customer.name} / ${customer.phone || "-"} / ${customer.email || "-"}`);
-                                                setSelectedCaseIds([]);
-                                            }}
-                                            className={[
-                                                "rounded-lg border px-3 py-2 text-left text-sm",
-                                                customerId === customer.id
-                                                    ? "border-[rgb(var(--accent))] bg-[rgb(var(--panel2))]"
-                                                    : "border-[rgb(var(--border))] hover:bg-[rgb(var(--panel2))]",
-                                            ].join(" ")}
-                                        >
-                                            <div className="font-medium">{customer.name}</div>
-                                            <div className="text-xs text-[rgb(var(--muted))]">{customer.phone || "-"} / {customer.email || "-"}</div>
-                                        </button>
-                                    ))
-                                )}
-                            </div>
-                        ) : null}
-
-                        <input type="hidden" name="customerMode" value={customerMode} />
-                        <input type="hidden" name="customerId" value={customerMode === "customer" ? customerId : ""} />
-                        <input
-                            type="hidden"
-                            name="customerName"
-                            value={customerMode === "customer" ? selectedCustomer?.name ?? "" : defaultCompanyCustomer.name}
+                    {shouldShowCaseSelector ? (
+                        <CheckoutCaseSelectorCard
+                            ui={ui}
+                            cases={availableCases}
+                            selectedCaseIds={visibleSelectedCaseIds}
+                            closeCase={closeCase && visibleSelectedCaseIds.length > 0}
+                            loading={casesLoading}
+                            onToggleCase={(caseId, checked) => {
+                                setSelectedCaseIds((prev) => {
+                                    const next = checked ? [...prev, caseId] : prev.filter((id) => id !== caseId);
+                                    if (!checked && next.length === 0) {
+                                        setCloseCase(false);
+                                    }
+                                    return next;
+                                });
+                            }}
+                            onCloseCaseChange={setCloseCase}
                         />
-                        <input
-                            type="hidden"
-                            name="customerPhone"
-                            value={customerMode === "customer" ? selectedCustomer?.phone ?? "" : defaultCompanyCustomer.phone}
-                        />
-                        <input
-                            type="hidden"
-                            name="customerEmail"
-                            value={customerMode === "customer" ? selectedCustomer?.email ?? "" : defaultCompanyCustomer.email}
-                        />
-                    </MerchantSectionCard>
+                    ) : null}
+                    <input type="hidden" name="closeCase" value={closeCase && visibleSelectedCaseIds.length > 0 ? "1" : "0"} />
 
-                    <MerchantSectionCard title={ui.promotionsSection} bodyClassName="space-y-3">
-                        {activeActivities.length === 0 ? (
-                            <div className="text-sm text-[rgb(var(--muted))]">{ui.noActiveActivities}</div>
-                        ) : (
-                            <div className="grid gap-2">
-                                {activeActivities.map((activity) => {
-                                    const checked = selectedActivityIdSet.has(activity.id);
-                                    return (
-                                        <label
-                                            key={activity.id}
-                                            className={[
-                                                "flex items-start gap-2 rounded-lg border p-3 text-sm",
-                                                checked
-                                                    ? "border-[rgb(var(--accent))] bg-[rgb(var(--panel2))]"
-                                                    : "border-[rgb(var(--border))]",
-                                            ].join(" ")}
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                checked={checked}
-                                                onChange={(event) => {
-                                                    toggleActivitySelection(activity, event.target.checked);
-                                                }}
-                                            />
-                                            <div className="grid gap-1">
-                                                <div className="font-medium">{activity.name}</div>
-                                                <div className="text-xs text-[rgb(var(--muted))]">
-                                                    {ui.activityPeriod} {formatDateOnly(activity.startAt)} ~ {formatDateOnly(activity.endAt)}
-                                                </div>
-                                                <div className="text-xs text-[rgb(var(--muted))]">
-                                                    {ui.activityEffectLabel} {activityEffectText(activity.effectType, ui)}
-                                                </div>
-                                            </div>
-                                        </label>
-                                    );
-                                })}
-                            </div>
-                        )}
+                    <CheckoutItemsCard
+                        ui={ui}
+                        lang={lang}
+                        activeActivities={activeActivities}
+                        lineDetails={lineDetails}
+                        filteredUsedProducts={filteredUsedProducts}
+                        selectedPromotions={selectedPromotions}
+                        selectedActivityIdSet={selectedActivityIdSet}
+                        usedProductQuery={usedProductQuery}
+                        usedPickerOpen={usedPickerOpen}
+                        promotionsPickerOpen={promotionsPickerOpen}
+                        onUsedProductQueryChange={setUsedProductQuery}
+                        onUsedPickerOpenChange={setUsedPickerOpen}
+                        onPromotionsPickerOpenChange={setPromotionsPickerOpen}
+                        onAppendLine={appendLine}
+                        onAppendUsedProductLine={appendUsedProductLine}
+                        onRemoveLine={(lineId) => setLines((prev) => prev.filter((row) => row.id !== lineId))}
+                        onLineQtyChange={(lineId, qty) => setLines((prev) => prev.map((row) => (row.id === lineId ? { ...row, qty } : row)))}
+                        onLineProductSelect={(lineId, suggestion) => {
+                            const matched = resolveProductFromSuggestion(suggestion);
+                            if (!matched) return;
+                            setLines((prev) =>
+                                prev.map((row) =>
+                                    row.id === lineId
+                                        ? {
+                                              ...row,
+                                              productId: matched.id,
+                                              isUsedProduct: false,
+                                              usedProductId: undefined,
+                                          }
+                                        : row,
+                                ),
+                            );
+                        }}
+                        onResolveProductFromSuggestion={resolveProductFromSuggestion}
+                        onToggleActivitySelection={toggleActivitySelection}
+                        onUpdateSelectedPromotion={updateSelectedPromotion}
+                        formatMoney={formatMoney}
+                        formatDateOnly={formatDateOnly}
+                        activityEffectText={(effectType) => activityEffectText(effectType, ui)}
+                    />
 
-                        {selectedPromotions.length > 0 ? (
-                            <div className="mt-3 grid gap-2">
-                                <div className="text-xs text-[rgb(var(--muted))]">{ui.promotionDetailsHint}</div>
-                                {selectedPromotions.map((activity) => (
-                                    <details
-                                        key={activity.promotionId}
-                                        open
-                                        className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3"
-                                    >
-                                        <summary className="cursor-pointer text-sm font-medium">
-                                            {activity.promotionName} / {activityEffectText(activity.effectType, ui)}
-                                        </summary>
-                                        <div className="mt-2 grid gap-2 md:grid-cols-2">
-                                            <label className="grid gap-1 text-sm">
-                                                <span className="text-xs text-[rgb(var(--muted))]">{ui.activityName}</span>
-                                                <Input
-                                                    value={activity.promotionName}
-                                                    onChange={(event) =>
-                                                        updateSelectedPromotion(activity.promotionId, (current) => ({
-                                                            ...current,
-                                                            promotionName: event.target.value,
-                                                        }))
-                                                    }
-                                                />
-                                            </label>
-                                            <label className="grid gap-1 text-sm md:col-span-2">
-                                                <span className="text-xs text-[rgb(var(--muted))]">{ui.activityNote}</span>
-                                                <Textarea
-                                                    rows={3}
-                                                    value={activity.note}
-                                                    placeholder={ui.activityNotePlaceholder}
-                                                    onChange={(event) =>
-                                                        updateSelectedPromotion(activity.promotionId, (current) => ({
-                                                            ...current,
-                                                            note: event.target.value,
-                                                        }))
-                                                    }
-                                                />
-                                            </label>
-                                            {activity.effectType === "discount" || activity.effectType === "bundle_price" ? (
-                                                <label className="grid gap-1 text-sm">
-                                                    <span className="text-xs text-[rgb(var(--muted))]">
-                                                        {activity.effectType === "bundle_price" ? ui.bundleDiscountAmount : ui.discountAmount}
-                                                    </span>
-                                                    <Input
-                                                        type="number"
-                                                        min={0}
-                                                        value={activity.effectType === "bundle_price" ? activity.bundlePriceDiscount : activity.discountAmount}
-                                                        onChange={(event) => {
-                                                            const value = Math.max(0, Number.parseInt(event.target.value || "0", 10));
-                                                            updateSelectedPromotion(activity.promotionId, (current) =>
-                                                                current.effectType === "bundle_price"
-                                                                    ? { ...current, bundlePriceDiscount: value }
-                                                                    : { ...current, discountAmount: value },
-                                                            );
-                                                        }}
-                                                    />
-                                                </label>
-                                            ) : null}
-                                            {activity.effectType === "gift_item" ? (
-                                                <>
-                                                    <div className="grid gap-1 text-sm">
-                                                        <span className="text-xs text-[rgb(var(--muted))]">{ui.giftLine}</span>
-                                                        <div className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-3 py-2 text-sm">
-                                                            {activity.giftProductName || activity.giftProductId || ui.giftNotSet}
-                                                        </div>
-                                                    </div>
-                                                    <label className="grid gap-1 text-sm">
-                                                        <span className="text-xs text-[rgb(var(--muted))]">{ui.giftQty}</span>
-                                                        <Input
-                                                            type="number"
-                                                            min={1}
-                                                            value={activity.giftQty}
-                                                            onChange={(event) => {
-                                                                const value = Math.max(1, Number.parseInt(event.target.value || "1", 10));
-                                                                updateSelectedPromotion(activity.promotionId, (current) => ({
-                                                                    ...current,
-                                                                    giftQty: value,
-                                                                }));
-                                                            }}
-                                                        />
-                                                    </label>
-                                                </>
-                                            ) : null}
-                                            {activity.effectType === "create_entitlement" ? (
-                                                <>
-                                                    <label className="grid gap-1 text-sm">
-                                                        <span className="text-xs text-[rgb(var(--muted))]">{ui.entitlementQty}</span>
-                                                        <Input
-                                                            type="number"
-                                                            min={1}
-                                                            value={activity.entitlementQty}
-                                                            onChange={(event) => {
-                                                                const value = Math.max(1, Number.parseInt(event.target.value || "1", 10));
-                                                                updateSelectedPromotion(activity.promotionId, (current) => ({
-                                                                    ...current,
-                                                                    entitlementQty: value,
-                                                                }));
-                                                            }}
-                                                        />
-                                                    </label>
-                                                    <div className="grid gap-1 text-sm">
-                                                        <span className="text-xs text-[rgb(var(--muted))]">{ui.scope}</span>
-                                                        <div className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-3 py-2 text-sm">
-                                                            {activity.scopeType === "product"
-                                                                ? `${ui.scopeProduct}${activity.productName || activity.productId || ui.notSet}`
-                                                                : `${ui.scopeCategory}${activity.categoryName || activity.categoryId || ui.notSet}`}
-                                                        </div>
-                                                    </div>
-                                                </>
-                                            ) : null}
-                                            {activity.effectType === "create_pickup_reservation" ? (
-                                                <label className="grid gap-1 text-sm">
-                                                    <span className="text-xs text-[rgb(var(--muted))]">{ui.pickupQty}</span>
-                                                    <Input
-                                                        type="number"
-                                                        min={1}
-                                                        value={activity.reservationQty}
-                                                        onChange={(event) => {
-                                                            const value = Math.max(1, Number.parseInt(event.target.value || "1", 10));
-                                                            updateSelectedPromotion(activity.promotionId, (current) => ({
-                                                                ...current,
-                                                                reservationQty: value,
-                                                            }));
-                                                        }}
-                                                    />
-                                                </label>
-                                            ) : null}
-                                        </div>
-                                    </details>
-                                ))}
-                            </div>
-                        ) : null}
+                    <CheckoutDocumentSettingsCard
+                        ui={ui}
+                        settings={resolvedReceiptSettings}
+                        document={checkoutDocument}
+                        onChange={(updater) => setCheckoutDocument((current) => updater(current))}
+                    />
 
-                        {selectedPromotions.map((activity) => (
-                            <input
-                                key={`promotionSelection_${activity.promotionId}`}
-                                type="hidden"
-                                name="promotionSelection[]"
-                                value={JSON.stringify({
-                                    promotionId: activity.promotionId,
-                                    promotionName: activity.promotionName,
-                                    note: activity.note,
-                                    effectType: activity.effectType,
-                                    scopeType: activity.scopeType,
-                                    entitlementType: activity.entitlementType,
-                                    categoryId: activity.categoryId,
-                                    categoryName: activity.categoryName,
-                                    productId: activity.productId,
-                                    productName: activity.productName,
-                                    discountAmount: activity.discountAmount,
-                                    bundlePriceDiscount: activity.bundlePriceDiscount,
-                                    giftProductId: activity.giftProductId,
-                                    giftProductName: activity.giftProductName,
-                                    giftQty: activity.giftQty,
-                                    entitlementQty: activity.entitlementQty,
-                                    entitlementExpiresAt: activity.entitlementExpiresAt,
-                                    reservationQty: activity.reservationQty,
-                                    reservationExpiresAt: activity.reservationExpiresAt,
-                                })}
-                            />
-                        ))}
-                    </MerchantSectionCard>
+                    <CheckoutReceiptPreviewCard
+                        ui={ui}
+                        locale={resolvedReceiptSettings.locale || uiLocale(lang)}
+                        businessProfile={businessProfile}
+                        settings={resolvedReceiptSettings}
+                        document={checkoutDocument}
+                        paymentMethod={paymentMethod}
+                        paymentStatus={paymentStatus}
+                        totalAmount={totalAmount}
+                    />
 
-                    <MerchantSectionCard title={ui.casesSection} bodyClassName="space-y-2">
-                        {customerMode !== "customer" || !selectedCustomer ? (
-                            <div className="text-sm text-[rgb(var(--muted))]">{ui.casesHintNoCustomer}</div>
-                        ) : availableCases.length === 0 ? (
-                            <div className="text-sm text-[rgb(var(--muted))]">{ui.noOpenCases}</div>
-                        ) : (
-                            <div className="grid gap-2">
-                                {availableCases.map((ticket) => {
-                                    const checked = selectedCaseIds.includes(ticket.id);
-                                    return (
-                                        <label
-                                            key={ticket.id}
-                                            className={[
-                                                "flex items-start gap-2 rounded-lg border p-3 text-sm",
-                                                checked
-                                                    ? "border-[rgb(var(--accent))] bg-[rgb(var(--panel2))]"
-                                                    : "border-[rgb(var(--border))]",
-                                            ].join(" ")}
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                name="caseId[]"
-                                                value={ticket.id}
-                                                checked={checked}
-                                                onChange={(event) => {
-                                                    setSelectedCaseIds((prev) =>
-                                                        event.target.checked ? [...prev, ticket.id] : prev.filter((id) => id !== ticket.id),
-                                                    );
-                                                }}
-                                            />
-                                            <div className="grid gap-1">
-                                                <div className="font-medium">{toCaseNo(ticket)}</div>
-                                                <div className="text-xs text-[rgb(var(--muted))]">
-                                                    {ui.device} {ticket.device.name} {ticket.device.model}
-                                                </div>
-                                                <div className="text-xs text-[rgb(var(--muted))]">
-                                                    {ui.status} {statusText(ticket.status, ui)}
-                                                </div>
-                                            </div>
-                                        </label>
-                                    );
-                                })}
-                            </div>
-                        )}
-
-                        {selectedCaseIds.length > 0 ? (
-                            <label className="mt-2 inline-flex items-center gap-2 text-sm">
-                                <input
-                                    type="checkbox"
-                                    checked={closeCase}
-                                    onChange={(event) => setCloseCase(event.target.checked)}
-                                />
-                                {ui.closeCaseAfterCheckout}
-                            </label>
-                        ) : null}
-                        <input type="hidden" name="closeCase" value={closeCase ? "1" : "0"} />
-                    </MerchantSectionCard>
-
-                    <MerchantSectionCard
-                        title={ui.linesSection}
-                        actions={
+                    <MerchantSectionCard title={ui.operationSection} description={ui.operationSectionDescription}>
+                        <div className="flex flex-wrap gap-2">
                             <IconTextActionButton
-                                icon={CirclePlus}
-                                type="button"
-                                label={ui.addLine}
-                                tooltip={ui.addLineTooltip}
-                                onClick={() => appendLine()}
+                                icon={ShoppingCart}
+                                type="submit"
+                                label={ui.submitCheckout}
+                                tooltip={ui.submitCheckoutTooltip}
+                                disabled={!hasValidLine}
                             />
-                        }
-                        bodyClassName="space-y-3"
-                    >
-                        <div className="mb-3">
-                            <MerchantPredictiveSearchInput
-                                placeholder={ui.productSearchPlaceholder}
-                                targets={["checkout_items"]}
-                                onSelect={(item) => {
-                                    const metaProductId = typeof item.meta?.productId === "string" ? item.meta.productId : "";
-                                    const exactNameMatches = products.filter((product) => product.name === item.value || product.name === item.title);
-                                    const matched =
-                                        products.find((product) => product.id === metaProductId) ??
-                                        products.find((product) => product.id === item.id) ??
-                                        (exactNameMatches.length === 1 ? exactNameMatches[0] : null) ??
-                                        null;
-                                    if (!matched) return;
-                                    appendLine(matched.id);
-                                }}
-                            />
-                        </div>
-                        <div className="mb-3 grid gap-2 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3">
-                            <div className="text-sm font-semibold">{ui.usedQuickTitle}</div>
-                            <Input
-                                value={usedProductQuery}
-                                onChange={(event) => setUsedProductQuery(event.currentTarget.value)}
-                                placeholder={ui.usedSearchPlaceholder}
-                            />
-                            {filteredUsedProducts.length === 0 ? (
-                                <div className="text-xs text-[rgb(var(--muted))]">{ui.noSellableUsed}</div>
-                            ) : (
-                                <div className="grid gap-2 md:grid-cols-2">
-                                    {filteredUsedProducts.map((item) => (
-                                        <div key={`used-quick-${item.id}`} className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-2">
-                                            <div className="mb-1 flex items-start justify-between gap-2">
-                                                <div>
-                                                    <div className="text-sm font-medium">{item.name}</div>
-                                                    <div className="text-xs text-[rgb(var(--muted))]">
-                                                        {item.brand} / {item.model} / {item.serialNumber || item.imeiNumber || "-"}
-                                                    </div>
-                                                </div>
-                                                <UsedProductStatusBadge
-                                                    product={{
-                                                        grade: item.grade,
-                                                        gradeLabel: item.gradeLabel,
-                                                        isRefurbished: item.isRefurbished,
-                                                        refurbishmentStatus: item.refurbishmentStatus,
-                                                        saleStatus: item.saleStatus,
-                                                    }}
-                                                />
-                                            </div>
-                                            <div className="flex items-center justify-between gap-2">
-                                                <div className="text-sm">
-                                                    {ui.salePrice}
-                                                    {formatMoney(item.salePrice ?? item.suggestedSalePrice ?? 0, lang)}
-                                                </div>
-                                                <div className="flex gap-1">
-                                                    <IconActionButton
-                                                        href={`/products/used/${encodeURIComponent(item.id)}`}
-                                                        icon={Eye}
-                                                        label={ui.viewUsedProduct}
-                                                        tooltip={ui.viewUsedProductTooltip}
-                                                    />
-                                                    <IconActionButton
-                                                        icon={ShoppingCart}
-                                                        label={ui.addToCart}
-                                                        tooltip={ui.addToCartTooltip}
-                                                        onClick={() => appendUsedProductLine(item.id)}
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="grid gap-2">
-                            {lineDetails.map(({ line, product, usedProduct, unitPrice, subtotal }, index) => {
-                                const resolvedName = usedProduct?.name ?? product?.name ?? "";
-                                const resolvedId = usedProduct?.id ?? product?.id ?? "";
-                                return (
-                                    <div key={line.id} className="grid gap-2 rounded-lg border border-[rgb(var(--border))] p-3 md:grid-cols-[2fr_1fr_1fr_1fr_auto]">
-                                        <label className="grid gap-1 text-sm">
-                                            <span className="text-xs text-[rgb(var(--muted))]">
-                                                {ui.lineProduct.replace("{n}", String(index + 1))}
-                                            </span>
-                                            {line.isUsedProduct ? (
-                                                <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2">
-                                                    <div className="font-medium">{usedProduct?.name ?? ui.delistedUsed}</div>
-                                                    <div className="text-xs text-[rgb(var(--muted))]">
-                                                        {ui.usedTag} / {usedProduct?.brand || "-"} / {usedProduct?.model || "-"} /{" "}
-                                                        {usedProduct?.serialNumber || usedProduct?.imeiNumber || "-"}
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <Select
-                                                    value={line.productId}
-                                                    onChange={(event) => {
-                                                        const value = event.target.value;
-                                                        setLines((prev) =>
-                                                            prev.map((row) => (row.id === line.id ? { ...row, productId: value, isUsedProduct: false, usedProductId: undefined } : row)),
-                                                        );
-                                                    }}
-                                                >
-                                                    <option value="">{ui.selectProduct}</option>
-                                                    {products.map((item) => (
-                                                        <option key={item.id} value={item.id}>
-                                                            {ui.productOptionLine
-                                                                .replace("{name}", item.name)
-                                                                .replace("{unitPrice}", formatMoney(item.price, lang))
-                                                                .replace("{onHand}", String(item.onHandQty ?? item.stock))
-                                                                .replace("{reserved}", String(item.reservedQty ?? 0))
-                                                                .replace(
-                                                                    "{available}",
-                                                                    String(
-                                                                        item.availableQty ??
-                                                                            Math.max((item.onHandQty ?? item.stock) - (item.reservedQty ?? 0), 0),
-                                                                    ),
-                                                                )}
-                                                        </option>
-                                                    ))}
-                                                </Select>
-                                            )}
-                                        </label>
-                                        <label className="grid gap-1 text-sm">
-                                            <span className="text-xs text-[rgb(var(--muted))]">{ui.qty}</span>
-                                            <Input
-                                                type="number"
-                                                min={1}
-                                                value={line.isUsedProduct ? 1 : line.qty}
-                                                disabled={line.isUsedProduct}
-                                                onChange={(event) => {
-                                                    const value = Math.max(1, Number.parseInt(event.target.value || "1", 10));
-                                                    setLines((prev) => prev.map((row) => (row.id === line.id ? { ...row, qty: value } : row)));
-                                                }}
-                                            />
-                                        </label>
-                                        <div className="grid gap-1 text-sm">
-                                            <span className="text-xs text-[rgb(var(--muted))]">{ui.unitPrice}</span>
-                                            <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2">
-                                                {formatMoney(unitPrice, lang)}
-                                            </div>
-                                        </div>
-                                        <div className="grid gap-1 text-sm">
-                                            <span className="text-xs text-[rgb(var(--muted))]">{ui.subtotal}</span>
-                                            <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2">
-                                                {formatMoney(subtotal, lang)}
-                                            </div>
-                                        </div>
-                                        <div className="flex items-end justify-end gap-1">
-                                            {line.isUsedProduct && usedProduct ? (
-                                                <IconActionButton
-                                                    href={`/products/used/${encodeURIComponent(usedProduct.id)}`}
-                                                    icon={Eye}
-                                                    label={ui.view}
-                                                    tooltip={ui.viewUsedShortTooltip}
-                                                />
-                                            ) : null}
-                                            <IconActionButton
-                                                icon={Trash2}
-                                                label={ui.remove}
-                                                tooltip={ui.removeLineTooltip}
-                                                onClick={() => setLines((prev) => prev.filter((row) => row.id !== line.id))}
-                                            />
-                                        </div>
-
-                                        <input type="hidden" name="lineProductId[]" value={resolvedId} />
-                                        <input type="hidden" name="lineProductName[]" value={resolvedName} />
-                                        <input type="hidden" name="lineQty[]" value={String(line.isUsedProduct ? 1 : Math.max(1, line.qty))} />
-                                        <input type="hidden" name="lineUnitPrice[]" value={String(unitPrice)} />
-                                        <input type="hidden" name="lineIsUsedProduct[]" value={line.isUsedProduct ? "1" : "0"} />
-                                        <input type="hidden" name="lineUsedProductId[]" value={line.usedProductId ?? ""} />
-                                        <input type="hidden" name="lineUsedBrand[]" value={usedProduct?.brand ?? ""} />
-                                        <input type="hidden" name="lineUsedModel[]" value={usedProduct?.model ?? ""} />
-                                        <input type="hidden" name="lineUsedGrade[]" value={usedProduct?.gradeLabel || usedProduct?.grade || ""} />
-                                        <input type="hidden" name="lineUsedSerialOrImei[]" value={usedProduct?.serialNumber || usedProduct?.imeiNumber || ""} />
-                                    </div>
-                                );
-                            })}
+                            <IconTextActionButton icon={Eye} href="/dashboard/receipts" label={ui.receiptsHub} tooltip={ui.receiptsHubTooltip} />
                         </div>
                     </MerchantSectionCard>
-
-                    <MerchantSectionCard title={ui.receiptPreview}>
-                        <div className="grid gap-1 text-sm">
-                            <div>
-                                {ui.previewCustomer}{" "}
-                                {customerMode === "customer" ? selectedCustomer?.name || ui.notSelected : defaultCompanyCustomer.name}
-                            </div>
-                            {customerMode !== "customer" &&
-                            selectedPromotions.some(
-                                (activity) => activity.effectType === "create_entitlement" || activity.effectType === "create_pickup_reservation",
-                            ) ? (
-                                <div className="text-xs text-[rgb(var(--muted))]">{ui.walkinPromotionHint}</div>
-                            ) : null}
-                            <div>
-                                {ui.previewPriceEffects}{" "}
-                                {selectedPromotions
-                                    .filter((activity) => activity.effectType === "discount" || activity.effectType === "bundle_price" || activity.effectType === "gift_item")
-                                    .map((activity) => `${activity.promotionName}（${activityEffectText(activity.effectType, ui)}）`)
-                                    .join("、") || ui.none}
-                            </div>
-                            <div>
-                                {ui.previewEntitlements}{" "}
-                                {selectedPromotions
-                                    .filter((activity) => activity.effectType === "create_entitlement")
-                                    .map((activity) => {
-                                        const scopeText =
-                                            activity.scopeType === "product"
-                                                ? activity.productName || activity.productId || ui.entitlementScopeProduct
-                                                : activity.categoryName || activity.categoryId || ui.entitlementScopeCategory;
-                                        return ui.entitlementPreviewRow
-                                            .replace("{name}", activity.promotionName)
-                                            .replace("{scope}", scopeText)
-                                            .replace("{qty}", String(activity.entitlementQty));
-                                    })
-                                    .join("、") || ui.none}
-                            </div>
-                            <div>
-                                {ui.previewPickup}{" "}
-                                {selectedPromotions
-                                    .filter((activity) => activity.effectType === "create_pickup_reservation")
-                                    .map((activity) =>
-                                        ui.pickupPreviewRow.replace("{name}", activity.promotionName).replace("{qty}", String(activity.reservationQty)),
-                                    )
-                                    .join("、") || ui.none}
-                            </div>
-                            <div>
-                                {ui.previewCases}{" "}
-                                {selectedCases.length > 0
-                                    ? selectedCases.map((ticket) => toCaseNo(ticket)).join("、")
-                                    : ui.noCasesLinked}
-                            </div>
-                            <div>
-                                {ui.previewPaymentMethod} {paymentMethod === "card" ? ui.paymentCard : ui.paymentCash}
-                            </div>
-                            <div>
-                                {ui.previewPaymentStatus}{" "}
-                                {paymentStatus === "unpaid"
-                                    ? ui.statusUnpaid
-                                    : paymentStatus === "deposit"
-                                      ? ui.statusDeposit
-                                      : paymentStatus === "installment"
-                                        ? ui.statusInstallment
-                                        : ui.statusPaid}
-                            </div>
-                            <div className="text-base font-semibold">
-                                {ui.total}
-                                {formatMoney(totalAmount, lang)}
-                            </div>
-                        </div>
-                    </MerchantSectionCard>
-
-                    <div className="flex flex-wrap gap-2">
-                        <IconTextActionButton
-                            icon={ShoppingCart}
-                            type="submit"
-                            label={ui.submitCheckout}
-                            tooltip={ui.submitCheckoutTooltip}
-                            disabled={!hasValidLine}
-                        />
-                        <IconTextActionButton icon={Eye} href="/dashboard/receipts" label={ui.receiptsHub} tooltip={ui.receiptsHubTooltip} />
-                    </div>
                 </form>
             </MerchantSectionCard>
         </div>

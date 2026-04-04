@@ -1,3 +1,5 @@
+import type { CheckoutDocument } from "@/lib/schema";
+
 export type PaymentMethod = "cash" | "card";
 export type PaymentStatus = "unpaid" | "paid" | "deposit" | "installment";
 export type SalePromotionEffectType = "discount" | "bundle_price" | "gift_item" | "create_entitlement" | "create_pickup_reservation";
@@ -93,6 +95,7 @@ export type Sale = {
     createdEntitlements?: SaleCreatedEntitlementRef[];
     createdPickupReservations?: SaleCreatedPickupReservationRef[];
     lineItems?: SaleLineItem[];
+    checkoutDocument?: CheckoutDocument;
     companyId?: string;
     createdAt: number;
     updatedAt: number;

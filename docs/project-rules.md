@@ -60,13 +60,21 @@ Path: `src/components/ui`
 - reusable presentational components only
 - no business logic
 
+### Schema Layer
+
+Path: `src/lib/schema`
+
+- centralize Firestore schema helpers, document/module enums, and structured form/document models
+- new receipt / invoice / checkout document contracts should live here and export through `src/lib/schema/index.ts`
+- route / UI code should consume canonical schema modules instead of rebuilding TW / AU document state ad hoc
+
 ### Domain Layer
 
 Path: `src/lib/types`
 
-- centralize all schemas, enums, and types
+- centralize entity-focused shared types
 - keep entity definitions aligned and reusable
-- new shared types should prefer focused modules over compatibility barrels
+- new shared entity types should prefer focused modules over compatibility barrels
 
 ### Service Layer
 
@@ -80,6 +88,11 @@ Path: `src/lib/services`
 - detail pages that join multiple domains should prefer one focused detail read-model service, then let routes consume that aggregate
 - dashboard / workspace routes should prefer one focused route-data read-model service over page-local service orchestration
 - write-side route actions should prefer focused `merchant/*-write.service.ts` wrappers over direct action imports from `src/lib/services/commerce.ts`
+- account settings / profile pages should prefer one focused read-model service plus one focused write wrapper, instead of parsing auth metadata / settings forms directly inside routes
+- auth account summary、business profile、regional receipt settings 應維持分離；不要再把登入身分、公司主資料、地區單據欄位混成同一份 route-local state
+- checkout / POS 應透過 focused selector / document helper 讀取可結帳案件與地區化單據設定；不要把 TW / AU 欄位、案件 eligibility 判斷寫死在 route 或 page-local string compare
+- localized invoice / receipt flows 應優先延續 `invoice-settings.service.ts`、`invoice-track.service.ts`、`invoice-draft.service.ts`、`invoice-issue.service.ts`、`invoice-void.service.ts`、`invoice-platform.service.ts`、`receipt-document.service.ts`；route layer 應透過 `merchant/invoice-admin-*.service.ts` 讀寫，而不是直接重組 platform payload 或從 sales list 臨時拼單據資料
+- `receiptDocuments` 是 canonical 已開立單據主資料；TW 電子發票、AU receipt / invoice / tax invoice、作廢、重開、platform log 都應沿用同一條資料流，不要再新增平行 document master collection
 - if a service introduces warm cache / memory cache, the same module must update invalidation or memory sync in every write path touched this round
 - no heavy business logic inside `page.tsx`
 - new read-side callers should prefer focused service modules over `src/lib/services/commerce.ts`
@@ -246,6 +259,17 @@ Company B customer:
 - `users/{uid}` 保存登入身分與租戶關聯
 - `companies/{companyId}/customers/{customerId}` 保存客戶商業資料
 
+### Account / Business Profile / Receipt Settings
+
+- auth identity summary 只顯示登入身分欄位（如 accountType / email / uid / provider / metadata）
+- business master data canonical name 是 `BusinessProfile`
+- 地區單據與稅務欄位 canonical name 是 `RegionalReceiptSettings`
+- receipt / invoice preview model 應由 `BusinessProfile` + `RegionalReceiptSettings` 推導，不要另存一份 page-local duplicated company receipt state
+- Firestore canonical settings docs 優先拆為:
+  - `companies/{companyId}/settings/businessProfile`
+  - `companies/{companyId}/settings/regionalReceiptSettings`
+- 舊 `companies/{companyId}/settings/companyProfile` 若仍存在，只能當 compatibility bridge／fallback，不應再作為新功能的 canonical source
+
 ### Product / Item
 
 - business record canonical name 是 `Product`
@@ -337,7 +361,8 @@ companies/{companyId}
   -> staffMembers/{staffMemberId}
   -> permissionLevels/lv{n}  （Lv1–Lv9；預設能力映射見 `permission-level.service.ts` 之 `DEFAULT_PERMISSION_MAP`）
   -> auditLogs/{auditLogId}  （操作稽核：誰對哪個目標做了什麼；與 deleteLogs 分開）
-  -> settings/companyProfile
+  -> settings/businessProfile
+  -> settings/regionalReceiptSettings
   -> settings/delete-control
   -> deleteLogs/{logId}
 ```
@@ -432,6 +457,8 @@ UI 再翻譯顯示:
 主要相關檔案:
 
 - `src/features/business/components/BusinessLandingPage.tsx`
+- `src/lib/types/builder.ts`、`src/lib/constants/builder-demo.ts`（首頁 Builder 結構化設定與 mock；媒體欄位預設 `storageProvider: external-url`）
+- `src/components/ui/builder/*`（`HeroBackgroundMedia`、`AutoCarouselBanner`、`BuilderMediaField` 等；媒體上傳 UI 為預留，正式儲存前請走外部 URL）
 - `src/features/business/services/businessHomepageContent.ts`
 - `src/styles/globals.css`
 - `src/app/layout.tsx`

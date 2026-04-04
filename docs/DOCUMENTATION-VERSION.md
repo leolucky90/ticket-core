@@ -15,8 +15,8 @@
 
 | 項目 | 值 |
 | --- | --- |
-| **版本** | **V1.18** |
-| **最後更正** | **2026-04-01** |
+| **版本** | **V1.25** |
+| **最後更正** | **2026-04-04** |
 
 ---
 
@@ -34,6 +34,13 @@
 
 | 版本 | 日期 | 摘要 |
 | --- | --- | --- |
+| V1.25 | 2026-04-04 | invoice / receipt document canonical baseline：新增 `settings/invoiceSettings`、`invoiceTrackSettings`、`invoiceDrafts`、`receiptDocuments`、`invoiceVoids`、`invoiceCarriers`、`invoiceLogs` 文件；`/dashboard/receipts*` 與 `/settings/account/invoices*` 改走 merchant invoice-admin read/write wrappers |
+| V1.24 | 2026-04-04 | checkout / POS canonical baseline：`/dashboard/checkout` 改走 `checkout-route-data.service` + `checkout-case-selector.service` + `services/checkout/document-service`；案件卡預設隱藏、TW/AU 單據設定與 preview 統一吃 `businessProfile` / `regionalReceiptSettings`，sale snapshot 新增 `checkoutDocument` |
+| V1.23 | 2026-04-04 | 帳戶設定 canonical split：`/settings/account` 改為 auth summary / `businessProfile` / `regionalReceiptSettings` 三段分離；新增 receipt preview model、Firestore settings 路徑與 focused account-settings read/write docs |
+| V1.22 | 2026-04-04 | 結帳 `CheckoutWorkspace` 客戶區塊再收斂：`過路客` 模式直接隱藏搜尋欄，僅在 `選擇客戶` 時顯示搜尋輸入；同步更新 `project-summary` |
+| V1.21 | 2026-04-04 | 結帳 `CheckoutWorkspace` 客戶查找 UX 收斂：未輸入關鍵字不預覽客戶清單，且只有所選客戶存在未關閉 Ticket 時才顯示案件勾選卡；同步更新 `project-summary` |
+| V1.20 | 2026-04-01 | 官方／租戶首頁展示優化：`HeroBackgroundMedia` 內容卡尺寸與 CTA 層級、`AnimatedBackground` layers、mock 影片／圖輪播素材與文案；`OfficialPostHeroSection` 收斂第一屏後節奏；`BuilderMediaField` 上傳 disabled + 指定備註文案；同步 `ui-text`／文件版本 |
+| V1.19 | 2026-04-01 | 新增首頁 Builder 模組（`HeroBackgroundMedia`、`AutoCarouselBanner`、媒體欄位 UI）、`lib/types/builder` 與 `builder-demo` mock；官方 `/` 與租戶 `ShowHomePage` 整合；Demo `/demo/builder`；同步更新 `project-summary`／`codebase-map` |
 | V1.18 | 2026-04-01 | official homepage demo/test account section 的官方入口 URL 改為依目前 request host 動態顯示，不再寫死 `localhost`；同步更新 `project-summary` |
 | V1.17 | 2026-04-01 | official homepage demo/test account section 補上 Company A / B public route 直達連結，方便外部測試租戶首頁；同步更新 `project-summary` |
 | V1.16 | 2026-04-01 | auth 註冊邊界收斂：官方 `/register/company` 固定為用戶註冊，`/register/customer` 僅保留 tenant-scoped 商家客戶註冊；同步更新 `project-summary`／`codebase-map`／`multi-tenant-data-flow` |

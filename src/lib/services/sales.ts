@@ -14,7 +14,13 @@ import type {
     SalePricingAdjustment,
 } from "@/lib/types/sale";
 import type { CursorPageResult } from "@/lib/types/pagination";
-import type { CheckoutPromotionSelection, PromotionEffectType } from "@/lib/schema";
+import {
+    createEmptyRegionalReceiptSettings,
+    normalizeCheckoutDocument,
+    type CheckoutDocument,
+    type CheckoutPromotionSelection,
+    type PromotionEffectType,
+} from "@/lib/schema";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
@@ -26,6 +32,10 @@ import { evaluateCheckoutPromotions } from "@/lib/services/promotions";
 import { getUserCompanyId, getUserDoc, toAccountType } from "@/lib/services/user.service";
 import { listTickets, setTicketStatusById } from "@/lib/services/ticket";
 import { attachUsedProductToReceipt, getUsedProductById } from "@/lib/services/used-products.service";
+import { getRegionalReceiptSettings } from "@/lib/services/regional-receipt-settings.service";
+import { readCheckoutDocumentFromFormData } from "@/lib/services/checkout/document-service";
+import { getBusinessProfile } from "@/lib/services/business-profile.service";
+import { createAndIssueCheckoutReceiptDocument } from "@/lib/services/invoice-issue.service";
 import type { Ticket } from "@/lib/types/ticket";
 
 const memory: { salesByCompany: Record<string, Sale[]> } = { salesByCompany: {} };
@@ -43,6 +53,7 @@ const MAX_PROMOTION_REFS = 40;
 
 type SessionScope = {
     companyId: string;
+    uid: string;
 };
 type SaleCursor = {
     checkoutAt: number;
@@ -188,6 +199,14 @@ function saleMatchesKeyword(sale: Sale, keyword?: string): boolean {
         sale.customerEmail ?? "",
         sale.caseId ?? "",
         sale.caseTitle ?? "",
+        sale.checkoutDocument?.documentMode ?? "",
+        sale.checkoutDocument?.buyerType ?? "",
+        sale.checkoutDocument?.tw.taxId ?? "",
+        sale.checkoutDocument?.tw.carrierCode ?? "",
+        sale.checkoutDocument?.tw.donationCode ?? "",
+        sale.checkoutDocument?.au.buyerName ?? "",
+        sale.checkoutDocument?.au.buyerAbn ?? "",
+        sale.checkoutDocument?.businessRegion ?? "",
         String(sale.checkoutAt),
         String(sale.updatedAt),
         sale.companyId ?? "",
@@ -373,6 +392,17 @@ function normalizeSale(input: Partial<Sale> & { id: string }): Sale {
             : legacyCaseId
               ? [{ caseId: legacyCaseId, caseNo: legacyCaseId, caseTitle: legacyCaseTitle }]
               : [];
+    const checkoutDocument = input.checkoutDocument
+        ? normalizeCheckoutDocument(
+              input.checkoutDocument,
+              createEmptyRegionalReceiptSettings(
+                  companyId || "company",
+                  "system",
+                  input.checkoutDocument.businessRegion === "AU" ? "AU" : "TW",
+              ),
+              safeText(toStr(input.customerName), MAX_TEXT),
+          )
+        : undefined;
 
     return {
         id: input.id,
@@ -397,6 +427,7 @@ function normalizeSale(input: Partial<Sale> & { id: string }): Sale {
         createdEntitlements,
         createdPickupReservations,
         lineItems,
+        checkoutDocument,
         companyId: companyId || undefined,
         createdAt,
         updatedAt: typeof input.updatedAt === "number" ? input.updatedAt : createdAt,
@@ -457,7 +488,10 @@ async function resolveSessionScope(requireCompany = true): Promise<SessionScope 
     const companyId = normalizeCompanyId(getUserCompanyId(user, session.uid));
     if (!companyId) return null;
 
-    return { companyId };
+    return {
+        companyId,
+        uid: session.uid,
+    };
 }
 
 async function getFirestoreDb() {
@@ -495,6 +529,7 @@ type CreateSaleParams = {
     createdEntitlements?: SaleCreatedEntitlementRef[];
     createdPickupReservations?: SaleCreatedPickupReservationRef[];
     lineItems: SaleLineItem[];
+    checkoutDocument?: CheckoutDocument;
 };
 
 function buildSaleRecord(companyId: string, docId: string, params: CreateSaleParams): Sale {
@@ -522,6 +557,7 @@ function buildSaleRecord(companyId: string, docId: string, params: CreateSalePar
         createdEntitlements: params.createdEntitlements,
         createdPickupReservations: params.createdPickupReservations,
         lineItems: params.lineItems,
+        checkoutDocument: params.checkoutDocument,
         companyId,
         createdAt: ts,
         updatedAt: ts,
@@ -1115,6 +1151,12 @@ export async function createCheckoutSale(formData: FormData): Promise<void> {
 
     const subtotal = lineItems.reduce((sum, row) => sum + row.subtotal, 0);
     const receiptNo = buildReceiptNo(checkoutAt);
+    const receiptSettings = (await getRegionalReceiptSettings()) ?? createEmptyRegionalReceiptSettings(scope.companyId, "system");
+    const checkoutDocument = readCheckoutDocumentFromFormData({
+        formData,
+        settings: receiptSettings,
+        buyerName: customerName,
+    });
     const evaluatedPromotion = evaluateCheckoutPromotions({
         selectedPromotions,
         cartLines: lineItems,
@@ -1153,6 +1195,7 @@ export async function createCheckoutSale(formData: FormData): Promise<void> {
         createdEntitlements: [],
         createdPickupReservations: [],
         lineItems,
+        checkoutDocument,
     };
 
     let createdSale: Sale | null = null;
@@ -1167,6 +1210,18 @@ export async function createCheckoutSale(formData: FormData): Promise<void> {
         for (const row of caseRefs) {
             await setTicketStatusById(row.caseId, "closed");
         }
+    }
+
+    if (createdSale?.checkoutDocument) {
+        const businessProfile = await getBusinessProfile();
+        const receiptSettings = (await getRegionalReceiptSettings()) ?? createEmptyRegionalReceiptSettings(scope.companyId, scope.uid);
+        await createAndIssueCheckoutReceiptDocument({
+            companyId: scope.companyId,
+            operatorUid: scope.uid,
+            sale: createdSale,
+            businessProfile,
+            regionalReceiptSettings: receiptSettings,
+        });
     }
 
     const createdEntitlementRefs: SaleCreatedEntitlementRef[] = [];

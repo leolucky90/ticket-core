@@ -147,15 +147,149 @@ export type { AuditLog } from "@/lib/schema/auditLogs";
 
 export { auditLogsCollectionPath, normalizeAuditLog } from "@/lib/schema/auditLogs";
 
-export type {
-    CompanyProfile,
-} from "@/lib/schema/companyProfile";
+export type { BusinessProfile } from "@/lib/schema/business-profile.schema";
 
 export {
-    companyProfileDocPath,
-    isCompanyProfile,
-    normalizeCompanyProfile,
-} from "@/lib/schema/companyProfile";
+    businessProfileDocPath,
+    createEmptyBusinessProfile,
+    isBusinessProfile,
+    normalizeBusinessProfile,
+} from "@/lib/schema/business-profile.schema";
+
+export type {
+    AuReceiptSettings,
+    BusinessRegion,
+    DocumentMode,
+    InvoiceTitleMode,
+    RegionalReceiptSettings,
+    TwReceiptSettings,
+} from "@/lib/schema/regional-receipt-settings.schema";
+
+export {
+    BUSINESS_REGIONS,
+    createEmptyRegionalReceiptSettings,
+    DOCUMENT_MODES,
+    getRegionalReceiptDefaults,
+    INVOICE_TITLE_MODES,
+    isRegionalReceiptSettings,
+    normalizeRegionalReceiptSettings,
+    regionalReceiptSettingsDocPath,
+} from "@/lib/schema/regional-receipt-settings.schema";
+
+export type { ReceiptTemplatePreviewModel } from "@/lib/schema/receipt-template.schema";
+
+export { resolveReceiptTemplatePreviewModel } from "@/lib/schema/receipt-template.schema";
+
+export type { InvoiceItem } from "@/lib/schema/invoice-item.schema";
+
+export { normalizeInvoiceItem } from "@/lib/schema/invoice-item.schema";
+
+export type { InvoiceCarrierRecord, InvoiceCarrierType } from "@/lib/schema/invoice-carrier.schema";
+
+export {
+    invoiceCarrierDocPath,
+    invoiceCarriersCollectionPath,
+    INVOICE_CARRIER_TYPES,
+    normalizeInvoiceCarrierRecord,
+} from "@/lib/schema/invoice-carrier.schema";
+
+export type {
+    InvoiceBuyerType,
+    InvoiceIntegrationMode,
+    InvoicePlatformStatus,
+    InvoiceStatus,
+    InvoiceVoidStatus,
+    ReceiptDocumentRecord,
+    ReceiptDocumentType,
+} from "@/lib/schema/receipt-document.schema";
+
+export {
+    INVOICE_BUYER_TYPES,
+    INVOICE_INTEGRATION_MODES,
+    INVOICE_PLATFORM_STATUSES,
+    INVOICE_STATUSES,
+    INVOICE_VOID_STATUSES,
+    normalizeReceiptDocumentRecord,
+    RECEIPT_DOCUMENT_TYPES,
+    receiptDocumentDocPath,
+    receiptDocumentsCollectionPath,
+} from "@/lib/schema/receipt-document.schema";
+
+export type { InvoiceRecord } from "@/lib/schema/invoice.schema";
+
+export { invoiceDocPath, invoicesCollectionPath, normalizeInvoiceRecord } from "@/lib/schema/invoice.schema";
+
+export type { InvoiceDraftRecord, InvoiceDraftStatus } from "@/lib/schema/invoice-draft.schema";
+
+export {
+    invoiceDraftDocPath,
+    invoiceDraftsCollectionPath,
+    INVOICE_DRAFT_STATUSES,
+    normalizeInvoiceDraftRecord,
+} from "@/lib/schema/invoice-draft.schema";
+
+export type { InvoiceVoidRecord } from "@/lib/schema/invoice-void.schema";
+
+export {
+    invoiceVoidDocPath,
+    invoiceVoidsCollectionPath,
+    normalizeInvoiceVoidRecord,
+} from "@/lib/schema/invoice-void.schema";
+
+export type { InvoiceLogAction, InvoiceLogLevel, InvoiceLogRecord } from "@/lib/schema/invoice-log.schema";
+
+export {
+    invoiceLogDocPath,
+    invoiceLogsCollectionPath,
+    INVOICE_LOG_ACTIONS,
+    INVOICE_LOG_LEVELS,
+    normalizeInvoiceLogRecord,
+} from "@/lib/schema/invoice-log.schema";
+
+export type { InvoiceSettings } from "@/lib/schema/invoice-settings.schema";
+
+export {
+    createEmptyInvoiceSettings,
+    invoiceSettingsDocPath,
+    normalizeInvoiceSettings,
+} from "@/lib/schema/invoice-settings.schema";
+
+export type { InvoiceTrackSetting } from "@/lib/schema/invoice-track-settings.schema";
+
+export {
+    invoiceTrackSettingDocPath,
+    invoiceTrackSettingsCollectionPath,
+    normalizeInvoiceTrackSetting,
+} from "@/lib/schema/invoice-track-settings.schema";
+
+export type { CheckoutCaseSelection } from "@/lib/schema/checkout-case-selection.schema";
+
+export {
+    createCheckoutCaseSelectionFromTicket,
+    normalizeCheckoutCaseSelection,
+} from "@/lib/schema/checkout-case-selection.schema";
+
+export type {
+    CheckoutBuyerType,
+    CheckoutCarrierType,
+    CheckoutDocument,
+    CheckoutDocumentAuFields,
+    CheckoutDocumentMode,
+    CheckoutDocumentTwFields,
+    CheckoutPrintMode,
+} from "@/lib/schema/checkout-document.schema";
+
+export {
+    allowedCheckoutDocumentModesForRegion,
+    CHECKOUT_BUYER_TYPES,
+    CHECKOUT_CARRIER_TYPES,
+    CHECKOUT_DOCUMENT_MODES,
+    checkoutDocumentModeFromRegionalMode,
+    CHECKOUT_PRINT_MODES,
+    createDefaultCheckoutDocument,
+    normalizeCheckoutDocument,
+    resolveCheckoutDocumentModeFromRegionalSettings,
+} from "@/lib/schema/checkout-document.schema";
 
 export type {
     CaseRecord,

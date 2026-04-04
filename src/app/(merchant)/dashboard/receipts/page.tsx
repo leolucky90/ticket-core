@@ -1,44 +1,56 @@
+import { Hash, Settings } from "lucide-react";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { ReceiptWorkspace } from "@/components/dashboard/ReceiptWorkspace";
 import { MerchantPageShell } from "@/components/merchant/shell";
+import { IconTextActionButton } from "@/components/ui/icon-text-action-button";
 import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
-import { decodeCursorStack, encodeCursorStack, parseListPageSize } from "@/lib/pagination/query-controls";
-import { queryCheckoutSalesPage } from "@/lib/services/sales";
+import { getReceiptDocumentsRouteData } from "@/lib/services/merchant/invoice-admin-read-model.service";
+import { parseInvoiceStatus } from "@/lib/services/merchant/invoice-admin-write.service";
 
 type ReceiptsPageProps = {
-    searchParams: Promise<{ q?: string; pageSize?: string; cursor?: string; cursorStack?: string }>;
+    searchParams: Promise<{ q?: string; status?: string; pageSize?: string; flash?: string; ts?: string }>;
 };
 
 export default async function DashboardReceiptsPage({ searchParams }: ReceiptsPageProps) {
     const sp = await searchParams;
     const lang = getUiLanguage((await cookies()).get("lang")?.value);
     const p = getUiText(lang).merchantStandalonePages.receipts;
+    const invoiceUi = getUiText(lang).invoiceAdmin;
     const keyword = (sp.q ?? "").trim();
-    const currentCursor = (sp.cursor ?? "").trim();
-    const currentCursorStack = decodeCursorStack((sp.cursorStack ?? "").trim());
-    const receiptPage = await queryCheckoutSalesPage({
+    const statusFilter = parseInvoiceStatus((sp.status ?? "").trim());
+    const limit = Math.max(1, Math.min(200, Number((sp.pageSize ?? "").trim()) || 100));
+    const routeData = await getReceiptDocumentsRouteData({
         keyword,
-        pageSize: parseListPageSize((sp.pageSize ?? "").trim(), "20"),
-        cursor: currentCursor || undefined,
+        status: statusFilter,
+        limit,
     });
-    const previousCursor = currentCursorStack.at(-1) ?? "";
-    const previousCursorStack = encodeCursorStack(currentCursorStack.slice(0, -1));
-    const nextCursorStack = encodeCursorStack(currentCursor ? [...currentCursorStack, currentCursor] : currentCursorStack);
+
+    if (!routeData) {
+        redirect("/login?next=/dashboard/receipts");
+    }
 
     return (
-        <MerchantPageShell title={p.title} subtitle={p.subtitle} width="index">
+        <MerchantPageShell
+            title={p.title}
+            subtitle={p.subtitle}
+            width="index"
+            actions={
+                <div className="flex flex-wrap gap-2">
+                    <IconTextActionButton icon={Settings} href="/settings/account/invoices" label={invoiceUi.settingsPageShort} tooltip={invoiceUi.settingsPageShort} />
+                    <IconTextActionButton icon={Hash} href="/settings/account/invoice-tracks" label={invoiceUi.trackPageShort} tooltip={invoiceUi.trackPageShort} />
+                </div>
+            }
+        >
+            <div className="grid gap-4">
+                {sp.flash ? <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2 text-sm">{sp.flash}</div> : null}
             <ReceiptWorkspace
                 lang={lang}
-                receipts={receiptPage.items}
+                documents={routeData.documents}
                 keyword={keyword}
-                pageSize={String(receiptPage.pageSize)}
-                currentCursor={currentCursor}
-                previousCursor={previousCursor}
-                previousCursorStack={previousCursorStack}
-                nextCursor={receiptPage.nextCursor}
-                nextCursorStack={nextCursorStack}
-                hasNextPage={receiptPage.hasNextPage}
+                statusFilter={statusFilter}
             />
+            </div>
         </MerchantPageShell>
     );
 }

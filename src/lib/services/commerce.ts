@@ -1155,6 +1155,27 @@ function getRedirectInventoryView(formData: FormData, fallback: InventoryView = 
     return fallback;
 }
 
+function getRedirectMarketingSection(formData: FormData): string | undefined {
+    const raw = safeText(formData.get("marketingSection"), 40);
+    if (raw === "supplier" || raw === "category" || raw === "brand" || raw === "used") return raw;
+    return undefined;
+}
+
+type DashboardRedirectOptions = {
+    inventoryView?: InventoryView;
+    redirectPath?: ProductRedirectPath;
+    marketingSection?: string;
+};
+
+function mergeDashboardRedirectOptions(
+    formData: FormData,
+    tab: string,
+    base?: { inventoryView?: InventoryView; redirectPath?: ProductRedirectPath },
+): DashboardRedirectOptions {
+    const marketingSection = tab === "marketing" ? getRedirectMarketingSection(formData) : undefined;
+    return { ...base, ...(marketingSection ? { marketingSection } : {}) };
+}
+
 function getProductRedirectPath(formData: FormData): ProductRedirectPath {
     const raw = safeText(formData.get("redirectPath"), 400);
     if (!raw.startsWith("/dashboard/products")) return "";
@@ -1207,21 +1228,22 @@ async function enforceDeletePassword(
     tab: string,
     options?: { inventoryView?: InventoryView; redirectPath?: ProductRedirectPath },
 ): Promise<{ reason: string; settings: SecuritySettings }> {
+    const redirectOpts = mergeDashboardRedirectOptions(formData, tab, options);
     const settings = await getDeleteSecuritySettings(scope.companyId);
     const reason = safeText(formData.get("deleteReason"), MAX_LONG_TEXT);
     if (settings.requireReasonOnDelete && !reason) {
-        dashboardRedirect(tab, "delete_reason_required", options);
+        dashboardRedirect(tab, "delete_reason_required", redirectOpts);
     }
 
     const password = toRawString(formData.get("confirmPassword"));
     const shouldVerifyPassword = !settings.deleteButtonEnabled && settings.requirePasswordWhenDeleteDisabled;
     if (shouldVerifyPassword) {
         if (!password) {
-            dashboardRedirect(tab, "delete_auth_required", options);
+            dashboardRedirect(tab, "delete_auth_required", redirectOpts);
         }
         const verified = await verifyEmailPassword(scope.operatorEmail, password);
         if (!verified) {
-            dashboardRedirect(tab, "delete_auth_failed", options);
+            dashboardRedirect(tab, "delete_auth_failed", redirectOpts);
         }
     }
     return { reason, settings };
@@ -1232,7 +1254,7 @@ function debugMarketingAction(event: string, payload: Record<string, unknown>) {
     console.info(`[commerce:marketing] ${event}`, payload);
 }
 
-function dashboardRedirect(tab: string, flash: string, options?: { inventoryView?: InventoryView; redirectPath?: ProductRedirectPath }): never {
+function dashboardRedirect(tab: string, flash: string, options?: DashboardRedirectOptions): never {
     const query = new URLSearchParams();
     query.set("flash", flash);
     query.set("ts", String(Date.now()));
@@ -1242,6 +1264,9 @@ function dashboardRedirect(tab: string, flash: string, options?: { inventoryView
     query.set("tab", tab);
     if (tab === "inventory" && options?.inventoryView) {
         query.set("inventoryView", options.inventoryView);
+    }
+    if (tab === "marketing" && options?.marketingSection) {
+        query.set("marketingSection", options.marketingSection);
     }
     const target = `/dashboard?${query.toString()}`;
     redirect(target);
@@ -2659,7 +2684,8 @@ export async function createRepairBrand(formData: FormData): Promise<void> {
 
     const scope = await resolveSessionScope(true);
     const tab = getRedirectTab(formData, "marketing");
-    if (!scope) dashboardRedirect(tab, "invalid");
+    const rOpts = mergeDashboardRedirectOptions(formData, tab);
+    if (!scope) dashboardRedirect(tab, "invalid", rOpts);
 
     const name = safeText(formData.get("brandName"));
     const linkedCategoryNames = parseBrandCategoryNames(formData);
@@ -2667,7 +2693,7 @@ export async function createRepairBrand(formData: FormData): Promise<void> {
     const usedProductTypes = parseUsedProductTypeNames(formData).filter((typeName) =>
         productTypes.some((row) => row.toLowerCase() === typeName.toLowerCase()),
     );
-    if (!name) dashboardRedirect(tab, "invalid");
+    if (!name) dashboardRedirect(tab, "invalid", rOpts);
 
     const existingCatalogBrand = (await listCatalogBrands()).find((item) => item.name.toLowerCase() === name.toLowerCase());
     if (!existingCatalogBrand) {
@@ -2712,7 +2738,7 @@ export async function createRepairBrand(formData: FormData): Promise<void> {
 
     revalidatePath("/dashboard");
     revalidatePath("/dashboard/products");
-    dashboardRedirect(tab, "brand_created");
+    dashboardRedirect(tab, "brand_created", rOpts);
 }
 
 export async function updateRepairBrand(formData: FormData): Promise<void> {
@@ -2720,7 +2746,8 @@ export async function updateRepairBrand(formData: FormData): Promise<void> {
 
     const scope = await resolveSessionScope(true);
     const tab = getRedirectTab(formData, "marketing");
-    if (!scope) dashboardRedirect(tab, "invalid");
+    const rOpts = mergeDashboardRedirectOptions(formData, tab);
+    if (!scope) dashboardRedirect(tab, "invalid", rOpts);
 
     const brandId = safeText(formData.get("brandId"), 120);
     const name = safeText(formData.get("brandName"));
@@ -2734,10 +2761,10 @@ export async function updateRepairBrand(formData: FormData): Promise<void> {
     const requestedUsedTypes = parseUsedProductTypeNames(formData).filter((typeName) =>
         requestedTypes.some((row) => row.toLowerCase() === typeName.toLowerCase()),
     );
-    if (!brandId || !name) dashboardRedirect(tab, "invalid");
+    if (!brandId || !name) dashboardRedirect(tab, "invalid", rOpts);
 
     const current = (await listRepairBrands()).find((brand) => brand.id === brandId);
-    if (!current) dashboardRedirect(tab, "invalid");
+    if (!current) dashboardRedirect(tab, "invalid", rOpts);
     const nextLinkedCategoryNames = requestedCategoryNames;
     const nextProductTypes = brandTypesMode === "sync" ? requestedTypes : current.productTypes;
     const nextUsedTypes = brandTypesMode === "sync" ? requestedUsedTypes : current.usedProductTypes;
@@ -2772,7 +2799,7 @@ export async function updateRepairBrand(formData: FormData): Promise<void> {
 
     revalidatePath("/dashboard");
     revalidatePath("/dashboard/products");
-    dashboardRedirect(tab, "brand_updated");
+    dashboardRedirect(tab, "brand_updated", rOpts);
 }
 
 export async function renameRepairBrandType(formData: FormData): Promise<void> {
@@ -2780,15 +2807,16 @@ export async function renameRepairBrandType(formData: FormData): Promise<void> {
 
     const scope = await resolveSessionScope(true);
     const tab = getRedirectTab(formData, "marketing");
-    if (!scope) dashboardRedirect(tab, "invalid");
+    const rOpts = mergeDashboardRedirectOptions(formData, tab);
+    if (!scope) dashboardRedirect(tab, "invalid", rOpts);
 
     const brandId = safeText(formData.get("brandId"), 120);
     const oldTypeName = safeText(formData.get("oldTypeName"), 120);
     const nextTypeName = safeText(formData.get("nextTypeName"), 120);
-    if (!brandId || !oldTypeName || !nextTypeName) dashboardRedirect(tab, "invalid");
+    if (!brandId || !oldTypeName || !nextTypeName) dashboardRedirect(tab, "invalid", rOpts);
 
     const current = (await listRepairBrands()).find((brand) => brand.id === brandId);
-    if (!current) dashboardRedirect(tab, "invalid");
+    if (!current) dashboardRedirect(tab, "invalid", rOpts);
 
     const nextProductTypes = normalizeTextArray(
         current.productTypes.map((typeName) => (typeName.toLowerCase() === oldTypeName.toLowerCase() ? nextTypeName : typeName)),
@@ -2845,7 +2873,7 @@ export async function renameRepairBrandType(formData: FormData): Promise<void> {
 
     revalidatePath("/dashboard");
     revalidatePath("/dashboard/products");
-    dashboardRedirect(tab, "brand_type_updated");
+    dashboardRedirect(tab, "brand_type_updated", rOpts);
 }
 
 export async function deleteRepairBrandType(formData: FormData): Promise<void> {
@@ -2853,14 +2881,15 @@ export async function deleteRepairBrandType(formData: FormData): Promise<void> {
 
     const scope = await resolveSessionScope(true);
     const tab = getRedirectTab(formData, "marketing");
-    if (!scope) dashboardRedirect(tab, "invalid");
+    const rOpts = mergeDashboardRedirectOptions(formData, tab);
+    if (!scope) dashboardRedirect(tab, "invalid", rOpts);
 
     const brandId = safeText(formData.get("brandId"), 120);
     const oldTypeName = safeText(formData.get("oldTypeName"), 120);
-    if (!brandId || !oldTypeName) dashboardRedirect(tab, "invalid");
+    if (!brandId || !oldTypeName) dashboardRedirect(tab, "invalid", rOpts);
 
     const current = (await listRepairBrands()).find((brand) => brand.id === brandId);
-    if (!current) dashboardRedirect(tab, "invalid");
+    if (!current) dashboardRedirect(tab, "invalid", rOpts);
 
     const removedModels = getBrandModelsForType(current, oldTypeName);
     const nextProductTypes = current.productTypes.filter((typeName) => typeName.toLowerCase() !== oldTypeName.toLowerCase());
@@ -2904,7 +2933,7 @@ export async function deleteRepairBrandType(formData: FormData): Promise<void> {
 
     revalidatePath("/dashboard");
     revalidatePath("/dashboard/products");
-    dashboardRedirect(tab, "brand_type_deleted");
+    dashboardRedirect(tab, "brand_type_deleted", rOpts);
 }
 
 export async function deleteRepairBrand(formData: FormData): Promise<void> {
@@ -2912,12 +2941,13 @@ export async function deleteRepairBrand(formData: FormData): Promise<void> {
 
     const scope = await resolveSessionScope(true);
     const tab = getRedirectTab(formData, "marketing");
-    if (!scope) dashboardRedirect(tab, "invalid");
+    const rOpts = mergeDashboardRedirectOptions(formData, tab);
+    if (!scope) dashboardRedirect(tab, "invalid", rOpts);
 
     const brandId = safeText(formData.get("brandId"), 120);
-    if (!brandId) dashboardRedirect(tab, "invalid");
+    if (!brandId) dashboardRedirect(tab, "invalid", rOpts);
     const current = (await listRepairBrands()).find((brand) => brand.id === brandId);
-    if (!current) dashboardRedirect(tab, "invalid");
+    if (!current) dashboardRedirect(tab, "invalid", rOpts);
     const deleteGuard = await enforceDeletePassword(formData, scope, tab);
 
     await updateCatalogBrand(brandId, { status: "inactive" });
@@ -2969,7 +2999,7 @@ export async function deleteRepairBrand(formData: FormData): Promise<void> {
 
     revalidatePath("/dashboard");
     revalidatePath("/dashboard/products");
-    dashboardRedirect(tab, "brand_deleted");
+    dashboardRedirect(tab, "brand_deleted", rOpts);
 }
 
 export async function createRepairModel(formData: FormData): Promise<void> {
@@ -2977,15 +3007,16 @@ export async function createRepairModel(formData: FormData): Promise<void> {
 
     const scope = await resolveSessionScope(true);
     const tab = getRedirectTab(formData, "marketing");
-    if (!scope) dashboardRedirect(tab, "invalid");
+    const rOpts = mergeDashboardRedirectOptions(formData, tab);
+    if (!scope) dashboardRedirect(tab, "invalid", rOpts);
 
     const brandId = safeText(formData.get("brandId"), 120);
     const modelName = safeText(formData.get("modelName"), 80);
     const modelTypeNameInput = safeText(formData.get("modelTypeName"), 120);
-    if (!brandId || !modelName) dashboardRedirect(tab, "invalid");
+    if (!brandId || !modelName) dashboardRedirect(tab, "invalid", rOpts);
 
     const current = (await listRepairBrands()).find((brand) => brand.id === brandId);
-    if (!current) dashboardRedirect(tab, "invalid");
+    if (!current) dashboardRedirect(tab, "invalid", rOpts);
     const modelTypeName = resolveBrandModelTypeName(current, modelTypeNameInput);
 
     const existingCatalogModel = (await listCatalogModels()).find(
@@ -3029,7 +3060,7 @@ export async function createRepairModel(formData: FormData): Promise<void> {
 
     revalidatePath("/dashboard");
     revalidatePath("/dashboard/products");
-    dashboardRedirect(tab, "model_created");
+    dashboardRedirect(tab, "model_created", rOpts);
 }
 
 export async function updateRepairModel(formData: FormData): Promise<void> {
@@ -3037,16 +3068,17 @@ export async function updateRepairModel(formData: FormData): Promise<void> {
 
     const scope = await resolveSessionScope(true);
     const tab = getRedirectTab(formData, "marketing");
-    if (!scope) dashboardRedirect(tab, "invalid");
+    const rOpts = mergeDashboardRedirectOptions(formData, tab);
+    if (!scope) dashboardRedirect(tab, "invalid", rOpts);
 
     const brandId = safeText(formData.get("brandId"), 120);
     const oldModel = safeText(formData.get("oldModel"), 80);
     const modelName = safeText(formData.get("modelName"), 80);
     const modelTypeNameInput = safeText(formData.get("modelTypeName"), 120);
-    if (!brandId || !oldModel || !modelName) dashboardRedirect(tab, "invalid");
+    if (!brandId || !oldModel || !modelName) dashboardRedirect(tab, "invalid", rOpts);
 
     const current = (await listRepairBrands()).find((brand) => brand.id === brandId);
-    if (!current) dashboardRedirect(tab, "invalid");
+    if (!current) dashboardRedirect(tab, "invalid", rOpts);
     const modelTypeName = resolveBrandModelTypeName(current, modelTypeNameInput);
 
     const targetCatalogModels = (await listCatalogModels()).filter(
@@ -3086,7 +3118,7 @@ export async function updateRepairModel(formData: FormData): Promise<void> {
 
     revalidatePath("/dashboard");
     revalidatePath("/dashboard/products");
-    dashboardRedirect(tab, "model_updated");
+    dashboardRedirect(tab, "model_updated", rOpts);
 }
 
 export async function deleteRepairModel(formData: FormData): Promise<void> {
@@ -3094,16 +3126,17 @@ export async function deleteRepairModel(formData: FormData): Promise<void> {
 
     const scope = await resolveSessionScope(true);
     const tab = getRedirectTab(formData, "marketing");
-    if (!scope) dashboardRedirect(tab, "invalid");
+    const rOpts = mergeDashboardRedirectOptions(formData, tab);
+    if (!scope) dashboardRedirect(tab, "invalid", rOpts);
 
     const brandId = safeText(formData.get("brandId"), 120);
     const modelName = safeText(formData.get("modelName"), 80);
     const modelTypeNameInput = safeText(formData.get("modelTypeName"), 120);
-    if (!brandId || !modelName) dashboardRedirect(tab, "invalid");
+    if (!brandId || !modelName) dashboardRedirect(tab, "invalid", rOpts);
     const deleteGuard = await enforceDeletePassword(formData, scope, tab);
 
     const current = (await listRepairBrands()).find((brand) => brand.id === brandId);
-    if (!current) dashboardRedirect(tab, "invalid");
+    if (!current) dashboardRedirect(tab, "invalid", rOpts);
     const modelTypeName = resolveBrandModelTypeName(current, modelTypeNameInput);
 
     const targetCatalogModels = (await listCatalogModels()).filter(
@@ -3150,7 +3183,7 @@ export async function deleteRepairModel(formData: FormData): Promise<void> {
 
     revalidatePath("/dashboard");
     revalidatePath("/dashboard/products");
-    dashboardRedirect(tab, "model_deleted");
+    dashboardRedirect(tab, "model_deleted", rOpts);
 }
 
 export async function createProductCategory(formData: FormData): Promise<void> {
@@ -3158,10 +3191,11 @@ export async function createProductCategory(formData: FormData): Promise<void> {
 
     const scope = await resolveSessionScope(true);
     const tab = getRedirectTab(formData, "marketing");
-    if (!scope) dashboardRedirect(tab, "invalid");
+    const rOpts = mergeDashboardRedirectOptions(formData, tab);
+    if (!scope) dashboardRedirect(tab, "invalid", rOpts);
 
     const categoryName = safeText(formData.get("categoryName"));
-    if (!categoryName) dashboardRedirect(tab, "invalid");
+    if (!categoryName) dashboardRedirect(tab, "invalid", rOpts);
 
     const companyId = scope.companyId;
     const path = catalogCategoryCollectionPath(companyId);
@@ -3266,14 +3300,14 @@ export async function createProductCategory(formData: FormData): Promise<void> {
             path,
             error: message,
         });
-        if (message === "duplicate_active_category") dashboardRedirect(tab, "invalid");
-        if (message === "invalid_category_parent") dashboardRedirect(tab, "category_invalid_parent");
-        dashboardRedirect(tab, "error");
+        if (message === "duplicate_active_category") dashboardRedirect(tab, "invalid", rOpts);
+        if (message === "invalid_category_parent") dashboardRedirect(tab, "category_invalid_parent", rOpts);
+        dashboardRedirect(tab, "error", rOpts);
     }
 
     revalidatePath("/dashboard");
     revalidatePath("/dashboard/products");
-    dashboardRedirect(tab, "category_created");
+    dashboardRedirect(tab, "category_created", rOpts);
 }
 
 export async function createProductSupplier(formData: FormData): Promise<void> {
@@ -3281,10 +3315,11 @@ export async function createProductSupplier(formData: FormData): Promise<void> {
 
     const scope = await resolveSessionScope(true);
     const tab = getRedirectTab(formData, "marketing");
-    if (!scope) dashboardRedirect(tab, "invalid");
+    const rOpts = mergeDashboardRedirectOptions(formData, tab);
+    if (!scope) dashboardRedirect(tab, "invalid", rOpts);
 
     const supplierName = safeText(formData.get("supplierName"));
-    if (!supplierName) dashboardRedirect(tab, "invalid");
+    if (!supplierName) dashboardRedirect(tab, "invalid", rOpts);
 
     const companyId = scope.companyId;
     const path = catalogSupplierCollectionPath(companyId);
@@ -3370,13 +3405,13 @@ export async function createProductSupplier(formData: FormData): Promise<void> {
             path,
             error: message,
         });
-        if (message === "duplicate_active_supplier") dashboardRedirect(tab, "invalid");
-        dashboardRedirect(tab, "error");
+        if (message === "duplicate_active_supplier") dashboardRedirect(tab, "invalid", rOpts);
+        dashboardRedirect(tab, "error", rOpts);
     }
 
     revalidatePath("/dashboard");
     revalidatePath("/dashboard/products");
-    dashboardRedirect(tab, "supplier_created");
+    dashboardRedirect(tab, "supplier_created", rOpts);
 }
 
 export async function updateProductCategory(formData: FormData): Promise<void> {
@@ -3384,24 +3419,25 @@ export async function updateProductCategory(formData: FormData): Promise<void> {
 
     const scope = await resolveSessionScope(true);
     const tab = getRedirectTab(formData, "marketing");
-    if (!scope) dashboardRedirect(tab, "invalid");
+    const rOpts = mergeDashboardRedirectOptions(formData, tab);
+    if (!scope) dashboardRedirect(tab, "invalid", rOpts);
 
     const categoryId = safeText(formData.get("categoryId"), 120);
     const categoryName = safeText(formData.get("categoryName"));
-    if (!categoryId || !categoryName) dashboardRedirect(tab, "invalid");
+    if (!categoryId || !categoryName) dashboardRedirect(tab, "invalid", rOpts);
 
     const companyId = scope.companyId;
     const categoryList = await listCatalogCategories("", companyId);
-    if (!categoryList.some((item) => item.id === categoryId)) dashboardRedirect(tab, "invalid");
+    if (!categoryList.some((item) => item.id === categoryId)) dashboardRedirect(tab, "invalid", rOpts);
     const parentCategoryRef = parseDimensionRef(formData.get("parentCategoryRef"));
     const parentCategoryId = parentCategoryRef.id || safeText(formData.get("parentCategoryId"), 120);
     const parentCategory = parentCategoryId ? categoryList.find((item) => item.id === parentCategoryId && item.status === "active") ?? null : null;
     const hasChildren = categoryList.some((item) => item.parentCategoryId === categoryId && item.status === "active");
     if (parentCategoryId && (!parentCategory || parentCategory.categoryLevel !== 1 || parentCategory.id === categoryId)) {
-        dashboardRedirect(tab, "category_invalid_parent");
+        dashboardRedirect(tab, "category_invalid_parent", rOpts);
     }
     if (hasChildren && parentCategory) {
-        dashboardRedirect(tab, "category_has_children");
+        dashboardRedirect(tab, "category_has_children", rOpts);
     }
     const duplicated = categoryList.some(
         (item) =>
@@ -3410,7 +3446,7 @@ export async function updateProductCategory(formData: FormData): Promise<void> {
             item.status === "active" &&
             (item.parentCategoryId ?? "") === (parentCategory?.id ?? ""),
     );
-    if (duplicated) dashboardRedirect(tab, "invalid");
+    if (duplicated) dashboardRedirect(tab, "invalid", rOpts);
 
     const updated = await updateCatalogCategory(
         categoryId,
@@ -3424,11 +3460,11 @@ export async function updateProductCategory(formData: FormData): Promise<void> {
         },
         companyId,
     );
-    if (!updated?.id) dashboardRedirect(tab, "error");
+    if (!updated?.id) dashboardRedirect(tab, "error", rOpts);
 
     revalidatePath("/dashboard");
     revalidatePath("/dashboard/products");
-    dashboardRedirect(tab, "category_updated");
+    dashboardRedirect(tab, "category_updated", rOpts);
 }
 
 export async function deleteProductCategory(formData: FormData): Promise<void> {
@@ -3436,16 +3472,17 @@ export async function deleteProductCategory(formData: FormData): Promise<void> {
 
     const scope = await resolveSessionScope(true);
     const tab = getRedirectTab(formData, "marketing");
-    if (!scope) dashboardRedirect(tab, "invalid");
+    const rOpts = mergeDashboardRedirectOptions(formData, tab);
+    if (!scope) dashboardRedirect(tab, "invalid", rOpts);
 
     const categoryId = safeText(formData.get("categoryId"), 120);
-    if (!categoryId) dashboardRedirect(tab, "invalid");
+    if (!categoryId) dashboardRedirect(tab, "invalid", rOpts);
     const deleteGuard = await enforceDeletePassword(formData, scope, tab);
     const categories = await listCatalogCategories("", scope.companyId);
     const target = categories.find((item) => item.id === categoryId);
-    if (!target) dashboardRedirect(tab, "invalid");
+    if (!target) dashboardRedirect(tab, "invalid", rOpts);
     const hasChildren = categories.some((item) => item.parentCategoryId === categoryId && item.status === "active");
-    if (hasChildren) dashboardRedirect(tab, "category_has_children");
+    if (hasChildren) dashboardRedirect(tab, "category_has_children", rOpts);
 
     const updated = await updateCatalogCategory(
         categoryId,
@@ -3454,7 +3491,7 @@ export async function deleteProductCategory(formData: FormData): Promise<void> {
         },
         scope.companyId,
     );
-    if (!updated) dashboardRedirect(tab, "error");
+    if (!updated) dashboardRedirect(tab, "error", rOpts);
 
     await createDeleteLog({
         module: "settings",
@@ -3471,7 +3508,7 @@ export async function deleteProductCategory(formData: FormData): Promise<void> {
 
     revalidatePath("/dashboard");
     revalidatePath("/dashboard/products");
-    dashboardRedirect(tab, "category_deleted");
+    dashboardRedirect(tab, "category_deleted", rOpts);
 }
 
 export async function updateProductSupplier(formData: FormData): Promise<void> {
@@ -3479,16 +3516,17 @@ export async function updateProductSupplier(formData: FormData): Promise<void> {
 
     const scope = await resolveSessionScope(true);
     const tab = getRedirectTab(formData, "marketing");
-    if (!scope) dashboardRedirect(tab, "invalid");
+    const rOpts = mergeDashboardRedirectOptions(formData, tab);
+    if (!scope) dashboardRedirect(tab, "invalid", rOpts);
 
     const supplierId = safeText(formData.get("supplierId"), 120);
     const supplierName = safeText(formData.get("supplierName"));
-    if (!supplierId || !supplierName) dashboardRedirect(tab, "invalid");
+    if (!supplierId || !supplierName) dashboardRedirect(tab, "invalid", rOpts);
 
     const companyId = scope.companyId;
     const supplierList = await listCatalogSuppliers("", companyId);
     const duplicated = supplierList.some((item) => item.id !== supplierId && item.name.toLowerCase() === supplierName.toLowerCase() && item.status === "active");
-    if (duplicated) dashboardRedirect(tab, "invalid");
+    if (duplicated) dashboardRedirect(tab, "invalid", rOpts);
 
     const updated = await updateCatalogSupplier(
         supplierId,
@@ -3498,11 +3536,11 @@ export async function updateProductSupplier(formData: FormData): Promise<void> {
         },
         companyId,
     );
-    if (!updated?.id) dashboardRedirect(tab, "error");
+    if (!updated?.id) dashboardRedirect(tab, "error", rOpts);
 
     revalidatePath("/dashboard");
     revalidatePath("/dashboard/products");
-    dashboardRedirect(tab, "supplier_updated");
+    dashboardRedirect(tab, "supplier_updated", rOpts);
 }
 
 export async function deleteProductSupplier(formData: FormData): Promise<void> {
@@ -3510,14 +3548,15 @@ export async function deleteProductSupplier(formData: FormData): Promise<void> {
 
     const scope = await resolveSessionScope(true);
     const tab = getRedirectTab(formData, "marketing");
-    if (!scope) dashboardRedirect(tab, "invalid");
+    const rOpts = mergeDashboardRedirectOptions(formData, tab);
+    if (!scope) dashboardRedirect(tab, "invalid", rOpts);
 
     const supplierId = safeText(formData.get("supplierId"), 120);
-    if (!supplierId) dashboardRedirect(tab, "invalid");
+    if (!supplierId) dashboardRedirect(tab, "invalid", rOpts);
     const deleteGuard = await enforceDeletePassword(formData, scope, tab);
     const suppliers = await listCatalogSuppliers("", scope.companyId);
     const target = suppliers.find((item) => item.id === supplierId);
-    if (!target) dashboardRedirect(tab, "invalid");
+    if (!target) dashboardRedirect(tab, "invalid", rOpts);
 
     const updated = await updateCatalogSupplier(
         supplierId,
@@ -3526,7 +3565,7 @@ export async function deleteProductSupplier(formData: FormData): Promise<void> {
         },
         scope.companyId,
     );
-    if (!updated) dashboardRedirect(tab, "error");
+    if (!updated) dashboardRedirect(tab, "error", rOpts);
 
     await createDeleteLog({
         module: "settings",
@@ -3543,7 +3582,7 @@ export async function deleteProductSupplier(formData: FormData): Promise<void> {
 
     revalidatePath("/dashboard");
     revalidatePath("/dashboard/products");
-    dashboardRedirect(tab, "supplier_deleted");
+    dashboardRedirect(tab, "supplier_deleted", rOpts);
 }
 
 export async function getDashboardBundle(params?: {

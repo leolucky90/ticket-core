@@ -15,9 +15,11 @@ import {
 import type { DimensionPickerBundle } from "@/lib/types/catalog";
 import type { RepairBrand } from "@/lib/types/repair-brand";
 import { getUiText } from "@/lib/i18n/ui-text";
+import type { MarketingSectionId } from "@/components/dashboard/marketing-settings-workspace";
 
 export type MarketingBrandEditorProps = {
     lang: "zh" | "en";
+    marketingSection: MarketingSectionId;
     brand: RepairBrand;
     dimensionBundle: DimensionPickerBundle;
     brandTypeSuggestionPool: string[];
@@ -37,6 +39,7 @@ export type MarketingBrandEditorProps = {
 
 export function MarketingBrandEditor({
     lang,
+    marketingSection,
     brand,
     dimensionBundle,
     brandTypeSuggestionPool,
@@ -91,6 +94,7 @@ export function MarketingBrandEditor({
                 <div className="flex shrink-0 items-center gap-2">
                     <form action={updateBrandAction} onClick={(event) => event.stopPropagation()}>
                         <input type="hidden" name="tab" value="marketing" />
+                        <input type="hidden" name="marketingSection" value={marketingSection} />
                         <input type="hidden" name="brandId" value={brand.id} />
                         <input type="hidden" name="brandName" value={brand.name} />
                         <IconOnlyButton
@@ -103,6 +107,7 @@ export function MarketingBrandEditor({
                     </form>
                     <form action={deleteBrandAction} onSubmit={onDeleteGuard} data-delete-target={t.deleteBrandTarget.replace("{name}", brand.name)} onClick={(event) => event.stopPropagation()}>
                         <input type="hidden" name="tab" value="marketing" />
+                        <input type="hidden" name="marketingSection" value={marketingSection} />
                         <input type="hidden" name="brandId" value={brand.id} />
                         <IconOnlyButton label={t.removeBrand} type="submit" icon={<Trash2 className="h-4 w-4" aria-hidden="true" />} />
                     </form>
@@ -112,6 +117,7 @@ export function MarketingBrandEditor({
             <div className="rounded-lg border border-[rgb(var(--border))] p-3">
                 <form action={updateBrandAction} className="mb-2 grid gap-2 rounded-lg border border-[rgb(var(--border))] p-3">
                     <input type="hidden" name="tab" value="marketing" />
+                    <input type="hidden" name="marketingSection" value={marketingSection} />
                     <input type="hidden" name="brandId" value={brand.id} />
                     <input type="hidden" name="brandName" value={brand.name} />
                     <input type="hidden" name="brandTypesMode" value="sync" />
@@ -280,6 +286,7 @@ export function MarketingBrandEditor({
                                         <div className="mt-2 space-y-2">
                                             <form id={updateFormId} action={updateModelAction} className="grid gap-2">
                                                 <input type="hidden" name="tab" value="marketing" />
+                                                <input type="hidden" name="marketingSection" value={marketingSection} />
                                                 <input type="hidden" name="brandId" value={brand.id} />
                                                 <input type="hidden" name="modelTypeName" value={selectedModelType} />
                                                 <input type="hidden" name="oldModel" value={model} />
@@ -297,6 +304,7 @@ export function MarketingBrandEditor({
                                                 />
                                                 <form action={deleteModelAction} onSubmit={onDeleteGuard} data-delete-target={t.deleteModelTarget.replace("{name}", model)}>
                                                     <input type="hidden" name="tab" value="marketing" />
+                                                    <input type="hidden" name="marketingSection" value={marketingSection} />
                                                     <input type="hidden" name="brandId" value={brand.id} />
                                                     <input type="hidden" name="modelTypeName" value={selectedModelType} />
                                                     <input type="hidden" name="modelName" value={model} />
@@ -320,6 +328,7 @@ export function MarketingBrandEditor({
 
                     <form action={createModelAction} className="flex flex-wrap items-center gap-2">
                         <input type="hidden" name="tab" value="marketing" />
+                        <input type="hidden" name="marketingSection" value={marketingSection} />
                         <input type="hidden" name="brandId" value={brand.id} />
                         <input type="hidden" name="modelTypeName" value={selectedModelType} />
                         <Input

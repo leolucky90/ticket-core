@@ -8,9 +8,11 @@ import { IconTextActionButton } from "@/components/ui/icon-text-action-button";
 import type { ItemNamingSettings } from "@/lib/schema/itemNamingSettings";
 import { getUiText } from "@/lib/i18n/ui-text";
 import type { ItemNamingToken } from "@/lib/types/catalog";
+import type { MarketingSectionId } from "@/components/dashboard/marketing-settings-workspace";
 
 type ItemQuickNamingSettingsCardProps = {
     settings: ItemNamingSettings;
+    marketingSection: MarketingSectionId;
     submitAction: (formData: FormData) => Promise<void>;
 };
 
@@ -24,7 +26,7 @@ function moveToken(order: ItemNamingToken[], fromIndex: number, toIndex: number)
     return next;
 }
 
-export function ItemQuickNamingSettingsCard({ settings, submitAction }: ItemQuickNamingSettingsCardProps) {
+export function ItemQuickNamingSettingsCard({ settings, marketingSection, submitAction }: ItemQuickNamingSettingsCardProps) {
     const lang = useUiLanguage();
     const t = getUiText(lang).itemQuickNaming;
     const tokenOptions: Array<{ token: ItemNamingToken; label: string; description: string }> = [
@@ -53,6 +55,7 @@ export function ItemQuickNamingSettingsCard({ settings, submitAction }: ItemQuic
                 </summary>
                 <form action={submitAction} className="grid gap-4 border-t border-[rgb(var(--border))] p-3 pt-4">
                     <input type="hidden" name="tab" value="marketing" />
+                    <input type="hidden" name="marketingSection" value={marketingSection} />
                     <input type="hidden" name="order" value={order.join(",")} />
 
                     <div className="grid gap-2 md:grid-cols-2">

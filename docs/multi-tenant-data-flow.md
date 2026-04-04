@@ -11,6 +11,18 @@ For canonical naming, role-boundary, architecture, and refactor glossary, see:
 
 - `companies/{companyId}`
   - Company root profile (`id`, `name`, `slug`, `subdomain`, owner info)
+  - **Merchant account settings（canonical split）**
+    - `settings/businessProfile` — 公司主資料（companyName、displayName、contactName、phone、email、website、address、country、region、postcode）
+    - `settings/regionalReceiptSettings` — 地區單據設定（businessRegion、locale、currency、timezone、documentMode、TW/AU 稅務欄位與 notes）
+    - `settings/invoiceSettings` — 單據整合模式（mock / mof-test / mof-production / vac-test / vac-production）、自動開立、作廢後重開與 mock failure flags
+    - `settings/companyProfile` — **legacy compatibility bridge only**；新功能不應再直接依賴
+  - **Invoice / receipt documents（TW 電子發票 + AU Receipt / Invoice / Tax Invoice）**
+    - `invoiceTrackSettings/{trackId}` — 台灣合法字軌池與各模式文件號碼策略
+    - `invoiceDrafts/{draftId}` — checkout 或後台建立的 draft，待後續 issue
+    - `receiptDocuments/{documentId}` — canonical 已開立單據主資料（receipt / invoice / tax-invoice / electronic-invoice）
+    - `invoiceVoids/{voidId}` — 作廢 request / response / operator / reason
+    - `invoiceCarriers/{carrierId}` — TW 載具記錄與會員預設載具
+    - `invoiceLogs/{logId}` — draft / track allocate / issue / void / reissue 流程 log
   - **Receipt / PO intake（OCR + AI，人工確認後寫入採購單）**
     - `intakeDocuments/{documentId}` — 檔名、MIME、狀態（`uploaded` → `draft_ready` → `confirmed`）
     - `ocrResults/{ocrId}` — `documentId`、`rawText`
@@ -23,6 +35,7 @@ For canonical naming, role-boundary, architecture, and refactor glossary, see:
   - Case data, must include `companyId` and `customerId`
 - `companies/{companyId}/sales/{saleId}`
   - Sales data, must include `companyId`
+  - checkout / POS sale 可附帶 `checkoutDocument` snapshot（businessRegion、documentMode、buyerType、TW/AU 單據欄位），作為後續 receipt center / template renderer 的 canonical 單據輸出來源
 - `companies/{companyId}/permissionLevels/lv{1..9}`
   - 權限等級定義與 `permissions` 字串陣列（與 `StaffMember.roleLevel` 對應）
 - `companies/{companyId}/auditLogs/{auditLogId}`
@@ -43,6 +56,11 @@ For canonical naming, role-boundary, architecture, and refactor glossary, see:
 - Customer ticket history (`/ticket/history`) only reads cases under current customer's `companyId` and matches customer email.
 - Showcase / dashboard preferences read/write by tenant path `companies/{tenantId}/app_config/*`.
 - Tenant preference lookup no longer falls back to global legacy docs when `tenantId` is present.
+- `/settings/account` 應優先透過 focused account-settings read-model / write wrapper 讀寫 `settings/businessProfile` 與 `settings/regionalReceiptSettings`，不要在 route layer 直接拼 auth metadata 或舊 `companyProfile` 混合欄位
+- `/dashboard/checkout` 應優先透過 `merchant/checkout-route-data.service.ts` 讀取 customer / ticket / inventory / `settings/businessProfile` / `settings/regionalReceiptSettings`，並用 `merchant/checkout-case-selector.service.ts` 判斷是否顯示案件卡；checkout 不應自行複製一份獨立的地區設定
+- `/dashboard/checkout` 完成結帳後，應優先沿用 sale snapshot 的 `checkoutDocument` 與 `settings/invoiceSettings` 走 `invoice-issue.service.ts` 建立 `invoiceDrafts` / `receiptDocuments`；不要在 checkout route layer 臨時重組 platform payload
+- `/dashboard/receipts` 與 `/dashboard/receipts/[id]` 應以 `receiptDocuments` 為 canonical document master，透過 `merchant/invoice-admin-read-model.service.ts` / `merchant/invoice-admin-write.service.ts` 讀寫；作廢 / 重開不可刪除原單據
+- `/settings/account/invoices` 與 `/settings/account/invoice-tracks` 應優先讀寫 `settings/invoiceSettings`、`invoiceTrackSettings`，不要把字軌或整合模式資訊塞回 `regionalReceiptSettings`
 
 ## Registration binding
 
@@ -71,7 +89,7 @@ This script clears demo Firestore baseline and recreates:
 - official homepage baseline at `app_config/business_homepage`
 - Company A / Company B company roots under `companies/{companyId}`
 - A/B admin and customer Firebase Auth accounts
-- A/B user docs, customer docs, staff baseline, company profile, security settings
+- A/B user docs, customer docs, staff baseline, businessProfile / regionalReceiptSettings compatibility baseline, security settings
 - one sample ticket and one sample sale per company
 - Company A baseline
   - `companyId`: `company_a`

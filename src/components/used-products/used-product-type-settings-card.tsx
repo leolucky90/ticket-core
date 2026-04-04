@@ -13,10 +13,12 @@ import type {
     UsedProductTypeSpecificationTemplate,
 } from "@/lib/schema";
 import { LIST_DISPLAY_OPTIONS } from "@/lib/ui/list-display";
+import type { MarketingSectionId } from "@/components/dashboard/marketing-settings-workspace";
 import { getUiText } from "@/lib/i18n/ui-text";
 
 type UsedProductTypeSettingsCardProps = {
     lang: "zh" | "en";
+    marketingSection: MarketingSectionId;
     settings: UsedProductTypeSetting[];
     updateTypeAction: (formData: FormData) => Promise<void>;
 };
@@ -56,6 +58,7 @@ type UsedProductTypeSettingsText = {
 type TemplateEditorFormProps = {
     lang: "zh" | "en";
     text: UsedProductTypeSettingsText;
+    marketingSection: MarketingSectionId;
     settingId: string;
     actionMode: "addSpec" | "updateSpec";
     updateTypeAction: (formData: FormData) => Promise<void>;
@@ -147,7 +150,7 @@ function TemplateOptionsEditor({ lang, options, onChange, text }: TemplateOption
     );
 }
 
-function TemplateEditorForm({ lang, text, settingId, actionMode, updateTypeAction, template }: TemplateEditorFormProps) {
+function TemplateEditorForm({ lang, text, marketingSection, settingId, actionMode, updateTypeAction, template }: TemplateEditorFormProps) {
     const initialInputType = template ? templateInputType(template) : "text";
     const initialOptions = template ? templateOptions(template) : [""];
     const [fieldType, setFieldType] = useState<UsedProductTypeSpecificationInputType>(initialInputType);
@@ -161,6 +164,7 @@ function TemplateEditorForm({ lang, text, settingId, actionMode, updateTypeActio
         >
             <input type="hidden" name="id" value={settingId} />
             <input type="hidden" name="actionMode" value={actionMode} />
+            <input type="hidden" name="marketingSection" value={marketingSection} />
             {template ? <input type="hidden" name="specKey" value={template.key} /> : null}
             <input type="hidden" name="specOptionsJson" value={serializeOptions(options)} />
 
@@ -232,11 +236,13 @@ function TemplateEditorForm({ lang, text, settingId, actionMode, updateTypeActio
 function TypeSpecificationEditorPanel({
     lang,
     text,
+    marketingSection,
     setting,
     updateTypeAction,
 }: {
     lang: "zh" | "en";
     text: UsedProductTypeSettingsText;
+    marketingSection: MarketingSectionId;
     setting: UsedProductTypeSetting;
     updateTypeAction: (formData: FormData) => Promise<void>;
 }) {
@@ -282,6 +288,7 @@ function TypeSpecificationEditorPanel({
                                         <form action={updateTypeAction}>
                                             <input type="hidden" name="id" value={setting.id} />
                                             <input type="hidden" name="actionMode" value="removeSpec" />
+                                            <input type="hidden" name="marketingSection" value={marketingSection} />
                                             <input type="hidden" name="specKey" value={template.key} />
                                             <IconActionButton icon={Trash2} type="submit" label={text.removeSpec} tooltip={text.removeSpecTooltip} />
                                         </form>
@@ -300,6 +307,7 @@ function TypeSpecificationEditorPanel({
                                     <TemplateEditorForm
                                         lang={lang}
                                         text={text}
+                                        marketingSection={marketingSection}
                                         settingId={setting.id}
                                         actionMode="updateSpec"
                                         updateTypeAction={updateTypeAction}
@@ -311,7 +319,14 @@ function TypeSpecificationEditorPanel({
                     </div>
                 )}
 
-                <TemplateEditorForm lang={lang} text={text} settingId={setting.id} actionMode="addSpec" updateTypeAction={updateTypeAction} />
+                <TemplateEditorForm
+                    lang={lang}
+                    text={text}
+                    marketingSection={marketingSection}
+                    settingId={setting.id}
+                    actionMode="addSpec"
+                    updateTypeAction={updateTypeAction}
+                />
             </div>
         </div>
     );
@@ -319,6 +334,7 @@ function TypeSpecificationEditorPanel({
 
 export function UsedProductTypeSettingsCard({
     lang,
+    marketingSection,
     settings,
     updateTypeAction,
 }: UsedProductTypeSettingsCardProps) {
@@ -567,7 +583,13 @@ export function UsedProductTypeSettingsCard({
                 {text.pickTypeHint}
             </div>
         ) : (
-            <TypeSpecificationEditorPanel lang={lang} text={text} setting={selectedSetting} updateTypeAction={updateTypeAction} />
+            <TypeSpecificationEditorPanel
+                lang={lang}
+                text={text}
+                marketingSection={marketingSection}
+                setting={selectedSetting}
+                updateTypeAction={updateTypeAction}
+            />
         );
 
     return <MerchantBuilderShell sectionList={typeListShell} editor={editorShell} />;

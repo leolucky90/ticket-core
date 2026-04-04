@@ -22,6 +22,7 @@ import {
     updateUsedProductTypeSetting,
 } from "@/lib/services/used-product-type-settings.service";
 import type { ItemNamingToken } from "@/lib/types/catalog";
+import type { MarketingSectionId } from "@/components/dashboard/marketing-settings-workspace";
 import { getUiLanguage, getUiText } from "@/lib/i18n/ui-text";
 
 type DashboardSearchParams = {
@@ -49,7 +50,20 @@ type DashboardSearchParams = {
     activityCursor?: string;
     activityCursorStack?: string;
     inventoryView?: string;
+    marketingSection?: string;
 };
+
+function appendMarketingSectionQuery(pathWithQuery: string, formData: FormData): string {
+    const raw = String(formData.get("marketingSection") ?? "").trim();
+    if (raw !== "supplier" && raw !== "category" && raw !== "brand" && raw !== "used") return pathWithQuery;
+    const joiner = pathWithQuery.includes("?") ? "&" : "?";
+    return `${pathWithQuery}${joiner}marketingSection=${encodeURIComponent(raw)}`;
+}
+
+function toMarketingSection(value: string | undefined): MarketingSectionId | undefined {
+    if (value === "supplier" || value === "category" || value === "brand" || value === "used") return value;
+    return undefined;
+}
 
 function toTab(input: string | undefined): "dashboard" | "customers" | "cases" | "activities" | "inventory" | "marketing" {
     if (input === "customers") return "customers";
@@ -149,6 +163,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     const sp = await searchParams;
     const tab = toTab(sp.tab);
     const inventoryView = toInventoryView(sp.inventoryView);
+    const marketingSection = toMarketingSection((sp.marketingSection ?? "").trim() || undefined);
     const caseStatus = (sp.caseStatus ?? "all").trim() || "all";
     const caseOrder = toCaseOrder(sp.caseOrder);
     const customerCaseFilter = toCustomerCaseFilter(sp.customerCaseFilter);
@@ -222,7 +237,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         const settings = await listUsedProductTypeSettings();
         const current = settings.find((row) => row.id === id);
         if (!current) {
-            return redirect(`/dashboard?tab=marketing&flash=used_product_type_not_found&ts=${Date.now()}`);
+            return redirect(appendMarketingSectionQuery(`/dashboard?tab=marketing&flash=used_product_type_not_found&ts=${Date.now()}`, formData));
         }
 
         if (actionMode === "addSpec") {
@@ -232,10 +247,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             const specInputType = toSpecInputType(formData.get("specInputType"));
             const specOptions = parseSpecTemplateOptions(formData.get("specOptionsJson"));
             if (!specName) {
-                return redirect(`/dashboard?tab=marketing&flash=used_product_spec_name_required&ts=${Date.now()}`);
+                return redirect(appendMarketingSectionQuery(`/dashboard?tab=marketing&flash=used_product_spec_name_required&ts=${Date.now()}`, formData));
             }
             if (specInputType === "select" && specOptions.length === 0) {
-                return redirect(`/dashboard?tab=marketing&flash=used_product_spec_options_required&ts=${Date.now()}`);
+                return redirect(appendMarketingSectionQuery(`/dashboard?tab=marketing&flash=used_product_spec_options_required&ts=${Date.now()}`, formData));
             }
             const specKey = toSpecTemplateKey(specName);
             const exists = current.specificationTemplates.some((row) => {
@@ -259,7 +274,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 id,
                 specificationTemplates: nextTemplates,
             });
-            return redirect(`/dashboard?tab=marketing&flash=used_product_spec_added&ts=${Date.now()}`);
+            return redirect(appendMarketingSectionQuery(`/dashboard?tab=marketing&flash=used_product_spec_added&ts=${Date.now()}`, formData));
         }
 
         if (actionMode === "updateSpec") {
@@ -271,13 +286,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             const specOptions = parseSpecTemplateOptions(formData.get("specOptionsJson"));
 
             if (!specKey) {
-                return redirect(`/dashboard?tab=marketing&flash=used_product_spec_not_found&ts=${Date.now()}`);
+                return redirect(appendMarketingSectionQuery(`/dashboard?tab=marketing&flash=used_product_spec_not_found&ts=${Date.now()}`, formData));
             }
             if (!specName) {
-                return redirect(`/dashboard?tab=marketing&flash=used_product_spec_name_required&ts=${Date.now()}`);
+                return redirect(appendMarketingSectionQuery(`/dashboard?tab=marketing&flash=used_product_spec_name_required&ts=${Date.now()}`, formData));
             }
             if (specInputType === "select" && specOptions.length === 0) {
-                return redirect(`/dashboard?tab=marketing&flash=used_product_spec_options_required&ts=${Date.now()}`);
+                return redirect(appendMarketingSectionQuery(`/dashboard?tab=marketing&flash=used_product_spec_options_required&ts=${Date.now()}`, formData));
             }
 
             const nextTemplates = current.specificationTemplates.map((row) =>
@@ -297,7 +312,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 id,
                 specificationTemplates: nextTemplates,
             });
-            return redirect(`/dashboard?tab=marketing&flash=used_product_spec_updated&ts=${Date.now()}`);
+            return redirect(appendMarketingSectionQuery(`/dashboard?tab=marketing&flash=used_product_spec_updated&ts=${Date.now()}`, formData));
         }
 
         if (actionMode === "removeSpec") {
@@ -307,9 +322,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 id,
                 specificationTemplates: nextTemplates,
             });
-            return redirect(`/dashboard?tab=marketing&flash=used_product_spec_deleted&ts=${Date.now()}`);
+            return redirect(appendMarketingSectionQuery(`/dashboard?tab=marketing&flash=used_product_spec_deleted&ts=${Date.now()}`, formData));
         }
-        return redirect(`/dashboard?tab=marketing&flash=used_product_templates_updated&ts=${Date.now()}`);
+        return redirect(appendMarketingSectionQuery(`/dashboard?tab=marketing&flash=used_product_templates_updated&ts=${Date.now()}`, formData));
     }
 
     async function updateItemNamingSettingsAction(formData: FormData): Promise<void> {
@@ -321,9 +336,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 .map((item) => item.trim())
                 .filter((item) => item.length > 0);
             await updateItemNamingSettings({ patch: { order: order as ItemNamingToken[] } });
-            redirect(`/dashboard?tab=marketing&flash=${encodeURIComponent("item_naming_saved")}&ts=${Date.now()}`);
+            redirect(
+                appendMarketingSectionQuery(
+                    `/dashboard?tab=marketing&flash=${encodeURIComponent("item_naming_saved")}&ts=${Date.now()}`,
+                    formData,
+                ),
+            );
         } catch {
-            redirect(`/dashboard?tab=marketing&flash=${encodeURIComponent("error")}&ts=${Date.now()}`);
+            redirect(appendMarketingSectionQuery(`/dashboard?tab=marketing&flash=${encodeURIComponent("error")}&ts=${Date.now()}`, formData));
         }
     }
 
@@ -333,6 +353,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 lang={lang}
                 tab={tab}
                 inventoryView={inventoryView}
+                marketingSection={marketingSection}
                 flash={(sp.flash ?? "").trim()}
                 actionTs={actionTs}
                 snapshotTs={snapshotTs}

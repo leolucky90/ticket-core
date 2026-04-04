@@ -1,4 +1,6 @@
 import type { CSSProperties } from "react";
+import { AutoCarouselBanner } from "@/components/ui/builder/AutoCarouselBanner";
+import { HeroBackgroundMedia } from "@/components/ui/builder/HeroBackgroundMedia";
 import {
     COMPANY_HOME_TEMPLATE_COPY,
     COMPANY_HOME_TEMPLATE_STYLE_TOKENS,
@@ -11,7 +13,10 @@ import {
     type CompanyHomeLinkSet,
     type CompanyHomeNavLink,
 } from "@/features/showcase/components/companyHomeDefault/sections";
+import { TENANT_BUILDER_HOMEPAGE_CONFIG } from "@/lib/constants/builder-demo";
+import { getUiText } from "@/lib/i18n/ui-text";
 import { normalizeTenantId } from "@/lib/tenant-scope";
+import type { BuilderHomepageConfig } from "@/lib/types/builder";
 import type { ShowContentBlock, ShowContentState } from "@/features/showcase/types/showContent";
 import type { ShowThemeColors, StorefrontSettings } from "@/features/showcase/types/showTheme";
 
@@ -23,6 +28,8 @@ type ShowHomePageProps = {
     showContentState: ShowContentState;
     homeHref?: string;
     authTenantId?: string | null;
+    /** Homepage hero + carousel from structured builder config (Firebase/CMS-ready). */
+    builderHomepage?: BuilderHomepageConfig;
 };
 
 export function ShowHomePage({
@@ -33,14 +40,19 @@ export function ShowHomePage({
     showContentState,
     homeHref = "/",
     authTenantId = null,
+    builderHomepage = TENANT_BUILDER_HOMEPAGE_CONFIG,
 }: ShowHomePageProps) {
     const copy = COMPANY_HOME_TEMPLATE_COPY[lang];
+    const builderUi = getUiText(lang).builderModule;
     const currentYear = new Date().getFullYear();
     const localeContent = showContentState.locale[lang];
     const orderedBlocks: ShowContentBlock[] = showContentState.order
         .map((blockId) => localeContent[blockId])
         .filter((block): block is ShowContentBlock => Boolean(block))
         .filter((block) => block.enabled);
+
+    const blocksForCanvas: ShowContentBlock[] =
+        builderHomepage.hero.enabled ? orderedBlocks.filter((block) => block.type !== "hero") : orderedBlocks;
 
     const firstEnabledAnchorByType = (type: ShowContentBlock["type"]) =>
         orderedBlocks.find((block) => block.type === type && block.anchor)?.anchor;
@@ -124,7 +136,24 @@ export function ShowHomePage({
                 links={links}
             />
 
-            <main>{orderedBlocks.map((block) => renderCompanyHomeBlock(block, { copy, heroPrimaryCta, heroSecondaryCta }))}</main>
+            <main>
+                <div className="builder-on-showcase">
+                    {builderHomepage.hero.enabled ? <HeroBackgroundMedia config={builderHomepage.hero} /> : null}
+                    {builderHomepage.carousel.enabled ? (
+                        <div className="mx-auto max-w-6xl px-4 py-6 md:px-6">
+                            <AutoCarouselBanner
+                                config={builderHomepage.carousel}
+                                labels={{
+                                    prev: builderUi.carouselPrev,
+                                    next: builderUi.carouselNext,
+                                    goTo: builderUi.carouselGoTo,
+                                }}
+                            />
+                        </div>
+                    ) : null}
+                </div>
+                {blocksForCanvas.map((block) => renderCompanyHomeBlock(block, { copy, heroPrimaryCta, heroSecondaryCta }))}
+            </main>
 
             <CompanyHomeFooter copy={copy} currentYear={currentYear} />
         </div>

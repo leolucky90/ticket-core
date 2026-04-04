@@ -220,6 +220,155 @@ body {
   animation: routeProgressSlide 1.15s ease-in-out infinite;
 }
 
+/* Homepage builder: map showcase tokens to canonical RGB triplets for shared UI components */
+.builder-on-showcase {
+  --bg: var(--showcase-page-bg);
+  --panel: var(--showcase-surface);
+  --panel2: var(--showcase-surface);
+  --text: var(--showcase-text);
+  --muted: var(--showcase-muted);
+  --border: var(--showcase-border);
+  --accent: var(--showcase-accent);
+}
+
+.builder-canonical-official {
+  --bg: 248 250 252;
+  --panel: 255 255 255;
+  --panel2: 241 245 249;
+  --text: 30 41 59;
+  --muted: 100 116 139;
+  --border: 203 213 225;
+  --accent: 59 130 246;
+}
+
+.builder-animated-gradient {
+  background-image: linear-gradient(
+    125deg,
+    color-mix(in srgb, rgb(var(--panel)) 92%, rgb(var(--accent)) 8%),
+    color-mix(in srgb, rgb(var(--panel2)) 88%, rgb(var(--muted)) 12%),
+    color-mix(in srgb, rgb(var(--panel)) 90%, rgb(var(--accent)) 10%)
+  );
+  background-size: 200% 200%;
+  animation: builderGradientShift 22s ease-in-out infinite;
+}
+
+@keyframes builderGradientShift {
+  0%,
+  100% {
+    background-position: 0% 40%;
+  }
+  50% {
+    background-position: 100% 60%;
+  }
+}
+
+.builder-blob-a {
+  animation: builderBlobA 24s ease-in-out infinite;
+}
+
+.builder-blob-b {
+  animation: builderBlobB 28s ease-in-out infinite;
+}
+
+.builder-blob-c {
+  animation: builderBlobC 20s ease-in-out infinite;
+}
+
+@keyframes builderBlobA {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(16px, -12px) scale(1.04);
+  }
+}
+
+@keyframes builderBlobB {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-14px, 10px) scale(1.03);
+  }
+}
+
+@keyframes builderBlobC {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(8px, 14px) scale(1.02);
+  }
+}
+
+.biz-cta-primary {
+  background: var(--biz-accent);
+  color: var(--biz-accent-contrast);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--biz-accent) 32%, transparent),
+    0 18px 48px -20px var(--biz-shadow);
+}
+
+.builder-hero-subtle-drift video,
+.builder-hero-subtle-drift img {
+  animation: builderHeroDrift 36s ease-in-out infinite;
+}
+
+@keyframes builderHeroDrift {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.045);
+  }
+}
+
+.builder-parallax-a {
+  animation: builderParallaxA 38s ease-in-out infinite;
+}
+
+.builder-parallax-b {
+  animation: builderParallaxB 32s ease-in-out infinite;
+}
+
+.builder-parallax-c {
+  animation: builderParallaxC 28s ease-in-out infinite;
+}
+
+@keyframes builderParallaxA {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(1.5%, -1%, 0);
+  }
+}
+
+@keyframes builderParallaxB {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-1.2%, 1.2%, 0) scale(1.02);
+  }
+}
+
+@keyframes builderParallaxC {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0.8%, 0.6%, 0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .biz-fade-up,
   .biz-float,
@@ -227,7 +376,16 @@ body {
   .biz-rotate-slow,
   .biz-marquee,
   .biz-shimmer,
-  .route-progress-bar {
+  .route-progress-bar,
+  .builder-animated-gradient,
+  .builder-blob-a,
+  .builder-blob-b,
+  .builder-blob-c,
+  .builder-hero-subtle-drift video,
+  .builder-hero-subtle-drift img,
+  .builder-parallax-a,
+  .builder-parallax-b,
+  .builder-parallax-c {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;

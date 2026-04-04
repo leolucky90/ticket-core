@@ -20,9 +20,13 @@ import {
 import { SignOutButton } from "@/components/layout/SignOutButton";
 import { BusinessLanguageSwitcher } from "@/features/business/components/BusinessLanguageSwitcher";
 import { CtaStrip } from "@/features/business/components/homepage/CtaStrip";
-import { MetricPanel } from "@/features/business/components/homepage/MetricPanel";
+import { OfficialPostHeroSection } from "@/features/business/components/homepage/OfficialPostHeroSection";
 import { PortfolioIntroBlock } from "@/features/business/components/homepage/PortfolioIntroBlock";
 import { SectionShell } from "@/features/business/components/homepage/SectionShell";
+import { AutoCarouselBanner } from "@/components/ui/builder/AutoCarouselBanner";
+import { HeroBackgroundMedia } from "@/components/ui/builder/HeroBackgroundMedia";
+import { OFFICIAL_BUILDER_HOMEPAGE_CONFIG } from "@/lib/constants/builder-demo";
+import type { BuilderHomepageConfig, HeroBackgroundMediaConfig } from "@/lib/types/builder";
 import type {
     BusinessHomepageContentState,
     BusinessHomepageEditableContent,
@@ -38,6 +42,8 @@ type BusinessLandingPageProps = {
     dashboardHref?: string;
     homepageContent?: BusinessHomepageContentState;
     demoEntryValue?: string;
+    /** Structured builder homepage (hero + carousel); defaults to demo official config. */
+    builderHomepage?: BuilderHomepageConfig;
 };
 
 type LandingCopy = {
@@ -965,16 +971,36 @@ export function BusinessLandingPage({
     dashboardHref = "/dashboard",
     homepageContent,
     demoEntryValue,
+    builderHomepage = OFFICIAL_BUILDER_HOMEPAGE_CONFIG,
 }: BusinessLandingPageProps) {
     const ui = copyByLang[lang];
+    const builderUi = getUiText(lang).builderModule;
     const editable = resolveEditableCopy(lang, ui, homepageContent);
     const themePreset = homepageContent?.theme?.preset ?? "forest";
     const pageStyle = toCssVars(themeByPreset[themePreset] ?? themeByPreset.forest);
     const entryHref = isAuthenticated ? dashboardHref : "/login";
     const entryLabel = isAuthenticated ? ui.navDashboard : ui.navLogin;
     const heroEntryLabel = isAuthenticated ? ui.navDashboard : ui.navLogin;
-    const heroModules = [...ui.heroFlowModules, ...ui.heroFlowModules];
     const resolvedDemoEntryValue = demoEntryValue ?? ui.demoEntryValue;
+
+    const heroConfig: HeroBackgroundMediaConfig = {
+        ...builderHomepage.hero,
+        eyebrow: editable.kicker,
+        title: editable.title,
+        description: editable.desc,
+        primaryAction: {
+            label: editable.ctaPrimary,
+            href: builderHomepage.hero.primaryAction?.href ?? "#platform",
+            variant: "primary",
+            openInNewTab: builderHomepage.hero.primaryAction?.openInNewTab ?? false,
+        },
+        secondaryAction: {
+            label: editable.ctaSecondary,
+            href: builderHomepage.hero.secondaryAction?.href ?? "#about",
+            variant: "secondary",
+            openInNewTab: builderHomepage.hero.secondaryAction?.openInNewTab ?? false,
+        },
+    };
 
     return (
         <div style={pageStyle} className="relative min-h-dvh overflow-x-hidden bg-[var(--biz-page-bg)] text-[var(--biz-text)]">
@@ -1037,143 +1063,35 @@ export function BusinessLandingPage({
             </header>
 
             <main className="relative z-10">
-                <section className="mx-auto grid w-full max-w-7xl items-start gap-8 px-4 pb-10 pt-12 md:px-6 md:pb-14 md:pt-20 xl:grid-cols-[1.06fr_0.94fr]">
-                    <div className="biz-fade-up space-y-6">
-                        <div className="inline-flex items-center gap-2 rounded-full border border-[var(--biz-glass-border)] bg-[var(--biz-glass)] px-4 py-1.5 text-xs font-semibold tracking-[0.12em] text-[var(--biz-accent-ink)] uppercase backdrop-blur-xl">
-                            <Sparkles className="h-3.5 w-3.5" />
-                            <span>{editable.kicker}</span>
+                <div className="builder-canonical-official">
+                    {heroConfig.enabled ? <HeroBackgroundMedia config={heroConfig} /> : null}
+                    {builderHomepage.carousel.enabled ? (
+                        <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
+                            <AutoCarouselBanner
+                                config={builderHomepage.carousel}
+                                labels={{
+                                    prev: builderUi.carouselPrev,
+                                    next: builderUi.carouselNext,
+                                    goTo: builderUi.carouselGoTo,
+                                }}
+                            />
                         </div>
+                    ) : null}
+                </div>
 
-                        <div className="space-y-5">
-                            <h1 className="max-w-4xl [font-family:var(--font-display)] text-4xl leading-[1.02] text-[var(--biz-heading)] md:text-6xl xl:text-[4.5rem]">
-                                {editable.title}
-                            </h1>
-                            <p className="max-w-3xl text-base leading-relaxed text-[var(--biz-body)] md:text-lg">{editable.desc}</p>
-                        </div>
-
-                        <div className="grid gap-3 md:max-w-3xl md:grid-cols-3">
-                            <div className="rounded-2xl border border-[var(--biz-glass-border)] bg-[var(--biz-glass)] p-4 text-sm leading-relaxed text-[var(--biz-body)] backdrop-blur-xl">
-                                {ui.heroBulletA}
-                            </div>
-                            <div className="rounded-2xl border border-[var(--biz-glass-border)] bg-[var(--biz-glass)] p-4 text-sm leading-relaxed text-[var(--biz-body)] backdrop-blur-xl">
-                                {ui.heroBulletB}
-                            </div>
-                            <div className="rounded-2xl border border-[var(--biz-glass-border)] bg-[var(--biz-glass)] p-4 text-sm leading-relaxed text-[var(--biz-body)] backdrop-blur-xl">
-                                {ui.heroBulletC}
-                            </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-3">
-                            <a
-                                href="#platform"
-                                className="inline-flex items-center gap-2 rounded-full bg-[var(--biz-accent)] px-6 py-3 text-sm font-semibold text-[var(--biz-accent-contrast)] transition hover:translate-y-[-1px]"
-                            >
-                                {editable.ctaPrimary}
-                                <ArrowRight className="h-4 w-4" />
-                            </a>
-                            <a
-                                href="#about"
-                                className="rounded-full border border-[var(--biz-border-strong)] px-6 py-3 text-sm font-semibold text-[var(--biz-accent-ink)] transition hover:translate-y-[-1px] hover:bg-[var(--biz-surface-soft)]"
-                            >
-                                {editable.ctaSecondary}
-                            </a>
-                            <Link
-                                href={entryHref}
-                                className="rounded-full border border-[var(--biz-border)] px-6 py-3 text-sm font-semibold text-[var(--biz-body)] transition hover:bg-[var(--biz-surface-soft)]"
-                            >
-                                {heroEntryLabel}
-                            </Link>
-                        </div>
-
-                    </div>
-
-                    <aside className="biz-fade-up biz-delay-1 relative overflow-hidden rounded-[2rem] border border-[var(--biz-glass-border)] bg-[var(--biz-glass)] p-5 shadow-[0_32px_90px_-56px_var(--biz-shadow)] backdrop-blur-xl md:p-6">
-                        <div className="absolute inset-0">
-                            <div className="absolute left-[-2rem] top-10 h-32 w-32 rounded-full bg-[var(--biz-bloom-a)] blur-3xl" />
-                            <div className="biz-rotate-slow absolute right-6 top-8 h-28 w-28 rounded-full border border-[var(--biz-border-strong)]/80" />
-                            <div className="biz-float absolute right-12 top-12 h-16 w-16 rounded-full border border-[var(--biz-border)]/80" />
-                        </div>
-
-                        <div className="relative">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-xs font-semibold tracking-[0.12em] text-[var(--biz-muted)] uppercase">{ui.heroFlowTitle}</p>
-                                    <p className="mt-1 text-sm text-[var(--biz-body)]">{ui.heroFlowLabel}</p>
-                                </div>
-                                <div className="inline-flex items-center gap-2 rounded-full border border-[var(--biz-border)] bg-[var(--biz-surface)] px-3 py-1 text-xs text-[var(--biz-body)]">
-                                    <span className="biz-pulse h-2 w-2 rounded-full bg-[var(--biz-accent)]" />
-                                    <span>Live build</span>
-                                </div>
-                            </div>
-
-                            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                                {ui.heroMetrics.map((metric) => (
-                                    <MetricPanel key={metric.title} title={metric.title} value={metric.value} note={metric.note} className="bg-[var(--biz-surface)]/90" />
-                                ))}
-                            </div>
-
-                            <div className="mt-5 rounded-3xl border border-[var(--biz-border)] bg-[var(--biz-surface)]/90 p-4">
-                                <div className="grid gap-3 sm:grid-cols-2">
-                                    {ui.heroFlowModules.map((module, index) => {
-                                        const Icon = featureIcons[index % featureIcons.length];
-                                        return (
-                                            <div key={module} className="flex items-center gap-3 rounded-2xl border border-[var(--biz-border)] bg-[var(--biz-surface-soft)] px-3 py-3">
-                                                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--biz-chip-bg)] text-[var(--biz-accent-ink)]">
-                                                    <Icon className="h-4.5 w-4.5" />
-                                                </span>
-                                                <div>
-                                                    <p className="text-sm font-semibold text-[var(--biz-heading)]">{module}</p>
-                                                    <p className="text-xs text-[var(--biz-muted)]">Operational layer {String(index + 1).padStart(2, "0")}</p>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        </div>
-                    </aside>
-
-                    <div className="xl:col-span-2 grid gap-4 lg:grid-cols-[1.02fr_0.98fr]">
-                        <article className="rounded-[1.8rem] border border-[var(--biz-glass-border)] bg-[var(--biz-glass)] p-5 backdrop-blur-xl">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div>
-                                    <p className="text-xs font-semibold tracking-[0.12em] text-[var(--biz-muted)] uppercase">System momentum</p>
-                                    <p className="mt-1 text-sm text-[var(--biz-body)]">把首頁敘事、工作流與 AI roadmap 串成同一條產品線索。</p>
-                                </div>
-                                <span className="rounded-full border border-[var(--biz-border)] bg-[var(--biz-surface)] px-3 py-1 text-xs text-[var(--biz-body)]">
-                                    Proposal + Product
-                                </span>
-                            </div>
-
-                            <div className="mt-4 grid gap-3 md:grid-cols-3">
-                                {ui.architectureSteps.slice(0, 3).map((step, index) => (
-                                    <div
-                                        key={step.stage}
-                                        className={`rounded-2xl border border-[var(--biz-border)] bg-[var(--biz-surface)] px-4 py-3 ${index === 1 ? "biz-fade-up biz-delay-1" : index === 2 ? "biz-fade-up biz-delay-2" : "biz-fade-up"}`}
-                                    >
-                                        <p className="text-xs font-semibold tracking-[0.1em] text-[var(--biz-muted)] uppercase">
-                                            {step.stage} / {step.module}
-                                        </p>
-                                        <p className="mt-1 text-sm text-[var(--biz-body)]">{step.desc}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </article>
-
-                        <div className="overflow-hidden rounded-full border border-[var(--biz-glass-border)] bg-[var(--biz-glass)] backdrop-blur-xl self-center">
-                            <div className="biz-marquee flex w-max items-center gap-3 px-4 py-3">
-                                {heroModules.map((module, index) => (
-                                    <span
-                                        key={`${module}-${index}`}
-                                        className="rounded-full border border-[var(--biz-border)] bg-[var(--biz-surface)] px-3 py-1 text-xs font-medium text-[var(--biz-body)]"
-                                    >
-                                        {module}
-                                    </span>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                </section>
+                <OfficialPostHeroSection
+                    featureEyebrow={ui.featureEyebrow}
+                    heroBullets={[ui.heroBulletA, ui.heroBulletB, ui.heroBulletC]}
+                    ctaPrimary={editable.ctaPrimary}
+                    ctaSecondary={editable.ctaSecondary}
+                    entryHref={entryHref}
+                    heroEntryLabel={heroEntryLabel}
+                    heroFlowTitle={ui.heroFlowTitle}
+                    heroFlowLabel={ui.heroFlowLabel}
+                    heroMetrics={ui.heroMetrics}
+                    heroFlowModules={ui.heroFlowModules}
+                    moduleIcons={featureIcons}
+                />
 
                 <SectionShell id="platform" eyebrow={ui.platformEyebrow} title={ui.platformTitle} description={ui.platformDesc}>
                     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

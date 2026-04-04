@@ -10,8 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { getUiText } from "@/lib/i18n/ui-text";
 import type { DimensionOption } from "@/lib/types/catalog";
+import type { MarketingSectionId } from "@/components/dashboard/marketing-settings-workspace";
 
 export type MarketingCategoryManagerProps = {
+    marketingSection: MarketingSectionId;
     categories: DimensionOption[];
     createCategoryAction: (formData: FormData) => Promise<void>;
     updateCategoryAction: (formData: FormData) => Promise<void>;
@@ -20,6 +22,7 @@ export type MarketingCategoryManagerProps = {
 };
 
 export function MarketingCategoryManager({
+    marketingSection,
     categories,
     createCategoryAction,
     updateCategoryAction,
@@ -243,6 +246,7 @@ export function MarketingCategoryManager({
                     <p className="mt-1 text-xs text-[rgb(var(--muted))]">{t.createHint}</p>
                     <form action={createCategoryAction} className="mt-3 grid gap-3">
                         <input type="hidden" name="tab" value="marketing" />
+                        <input type="hidden" name="marketingSection" value={marketingSection} />
                         <FormField label={t.parentField} htmlFor="marketing-cat-create-parent">
                             <Select
                                 id="marketing-cat-create-parent"
@@ -308,6 +312,7 @@ export function MarketingCategoryManager({
 
                             <form key={selectedCategory.id} id={updateFormId} action={updateCategoryAction} className="grid gap-3">
                                 <input type="hidden" name="tab" value="marketing" />
+                                <input type="hidden" name="marketingSection" value={marketingSection} />
                                 <input type="hidden" name="categoryId" value={selectedCategory.id} />
                                 <FormField label={t.nameField} htmlFor="marketing-cat-update-name" required>
                                     <Input
@@ -349,6 +354,7 @@ export function MarketingCategoryManager({
                                 data-delete-target={t.deleteTarget.replace("{name}", selectedCategory.name)}
                             >
                                 <input type="hidden" name="tab" value="marketing" />
+                                <input type="hidden" name="marketingSection" value={marketingSection} />
                                 <input type="hidden" name="categoryId" value={selectedCategory.id} />
                                 <Button type="submit" variant="ghost" className="gap-2 border border-[rgb(var(--border))]">
                                     <Trash2 className="h-4 w-4" aria-hidden="true" />

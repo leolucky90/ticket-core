@@ -46,12 +46,14 @@
 - Firebase reset / seed baseline 已補齊到 `scripts/reset-firebase-data.mjs`
 - demo account / tenant baseline 已整合到 `docs/multi-tenant-data-flow.md`
 - official homepage demo/test account section 已補上 A / B 公司首頁 public route 直達連結，且官方首頁入口會依目前 request host 顯示，不再寫死 `localhost`
+- 官方 `/` 與租戶公開首頁（`ShowHomePage`）已接上結構化 **`BuilderHomepageConfig`**（`src/lib/types/builder.ts`、mock `src/lib/constants/builder-demo.ts`）：含 **`HeroBackgroundMedia`**（image / video / animated / none、`contentPanelSize`、layers 動態背景）與 **`AutoCarouselBanner`**；`BuilderMediaField`／`BuilderUploadNotice` 完成 URL／上傳預留（上傳鈕 disabled）與 i18n，媒體檔案正式儲存前預設 **external URL**。官方首頁第一屏後節奏收斂至 **`OfficialPostHeroSection`**。Demo 頁：`/demo/builder`。租戶端若啟用 builder Hero，會略過 showcase 模板內既有的 `hero` block，避免雙 Hero。
 - `BossAdmin` reset 邊界已明確維持在 hidden cookie login，不進 `users/{uid}`
 - shared shell / layout baseline 已集中到 `src/components/merchant/shell`
 - official / merchant / customer backend 已開始共用同一套 topbar / sidebar / account area 結構
 - merchant result-heavy pages 已開始共用 `query-controls` + `LIST_DISPLAY_OPTIONS` pagination baseline
 - merchant operational index pages 已開始共用 `MerchantPageShell` + `SearchToolbar` + `MerchantListShell` + `MerchantSectionCard`
 - merchant settings/detail pages 已開始共用 `MerchantPageShell` + `MerchantSectionCard` section baseline
+- merchant 帳戶設定頁已改成 **auth account summary / business profile / regional receipt settings** 三段分離：`/settings/account` 走 `merchant/account-settings-read-model.service.ts` + `merchant/account-settings-write.service.ts`；公司主資料 canonical doc 為 `settings/businessProfile`，地區單據設定 canonical doc 為 `settings/regionalReceiptSettings`，舊 `settings/companyProfile` 只保留 compatibility sync / fallback
 - merchant workflow pages 已開始共用 `MerchantSectionCard` workflow section baseline
 - Phase 4 shared index/list UX baseline 已開始，shared pagination / empty state 已擴散到 receipts / products / delete logs 與 dashboard customers / cases / activities tabs
 - Phase 5 catalog read baseline 已開始收斂到 service-level warm cache / invalidation，避免重複 route-load Firestore fetch
@@ -80,6 +82,10 @@
 - 儀表板「商店營銷設定」分頁已改為頂部區塊選單（分類／供應來源／品牌／二手商品）+ `MerchantBuilderShell` 左清單右編輯區；已移除重複的「商店營銷設置 · 維修品牌型號」搜尋工具列；品牌編輯與型號邏輯收斂至 `MarketingBrandEditor` + `src/lib/marketing/brand-catalog-helpers.ts`
 - 商店營銷 workspace、品項快速命名（`ItemQuickNamingSettingsCard`）、品牌編輯器、二手規格模板說明等 **框架文案** 已收斂至 `src/lib/i18n/ui-text.ts`（`marketingSettingsWorkspace`、`itemQuickNaming`、`marketingBrandEditor`、`usedProductTypeSettings` 等），與 cookie `lang` 一致；`ShowcaseBuilder` 頂部產品敘述用 `showcaseBuilderIntro`，`settings/showcase` 的 `MerchantPageShell` 副標用 `merchantStandalonePages.showcaseBuilderShellSubtitle`
 - 儀表板 workspace 分頁抬頭（`dashboardWorkspaceTabs`）與結帳／收據／關聯總覽／寄店總覽／品項管理獨立路由等 shell 標題（`merchantStandalonePages`）、寄店 KPI 區塊（`consignmentsOverview`）已走同一套 `getUiLanguage`／`getUiText`，避免英文模式下殘留寫死中文
+- `CheckoutWorkspace` 已收斂成結帳中心 / 客戶 / 案件 / 商品明細 / 單據設定 / 收據預覽 / 操作區 七段結構；案件卡預設隱藏，僅在所選客戶存在 checkout-eligible cases 時顯示；TW / AU 單據欄位與 preview 直接讀取 `businessProfile` + `regionalReceiptSettings`，並在 sale snapshot 寫入 `checkoutDocument`
+- invoice / receipt document 模組已建立 canonical baseline：`src/lib/schema/invoice-*.schema.ts` + `receipt-document.schema.ts` 定義 draft / issue / void / reissue / carrier / log / track / integration mode；`receiptDocuments` 為 canonical 已開立單據主資料，`invoiceDrafts` / `invoiceVoids` / `invoiceLogs` / `invoiceTrackSettings` / `settings/invoiceSettings` 為配套集合
+- `sales.createCheckoutSale` 已在 checkout 完成後透過 `invoice-issue.service.ts` 建立 draft 並依 `settings/invoiceSettings` 決定是否自動開立；TW 電子發票、AU receipt / invoice / tax invoice 共用同一套 `receiptDocuments` materialization 流程，作廢與重開由 `invoice-void.service.ts` / `reissueVoidedReceiptDocument` 保留原單據與關聯鏈
+- `/dashboard/receipts` 已從 raw sales list 收斂到 `receiptDocuments` 清單；`/dashboard/receipts/[id]` 顯示 document detail + log + void / reissue；`/settings/account/invoices` 與 `/settings/account/invoice-tracks` 走 `merchant/invoice-admin-read-model.service.ts` + `merchant/invoice-admin-write.service.ts`
 - 「二手商品」子區塊與供應來源／品牌對齊：`UsedProductTypeSettingsCard` 使用 `MerchantBuilderShell`，左欄為啟用中的二手類型清單（搜尋、清單顯示筆數、可點選列），右欄為該類型之規格模板列表與新增／編輯規格表單（不再用整頁 `<details>` 摺疊列表）
 - merchant item naming baseline 已集中到 `companies/{companyId}/settings/itemNaming` 與 shared helper，支援品牌 / 型號 / 主分類 / 第二分類排序
 - dashboard inventory `settings` / `product-management` 與 `/dashboard/products` 已共用同一套 `ItemFormFields`，避免第二分類與自動命名只存在單一路徑
@@ -162,8 +168,10 @@
   - `cases` 已明確標成 ticket legacy bridge
   - `src/lib/types/commerce.ts` 已縮成 compatibility barrel
   - merchant / platform read-side import path 已開始從大型聚合 service 抽離
+  - account settings canonical split 已建立：auth summary / `BusinessProfile` / `RegionalReceiptSettings` 不再混在單一 `companyProfile` route-local state
 - 目前基線:
   - 新 work 不應擴散對 `src/lib/services/commerce.ts` 與 `src/lib/types/commerce.ts` 的直接依賴
+  - account / company settings 新 work 應優先延續 `settings/businessProfile` + `settings/regionalReceiptSettings` 與 focused account-settings read/write services
 
 ### Phase 2
 
@@ -206,6 +214,7 @@
 - inventory `settings` 與 `product-management` 已共用 product create / edit list helper
 - inventory `settings` / `product-management` 與 `/dashboard/products` 已進一步共用 `ItemFormFields`，主分類 / 第二分類 / 自動命名欄位不再雙軌
 - marketing category / supplier 已共用 create form 與 editable lookup list helper
+- checkout customer lookup 已改成 walk-in 隱藏搜尋欄 + keyword-only suggestions；案件勾選卡只在 selected customer 有 checkout-eligible cases 時顯示，且 checkout UI 已拆到 `components/dashboard/checkout/*`
 - 目前基線:
   - operational list/index UX 新 work 應優先回到 shared toolbar / list shell / empty state / pagination pattern
 
@@ -232,13 +241,17 @@
   - predictive search / checkout item 綁定已優先用 `meta.productId`，名稱 fallback 僅允許唯一 match
   - sales / tickets / entitlements / pickup reservations / campaign-consignment 已補上 warm cache + write invalidation baseline
   - merchant customer / activity / product / inventory / catalog / marketing route actions 已開始透過 focused write wrappers 匯入
+  - checkout route data 已集中到 `merchant/checkout-route-data.service.ts`；案件 eligibility 改由 `merchant/checkout-case-selector.service.ts`；地區化單據 preview / form parsing 改由 `services/checkout/document-service.ts`
+  - checkout sale snapshot 已寫入 `checkoutDocument`，後續 Receipt Center / template renderer 可直接沿用，不必再從 route-local 表單字串重建
+  - receipt / invoice document lifecycle 已集中到 focused services：invoice settings / track / draft / issue / void / platform adapter / logs / carriers / receipt documents；receipt center 與 invoice settings routes 已改走 merchant invoice-admin read/write wrapper，不再把單據邏輯塞回 page.tsx 或 raw sales list
 - 目前基線:
   - relationship-heavy pages 應優先共用 shared read-model service，不要在 route layer 針對每筆資料 fan-out 查詢
   - catalog read-heavy pages 應優先依賴 service cache / invalidation baseline，不要在 route layer 自行重複抓 lookup lists
   - customer list / detail / relationship overview 應共用同一套 customer linkage helper，不要各自定義關聯規則
   - dashboard / workspace route 應優先收斂到 focused route-data service，再把結果交給 page / workspace
-- route action import 應優先走 `merchant/*-write.service.ts` wrappers，不要新增對 `commerce.ts` action 的直接依賴
-- item naming / catalog hierarchy 這類 merchant lookup 設定，應優先走 focused schema / service helper，不要回退成 page-local 字串拼接規則
+  - route action import 應優先走 `merchant/*-write.service.ts` wrappers，不要新增對 `commerce.ts` action 的直接依賴
+  - item naming / catalog hierarchy 這類 merchant lookup 設定，應優先走 focused schema / service helper，不要回退成 page-local 字串拼接規則
+  - checkout 後單據輸出、receipt center、作廢 / 重開與平台 adapter 狀態，應優先沿用 `receiptDocuments` + invoice focused services；不要回退成從 `sales` 臨時重建發票資料
 
 ### Phase 6
 
@@ -328,6 +341,16 @@
 - merchant UI 中文顯示為「品項」
 - merchant UI 英文顯示為 `Item`
 - `product*` route / service / type naming 目前可保留作為 compatibility naming，不需要為了 UI 文案改動核心資料模型名稱
+
+### Account / Business Profile / Receipt Settings
+
+- auth account summary 目前只承載登入身分欄位，不再混公司資料或收據設定
+- `src/lib/schema/business-profile.schema.ts` 是公司主資料 canonical schema
+- `src/lib/schema/regional-receipt-settings.schema.ts` 是地區單據與稅務欄位 canonical schema
+- `src/lib/schema/receipt-template.schema.ts` 負責 receipt / invoice preview model 推導
+- `src/lib/services/merchant/account-settings-read-model.service.ts` 是 `/settings/account` route data 聚合入口
+- `src/lib/services/merchant/account-settings-write.service.ts` 是 `/settings/account` write-side wrapper
+- `src/lib/services/company-profile-compat.service.ts` 只負責舊 `settings/companyProfile` compatibility fallback / sync，不應再成為新 caller 的第一入口
 
 ### Focused Service Wrappers
 
@@ -455,7 +478,8 @@
   - `src/app/(merchant)/account/security/page.tsx`
   - `src/app/(merchant)/settings/security/delete-control/page.tsx`
   - `src/components/account/AccountSecurityPanel.tsx`
-  - `src/components/account/company-profile-settings-form.tsx`
+  - `src/components/account/BusinessProfileForm.tsx`
+  - `src/components/account/RegionalReceiptSettingsCard.tsx`
   - `src/components/settings/ChangePasswordForm.tsx`
   - `src/components/settings/TicketAttributesSettingsPanel.tsx`
   - `src/components/settings/SecuritySettingsPanel.tsx`
@@ -465,7 +489,12 @@
 - merchant workflow pages
   - `src/app/(merchant)/dashboard/checkout/page.tsx`
   - `src/components/dashboard/CheckoutWorkspace.tsx`
-  - checkout workflow 的客戶 / promotions / cases / line items / receipt preview 區塊已開始對齊 shared section card pattern
+  - `src/components/dashboard/checkout/CheckoutCustomerCard.tsx`
+  - `src/components/dashboard/checkout/CheckoutCaseSelectorCard.tsx`
+  - `src/components/dashboard/checkout/CheckoutItemsCard.tsx`
+  - `src/components/dashboard/checkout/CheckoutDocumentSettingsCard.tsx`
+  - `src/components/dashboard/checkout/CheckoutReceiptPreviewCard.tsx`
+  - checkout workflow 已對齊 shared section card pattern，並把案件 eligibility、TW/AU document settings 與 preview 拆到 focused child components / services
 
 - shared index / list UX baseline
   - `src/components/merchant/shell/search-toolbar.tsx`
@@ -555,9 +584,12 @@
 1. 繼續把剩餘 merchant routes 的 action imports 切到 focused write wrappers，完成 route-layer boundary 收斂
 2. 把 `src/lib/services/commerce.ts` 內仍在被 wrapper 承接的 product / catalog / marketing write-side 實作真正內移到 focused service，讓 item/category flow 脫離 compatibility 層
 3. 視需要把 customer summary / activity purchases / consignments 下沉成更穩定的 aggregate doc 或 projection，進一步降低高流量頁面的即時計算成本
-4. 視需要把 `src/components/dashboard/CompanyDashboardWorkspace.tsx` 內的大型 tab 拆成 focused workspace，降低 shared list UX 與 item form 後續維護成本
-5. 繼續把剩餘 shared settings / list / builder framework text 收斂到 `ui-text.ts`，完成 Phase 7 邊角補漏
-6. 視需要把 checkout / 活動 / 庫存報表 等 downstream flow 一起接上第二分類與 item naming settings，完成 merchant item baseline 擴散
+4. 把後續 MOF / VAC adapter payload mapping、response mapping、retry / webhook / reconciliation 補進 `invoice-platform.service.ts`，維持 mock / test / production 同一 adapter 邊界
+5. 視需要補上 draft review / manual issue UI，讓 `autoIssueOnCheckout = false` 時可從後台完成審核與開立
+6. 視需要讓 downstream receipt / checkout / invoice generation 直接吃 `BusinessProfile` + `RegionalReceiptSettings` + `receiptDocuments` / preview model，逐步移除對舊 `settings/companyProfile` compatibility doc 的需求
+7. 視需要把 `src/components/dashboard/CompanyDashboardWorkspace.tsx` 內的大型 tab 拆成 focused workspace，降低 shared list UX 與 item form 後續維護成本
+8. 繼續把剩餘 shared settings / list / builder framework text 收斂到 `ui-text.ts`，完成 Phase 7 邊角補漏
+9. 視需要把 checkout / 活動 / 庫存報表 等 downstream flow 一起接上第二分類與 item naming settings，完成 merchant item baseline 擴散
 
 ## Validation Commands
 

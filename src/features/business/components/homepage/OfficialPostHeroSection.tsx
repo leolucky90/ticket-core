@@ -1,0 +1,121 @@
+import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
+import { ArrowRight, Sparkles } from "lucide-react";
+import { MetricPanel } from "@/features/business/components/homepage/MetricPanel";
+
+type Metric = { title: string; value: string; note: string };
+
+type OfficialPostHeroSectionProps = {
+    featureEyebrow: string;
+    heroBullets: [string, string, string];
+    ctaPrimary: string;
+    ctaSecondary: string;
+    entryHref: string;
+    heroEntryLabel: string;
+    heroFlowTitle: string;
+    heroFlowLabel: string;
+    heroMetrics: Metric[];
+    heroFlowModules: string[];
+    moduleIcons: LucideIcon[];
+};
+
+/**
+ * First content band after builder Hero + carousel: compact rhythm (no oversized hero duplicate).
+ */
+export function OfficialPostHeroSection({
+    featureEyebrow,
+    heroBullets,
+    ctaPrimary,
+    ctaSecondary,
+    entryHref,
+    heroEntryLabel,
+    heroFlowTitle,
+    heroFlowLabel,
+    heroMetrics,
+    heroFlowModules,
+    moduleIcons,
+}: OfficialPostHeroSectionProps) {
+    return (
+        <section className="mx-auto w-full max-w-7xl px-4 pb-10 pt-6 md:px-6 md:pb-14 md:pt-10">
+            <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(260px,300px)] lg:items-start lg:gap-10">
+                <div className="biz-fade-up space-y-5">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-[var(--biz-glass-border)] bg-[var(--biz-glass)] px-3 py-1.5 text-[11px] font-semibold tracking-[0.14em] text-[var(--biz-accent-ink)] uppercase backdrop-blur-xl">
+                        <Sparkles className="h-3.5 w-3.5" />
+                        <span>{featureEyebrow}</span>
+                    </div>
+
+                    <div className="grid gap-2 sm:grid-cols-3">
+                        {heroBullets.map((line) => (
+                            <div
+                                key={line}
+                                className="rounded-xl border border-[var(--biz-glass-border)] bg-[var(--biz-glass)] p-3 text-xs leading-relaxed text-[var(--biz-body)] backdrop-blur-xl md:text-sm"
+                            >
+                                {line}
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                        <a
+                            href="#platform"
+                            className="biz-cta-primary inline-flex items-center gap-2 rounded-full px-7 py-3.5 text-sm font-semibold transition hover:translate-y-[-1px]"
+                        >
+                            {ctaPrimary}
+                            <ArrowRight className="h-4 w-4" />
+                        </a>
+                        <a
+                            href="#about"
+                            className="rounded-full border border-[var(--biz-border-strong)] px-5 py-3 text-sm font-medium text-[var(--biz-accent-ink)] transition hover:bg-[var(--biz-surface-soft)]"
+                        >
+                            {ctaSecondary}
+                        </a>
+                        <Link
+                            href={entryHref}
+                            className="rounded-full border border-dashed border-[var(--biz-border)] px-5 py-3 text-sm font-medium text-[var(--biz-muted)] transition hover:border-[var(--biz-border-strong)] hover:text-[var(--biz-body)]"
+                        >
+                            {heroEntryLabel}
+                        </Link>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 pt-1">
+                        {heroFlowModules.slice(0, 8).map((module, index) => {
+                            const Icon = moduleIcons[index % moduleIcons.length];
+                            return (
+                                <span
+                                    key={module}
+                                    className="inline-flex items-center gap-1.5 rounded-full border border-[var(--biz-border)] bg-[var(--biz-surface)]/90 px-2.5 py-1 text-[11px] font-medium text-[var(--biz-body)]"
+                                >
+                                    <Icon className="h-3 w-3 text-[var(--biz-accent-ink)]" aria-hidden />
+                                    {module}
+                                </span>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <aside className="biz-fade-up biz-delay-1 rounded-2xl border border-[var(--biz-glass-border)] bg-[var(--biz-glass)] p-4 shadow-[0_20px_60px_-40px_var(--biz-shadow)] backdrop-blur-xl md:p-5">
+                    <div className="flex items-start justify-between gap-2">
+                        <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--biz-muted)]">{heroFlowTitle}</p>
+                            <p className="mt-0.5 text-xs text-[var(--biz-body)]">{heroFlowLabel}</p>
+                        </div>
+                        <span className="shrink-0 rounded-full border border-[var(--biz-border)] bg-[var(--biz-surface)] px-2 py-0.5 text-[10px] text-[var(--biz-muted)]">
+                            Live
+                        </span>
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                        {heroMetrics.slice(0, 4).map((metric) => (
+                            <MetricPanel
+                                key={metric.title}
+                                title={metric.title}
+                                value={metric.value}
+                                note={metric.note}
+                                className="bg-[var(--biz-surface)]/95 p-3"
+                            />
+                        ))}
+                    </div>
+                </aside>
+            </div>
+        </section>
+    );
+}
