@@ -84,7 +84,7 @@
 | 目錄 | 職責 |
 | --- | --- |
 | `components/ui/` | **純展示**可重用元件（button、processing、overlay 等）；無業務規則 |
-| `components/ui/builder/` | 首頁 Builder 共用 UI：`HeroBackgroundMedia`、`AutoCarouselBanner`、`BuilderMediaField`（URL／上傳預留）、`BuilderUploadNotice`、輪播子元件與 `background/AnimatedBackground` |
+| `components/ui/builder/` | 首頁 Builder 共用 UI：`HeroBackgroundMedia`、`AutoCarouselBanner`、`BuilderMediaField`（URL／上傳預留）、`BuilderUploadNotice`、輪播子元件與 `background/AnimatedBackground`；`HeroBackgroundMedia` / `AutoCarouselBanner` 現支援 `contentPresentation: "panel" | "inline"`，official hero / carousel 可直接將文案疊在背景媒體上 |
 | `components/merchant/shell/` | **商家 shell 基線**：`MerchantPageShell`、`MerchantSectionCard`、`MerchantListShell`、`SearchToolbar`、sidebar／topbar 等 |
 | `components/merchant/search/` | 商家預測／搜尋輸入；dropdown loading / empty / error copy 已收斂到 `lib/i18n/ui-text.ts` |
 | `components/merchant/catalog/` | 目錄維度選擇等共用 UI；`DimensionPicker` 已走 shared i18n，並支援主分類／第一層子分類（第二層分類）／第二層子分類（第三層分類）／品牌／品牌分類／型號六欄選擇；brand / productType / model options 依 catalog relation 做 category-aware cascade，不在 page / form 內各自硬編欄位文案 |

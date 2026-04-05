@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useState } from "react";
-import type { HeroBackgroundMediaConfig, HeroContentPanelSize } from "@/lib/types/builder";
+import type { HeroBackgroundMediaConfig, HeroContentPanelSize, HeroContentPresentation } from "@/lib/types/builder";
 import { AnimatedBackground } from "@/components/ui/builder/background/AnimatedBackground";
 
 type HeroBackgroundMediaProps = {
@@ -47,6 +47,31 @@ function panelSizeClass(size: HeroContentPanelSize | undefined): { wrap: string;
                 title: "text-3xl font-semibold leading-tight tracking-tight md:text-4xl",
                 desc: "mt-3 text-sm leading-relaxed md:text-base",
                 pad: "p-5 md:p-6",
+            };
+    }
+}
+
+function panelPresentationClass(presentation: HeroContentPresentation | undefined): {
+    frame: string;
+    eyebrow: string;
+    title: string;
+    desc: string;
+} {
+    switch (presentation) {
+        case "inline":
+            return {
+                frame: "border-0 bg-transparent p-0 shadow-none backdrop-blur-0",
+                eyebrow: "text-[rgb(255,255,255)]/78",
+                title: "text-white drop-shadow-[0_18px_30px_rgba(0,0,0,0.35)]",
+                desc: "text-[rgb(255,255,255)]/82 drop-shadow-[0_10px_22px_rgba(0,0,0,0.32)]",
+            };
+        case "panel":
+        default:
+            return {
+                frame: "rounded-2xl border border-[color-mix(in_srgb,rgb(var(--border))_85%,transparent)] bg-[color-mix(in_srgb,rgb(var(--panel))_88%,transparent)] shadow-lg backdrop-blur-md",
+                eyebrow: "text-[rgb(var(--muted))]",
+                title: "text-[rgb(var(--text))]",
+                desc: "text-[rgb(var(--muted))]",
             };
     }
 }
@@ -99,6 +124,7 @@ export function HeroBackgroundMedia({ config, className = "" }: HeroBackgroundMe
     const primary = config.primaryAction;
     const secondary = config.secondaryAction;
     const panel = panelSizeClass(config.contentPanelSize);
+    const presentation = panelPresentationClass(config.contentPresentation);
 
     const primaryBtn =
         "inline-flex min-h-[44px] items-center justify-center rounded-full bg-[rgb(var(--accent))] px-6 py-2.5 text-sm font-semibold text-[rgb(var(--panel))] shadow-[0_14px_40px_-12px_color-mix(in_srgb,rgb(var(--accent))_45%,transparent)] ring-2 ring-[color-mix(in_srgb,rgb(var(--accent))_28%,transparent)] transition hover:brightness-105";
@@ -177,14 +203,12 @@ export function HeroBackgroundMedia({ config, className = "" }: HeroBackgroundMe
 
             <div className={`relative z-10 flex h-full w-full items-center px-4 py-10 md:px-6 md:py-14 ${justifyClass(config.contentAlign)}`}>
                 <div className={`pointer-events-auto flex w-full flex-col gap-4 ${panel.wrap} ${textAlignClass(config.textAlign)}`}>
-                    <div
-                        className={`rounded-2xl border border-[color-mix(in_srgb,rgb(var(--border))_85%,transparent)] bg-[color-mix(in_srgb,rgb(var(--panel))_88%,transparent)] shadow-lg backdrop-blur-md ${panel.pad}`}
-                    >
+                    <div className={`${presentation.frame} ${panel.pad}`}>
                         {config.eyebrow ? (
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--muted))]">{config.eyebrow}</p>
+                            <p className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${presentation.eyebrow}`}>{config.eyebrow}</p>
                         ) : null}
-                        <h1 className={`mt-2 ${panel.title} text-[rgb(var(--text))]`}>{config.title}</h1>
-                        {config.description ? <p className={`${panel.desc} text-[rgb(var(--muted))]`}>{config.description}</p> : null}
+                        <h1 className={`mt-2 ${panel.title} ${presentation.title}`}>{config.title}</h1>
+                        {config.description ? <p className={`${panel.desc} ${presentation.desc}`}>{config.description}</p> : null}
 
                         {(primary || secondary) && (
                             <div

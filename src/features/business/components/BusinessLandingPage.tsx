@@ -1002,6 +1002,11 @@ export function BusinessLandingPage({
     const entryLabel = isAuthenticated ? ui.navDashboard : ui.navLogin;
     const heroEntryLabel = isAuthenticated ? ui.navDashboard : ui.navLogin;
     const resolvedDemoEntryValue = demoEntryValue ?? ui.demoEntryValue;
+    const demoScopeLabel = lang === "en" ? "Demo scope" : "測試範圍";
+    const demoScopeSummary =
+        lang === "en"
+            ? `${ui.demoGroups.length} tenant groups / ${ui.demoGroups.reduce((sum, group) => sum + group.accounts.length, 0)} accounts`
+            : `${ui.demoGroups.length} 組租戶 / ${ui.demoGroups.reduce((sum, group) => sum + group.accounts.length, 0)} 個帳號`;
 
     const heroConfig: HeroBackgroundMediaConfig = {
         ...builderHomepage.hero,
@@ -1086,7 +1091,7 @@ export function BusinessLandingPage({
                 <div className="builder-canonical-official">
                     {heroConfig.enabled ? <HeroBackgroundMedia config={heroConfig} /> : null}
                     {builderHomepage.carousel.enabled ? (
-                        <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
+                        <div className="mx-auto max-w-7xl px-4 pb-6 pt-3 md:px-6 md:pb-8 md:pt-4">
                             <AutoCarouselBanner
                                 config={builderHomepage.carousel}
                                 labels={{
@@ -1141,7 +1146,7 @@ export function BusinessLandingPage({
                         <div>
                             <h3 className="text-2xl font-semibold text-[var(--biz-heading)]">{ui.architectureTitle}</h3>
                             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--biz-body)]">{ui.architectureDesc}</p>
-                            <div className="mt-5 grid gap-3">
+                            <div className="mt-5 grid gap-3 md:grid-cols-2">
                                 {ui.architectureSteps.map((step, index) => (
                                     <div key={step.stage} className="rounded-2xl border border-[var(--biz-border)] bg-[var(--biz-surface)] px-4 py-4">
                                         <p className="text-xs font-semibold tracking-[0.1em] text-[var(--biz-muted)] uppercase">
@@ -1380,20 +1385,36 @@ export function BusinessLandingPage({
                 </SectionShell>
 
                 <SectionShell id="demo" eyebrow={ui.demoEyebrow} title={ui.demoTitle} description={ui.demoDesc}>
-                    <div className="grid gap-6 lg:grid-cols-[0.88fr_1.12fr]">
-                        <article className="rounded-[1.9rem] border border-[var(--biz-glass-border)] bg-[var(--biz-glass)] p-6 backdrop-blur-xl">
-                            <div className="grid gap-4">
+                    <div className="grid gap-5 lg:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] xl:grid-cols-[minmax(18rem,0.64fr)_minmax(0,1.36fr)]">
+                        <article className="rounded-[1.9rem] border border-[var(--biz-glass-border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(255,255,255,0.72))] p-5 shadow-[0_24px_70px_-52px_var(--biz-shadow)] backdrop-blur-xl md:p-6">
+                            <div className="flex h-full flex-col gap-4">
                                 <div className="rounded-[1.4rem] border border-[var(--biz-border)] bg-[var(--biz-surface)] p-4">
                                     <p className="text-xs font-semibold tracking-[0.12em] text-[var(--biz-muted)] uppercase">{ui.demoEntryLabel}</p>
                                     <p className="mt-2 break-all text-base font-semibold text-[var(--biz-heading)]">{resolvedDemoEntryValue}</p>
                                 </div>
-                                <div className="rounded-[1.4rem] border border-[var(--biz-border)] bg-[var(--biz-surface)] p-4">
-                                    <p className="text-xs font-semibold tracking-[0.12em] text-[var(--biz-muted)] uppercase">{ui.demoPasswordLabel}</p>
-                                    <p className="mt-2 text-3xl font-semibold tracking-[0.08em] text-[var(--biz-heading)]">{ui.demoPasswordValue}</p>
+                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                                    <div className="rounded-[1.4rem] border border-[var(--biz-border)] bg-[var(--biz-surface)] p-4">
+                                        <p className="text-xs font-semibold tracking-[0.12em] text-[var(--biz-muted)] uppercase">{ui.demoPasswordLabel}</p>
+                                        <p className="mt-2 text-3xl font-semibold tracking-[0.08em] text-[var(--biz-heading)]">{ui.demoPasswordValue}</p>
+                                    </div>
+                                    <div className="rounded-[1.4rem] border border-[var(--biz-border)] bg-[var(--biz-surface)] p-4">
+                                        <p className="text-xs font-semibold tracking-[0.12em] text-[var(--biz-muted)] uppercase">{demoScopeLabel}</p>
+                                        <p className="mt-2 text-sm leading-relaxed text-[var(--biz-body)]">{demoScopeSummary}</p>
+                                    </div>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {ui.demoGroups.map((group) => (
+                                        <span
+                                            key={group.title}
+                                            className="rounded-full border border-[var(--biz-border)] bg-[var(--biz-surface)] px-3 py-1.5 text-xs font-medium text-[var(--biz-body)]"
+                                        >
+                                            {group.title}
+                                        </span>
+                                    ))}
                                 </div>
                                 <Link
                                     href="/login"
-                                    className="inline-flex w-fit items-center gap-2 rounded-full bg-[var(--biz-accent)] px-5 py-3 text-sm font-semibold text-[var(--biz-accent-contrast)] transition hover:translate-y-[-1px]"
+                                    className="mt-auto inline-flex w-fit items-center gap-2 rounded-full bg-[var(--biz-accent)] px-5 py-3 text-sm font-semibold text-[var(--biz-accent-contrast)] transition hover:translate-y-[-1px]"
                                 >
                                     {ui.navLogin}
                                     <ArrowRight className="h-4 w-4" />
@@ -1401,11 +1422,11 @@ export function BusinessLandingPage({
                             </div>
                         </article>
 
-                        <div className="grid gap-4 md:grid-cols-2">
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                             {ui.demoGroups.map((group, index) => (
                                 <article
                                     key={group.title}
-                                    className={`rounded-[1.9rem] border border-[var(--biz-glass-border)] bg-[var(--biz-glass)] p-6 backdrop-blur-xl ${index === 1 ? "biz-fade-up biz-delay-1" : "biz-fade-up"}`}
+                                    className={`rounded-[1.9rem] border border-[var(--biz-glass-border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(255,255,255,0.72))] p-5 shadow-[0_24px_70px_-52px_var(--biz-shadow)] backdrop-blur-xl md:p-6 ${index === 1 ? "biz-fade-up biz-delay-1" : index === 2 ? "biz-fade-up biz-delay-2" : "biz-fade-up"}`}
                                 >
                                     <div className="flex items-center justify-between">
                                         <h3 className="text-xl font-semibold text-[var(--biz-heading)]">{group.title}</h3>

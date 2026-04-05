@@ -47,6 +47,7 @@
 - demo account / tenant baseline 已整合到 `docs/multi-tenant-data-flow.md`
 - official homepage demo/test account section 已補上 A / B / C 公司首頁 public route 直達連結，且官方首頁入口會依目前 request host 顯示，不再寫死 `localhost`；**各 demo 商家帳號的展示首頁內容**各自對應 `companies/{companyId}/app_config/showcase`（與官方 `/` 的 `business_homepage` 分開），詳見 `docs/multi-tenant-data-flow.md` 該節 FAQ
 - 官方 `/` 與租戶公開首頁（`ShowHomePage`）已接上結構化 **`BuilderHomepageConfig`**（`src/lib/types/builder.ts`、mock `src/lib/constants/builder-demo.ts`）：含 **`HeroBackgroundMedia`**（image / video / animated / none、`contentPanelSize`、layers 動態背景）與 **`AutoCarouselBanner`**；`BuilderMediaField`／`BuilderUploadNotice` 完成 URL／上傳預留（上傳鈕 disabled）與 i18n，媒體檔案正式儲存前預設 **external URL**。官方首頁第一屏後節奏收斂至 **`OfficialPostHeroSection`**。Demo 頁：`/demo/builder`。租戶端若啟用 builder Hero，會略過 showcase 模板內既有的 `hero` block，避免雙 Hero。
+- 官方首頁 builder hero / carousel 目前支援 `contentPresentation: "inline"`；official `/` 已改成文案直接疊在背景媒體上，而不是白底玻璃卡，輪播控制元件也回到圖片內。第一屏後的 `OfficialPostHeroSection`、platform architecture steps 與 demo 帳號區也已改為高密度橫向版型，避免桌面長段留白
 - 官方首頁 `/` 底部新增公開 `版本更新紀錄` 區塊，並補 `/updates` 完整歷史頁；資料直接解析 `docs/DOCUMENTATION-VERSION.md`，可在有 Git metadata 的環境顯示最近 revision 時間／hash，對外展示的 changelog 不再維護第二份手寫資料源
 - 公開 changelog 視覺已再收斂成較緊湊的摘要卡 + 卡片式版本歷史；首頁與 `/updates` 的歷史列表皆改為固定高度內層捲動，避免版本表把頁面主敘事拉得過長
 - storefront / showcase 的登出 CTA 已回到 shared `SignOutButton` appearance variants，避免 dark mode root theme class 與 storefront 色票互相覆蓋，導致展示頁 navbar 的 sign-out 按鈕反白／失真

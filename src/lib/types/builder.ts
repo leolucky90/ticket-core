@@ -49,6 +49,8 @@ export type BuilderCarouselConfig = {
     showArrows: boolean;
     showDots: boolean;
     pauseOnHover: boolean;
+    /** Default `panel`; official homepage can use `inline` to keep copy inside the image composition. */
+    contentPresentation?: HeroContentPresentation;
     slides: BuilderCarouselSlide[];
 };
 
@@ -65,6 +67,9 @@ export type HeroAnimatedVariant = "gradient" | "blobs" | "layers";
 /** Controls hero copy panel width; keeps background visible on marketing pages. */
 export type HeroContentPanelSize = "sm" | "md" | "lg";
 
+/** Controls whether hero copy floats on media directly or sits inside a glass panel. */
+export type HeroContentPresentation = "panel" | "inline";
+
 export type HeroBackgroundMediaConfig = {
     enabled: boolean;
     backgroundType: HeroBackgroundType;
@@ -73,6 +78,8 @@ export type HeroBackgroundMediaConfig = {
     textAlign: HeroTextAlign;
     /** Default `md`; use `sm` for proposal / portfolio heroes with large media. */
     contentPanelSize?: HeroContentPanelSize;
+    /** Default `panel`; official portfolio hero can use `inline` to avoid boxed copy over imagery. */
+    contentPresentation?: HeroContentPresentation;
     /** 0–1; mapped to overlay opacity classes. */
     overlayStrength: number;
     imageUrl?: string;
