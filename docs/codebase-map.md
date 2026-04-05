@@ -32,6 +32,7 @@
 | 區域 | 用途 |
 | --- | --- |
 | `(platform)/page.tsx` | 入口首頁（portfolio／敘事） |
+| `(platform)/updates` | 公開版本更新紀錄頁；完整顯示 `docs/DOCUMENTATION-VERSION.md` changelog，供展示頁訪客查看近期更新 |
 | `(platform)/login`、`forgot-password`、`reset-password` | 認證流程頁 |
 | `(platform)/register/company`、`register/customer` | 註冊；前者為官方用戶／商家註冊，後者僅限 tenant-scoped 商家客戶註冊 |
 | `(platform)/business` | 商業／提案相關落地 |
@@ -86,16 +87,16 @@
 | `components/ui/builder/` | 首頁 Builder 共用 UI：`HeroBackgroundMedia`、`AutoCarouselBanner`、`BuilderMediaField`（URL／上傳預留）、`BuilderUploadNotice`、輪播子元件與 `background/AnimatedBackground` |
 | `components/merchant/shell/` | **商家 shell 基線**：`MerchantPageShell`、`MerchantSectionCard`、`MerchantListShell`、`SearchToolbar`、sidebar／topbar 等 |
 | `components/merchant/search/` | 商家預測／搜尋輸入；dropdown loading / empty / error copy 已收斂到 `lib/i18n/ui-text.ts` |
-| `components/merchant/catalog/` | 目錄維度選擇等共用 UI；`DimensionPicker` 已走 shared i18n，不在 page / form 內各自硬編欄位文案 |
-| `components/layout/` | `ProtectedShell`、`ui-language-provider`、`navigation-progress` 等全站版面 |
+| `components/merchant/catalog/` | 目錄維度選擇等共用 UI；`DimensionPicker` 已走 shared i18n，並支援主分類／第一層子分類（第二層分類）／第二層子分類（第三層分類）／品牌／品牌分類／型號六欄選擇；brand / productType / model options 依 catalog relation 做 category-aware cascade，不在 page / form 內各自硬編欄位文案 |
+| `components/layout/` | `ProtectedShell`、`ui-language-provider`、`navigation-progress`、shared `SignOutButton` 等全站版面；跨 dashboard / showcase / shop 的登出 CTA 應優先延續 shared appearance variant；右上角帳戶選單的 `帳戶設定` 由此集中組裝 |
 | `components/dashboard/` | 儀表板大型 workspace（結帳、營銷設定、BossAdmin、品項等）；`components/dashboard/checkout/` 已拆出 checkout customer / case selector / items / document settings / preview cards |
 | `components/staff/` | 員工列表、表單、軟刪／保險庫區塊等 |
-| `components/settings/` | 刪除控制、刪除紀錄、**操作稽核**（`AuditLogsPanel`）、票務屬性、密碼表單等 |
+| `components/settings/` | 刪除控制、刪除紀錄、**操作稽核**（`AuditLogsPanel`）、票務屬性、密碼表單、dashboard appearance-only `SecuritySettingsPanel` / `ThemeModeToggle` 等 |
 | `components/account/` | 帳戶／安全相關面板；`AccountSummaryCard`、`BusinessProfileForm`、`RegionalReceiptSettingsCard`、`ReceiptTemplatePreview` 已將登入摘要、公司主資料、地區單據設定分離 |
 | `components/invoices/` | 發票／單據模組 UI：checkout 共用欄位、狀態 badge、作廢 dialog、設定表單、字軌設定、document detail panel |
 | `components/auth/` | 登入、Google、重設密碼等表單 |
 | `components/sales/` | 銷售工作區 |
-| `components/used-products/` | 二手商品管理 UI |
+| `components/used-products/` | 二手商品管理 UI；類型清單與規格模板基於 `usedProductTypeSettings`，若 collection 尚未建立則由品牌已啟用的 `usedProductTypes` 自動回補 active baseline |
 | `components/purchase-orders/` | 採購／訂購單草稿 UI（OCR+AI 上傳、`feature/receipt-po` 審核表單、人工建立、物流區塊預留） |
 | `components/feature/receipt-po/` | 收據 intake 上傳、PoDraft 可編輯審核（`draft-editor`／目錄篩選 + 商品搜尋連動）；`components/feature/product/dimension-picker` 為 merchant DimensionPicker 之 re-export |
 | `components/ai/` | AI 相關 UI 包裝 |
@@ -106,8 +107,8 @@
 
 | 目錄 | 說明 |
 | --- | --- |
-| `features/business/` | 首頁／商業落地內容與服務 |
-| `features/showcase/` | 展示頁 builder：`ShowcaseBuilder`、block registry、preferences、預設 template／renderer；builder 頂部引言、整套 editor labels 與 shell 文案已對齊 `lib/i18n/ui-text.ts`（`showcaseBuilderIntro`、`showcaseBuilderPage`、`merchantStandalonePages`）與 cookie `lang` |
+| `features/business/` | 首頁／商業落地內容與服務；`publicReleaseNotes.server.ts` 解析公開 changelog，`PublicReleaseNotesSection` 同時供官方 `/` 與 `/updates` 復用，並維持摘要卡 + 內層滾動歷史的公開展示節奏 |
+| `features/showcase/` | 展示頁 builder：`ShowcaseBuilder`、block registry、preferences、預設 template／renderer；builder 頂部引言、整套 editor labels 與 shell 文案已對齊 `lib/i18n/ui-text.ts`（`showcaseBuilderIntro`、`showcaseBuilderPage`、`merchantStandalonePages`）與 cookie `lang`；此處編輯 tenant storefront `themeColors` / content，**不**承接 dashboard shell 的 `light` / `dark` / `custom` mode toggle |
 | `features/dashboard/` | 儀表板相關 feature 服務（若與 `components/dashboard` 並用，讀取時注意邊界） |
 
 Showcase 擴充時優先動：`showBlockRegistry.ts`、`showContentPreferences.ts`、`blockRenderer.tsx`（見 `project-rules.md` Storefront Builder Rule）。
@@ -131,7 +132,7 @@ Showcase 擴充時優先動：`showBlockRegistry.ts`、`showContentPreferences.t
 
 集中 **entity／業務型別**；新共用型別優先獨立模組，**不要**再擴散塞入 `types/commerce.ts`（該檔為 compatibility barrel）。
 
-常用 canonical 模組包含：`customer.ts`、`ticket.ts`、`merchant-product.ts`、`catalog.ts`、`promotion.ts`、`inventory.ts`、`repair-brand.ts`、`reporting.ts`、`purchase-order.ts`（採購草稿，Firestore）、`builder.ts`（官方／租戶首頁 builder 結構化設定與媒體欄位語意）等。多店面／多倉：`merchant-store.ts`、`warehouse.ts`、`warehouse-inventory.ts`、`stock-item.ts`、`inventory-log.ts`（倉別時間軸）、`inventory-transfer.ts`。
+常用 canonical 模組包含：`customer.ts`、`ticket.ts`、`merchant-product.ts`、`catalog.ts`、`promotion.ts`、`inventory.ts`、`repair-brand.ts`、`reporting.ts`、`purchase-order.ts`（採購草稿，Firestore）、`builder.ts`（官方／租戶首頁 builder 結構化設定與媒體欄位語意）等。`catalog.ts` 的 `CategoryDoc` 已支援 `categoryLevel: 1 | 2 | 3`，`merchant-product.ts` / `product.ts` 也已帶 `secondaryCategory*`、`tertiaryCategory*` 欄位。多店面／多倉：`merchant-store.ts`、`warehouse.ts`、`warehouse-inventory.ts`、`stock-item.ts`、`inventory-log.ts`（倉別時間軸）、`inventory-transfer.ts`。
 
 ### Schema `lib/schema/`
 
@@ -155,7 +156,7 @@ Firestore／資料形狀與 bridge；例如 `cases.ts`（ticket legacy）、`del
 
 | 路徑 | 說明 |
 | --- | --- |
-| `lib/i18n/` | `ui-text.ts` 為共用 UI 字串主檔；與 `ui-language-provider` 搭配；含儀表板分頁抬頭（`dashboardWorkspaceTabs`）、dashboard flash、dashboard customers / cases / campaigns workspace（`dashboardCustomerCaseWorkspace`）、商店營銷 workspace（`marketingSettingsWorkspace`、`itemFormFields`、`dimensionPicker`、`predictiveSearchInput` 等）、獨立 merchant 路由 shell（`merchantStandalonePages`）、寄店總覽（`consignmentsOverview`）、Showcase 引言／editor labels（`showcaseBuilderIntro`、`showcaseBuilderPage`）等 |
+| `lib/i18n/` | `ui-text.ts` 為共用 UI 字串主檔；與 `ui-language-provider` 搭配；含儀表板分頁抬頭（`dashboardWorkspaceTabs`）、dashboard flash、dashboard customers / cases / campaigns workspace（`dashboardCustomerCaseWorkspace`）、商店營銷 workspace（`marketingSettingsWorkspace`、`marketingCategory`、`itemQuickNaming`、`itemFormFields`、`dimensionPicker`、`predictiveSearchInput` 等）、獨立 merchant 路由 shell（`merchantStandalonePages`）、寄店總覽（`consignmentsOverview`）、Showcase 引言／editor labels（`showcaseBuilderIntro`、`showcaseBuilderPage`）等 |
 | `lib/reporting/financial-summary.ts` | 儀表板用估計 COGS／毛利（銷售明細 × 品項成本） |
 | `lib/pagination/query-controls.ts` | cursor 分頁控制共用邏輯 |
 | `lib/ui/list-display.ts` | 列表 page-size 等共用常數 |

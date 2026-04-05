@@ -108,7 +108,14 @@ function initializeFirebaseApp() {
 }
 
 /** Must match `TENANT_SEEDS` admin + customer emails in reset-firebase-data.mjs */
-const DEMO_FIREBASE_AUTH_EMAILS = ["admina@gmail.com", "cxa@gmail.com", "adminb@gmail.com", "cxb@gmail.com"];
+const DEMO_FIREBASE_AUTH_EMAILS = [
+    "admina@gmail.com",
+    "cxa@gmail.com",
+    "adminb@gmail.com",
+    "cxb@gmail.com",
+    "adminc@gmail.com",
+    "cxc@gmail.com",
+];
 
 async function main() {
     loadEnvFiles(REPO_ROOT);

@@ -175,8 +175,13 @@ export type ProductDoc = AuditFields & {
     namingMode: ProductNamingMode;
     categoryId?: EntityId;
     categoryName?: string;
+    secondaryCategoryId?: EntityId;
+    secondaryCategoryName?: string;
+    tertiaryCategoryId?: EntityId;
+    tertiaryCategoryName?: string;
     brandId?: EntityId;
     brandName?: string;
+    productTypeName?: string;
     modelId?: EntityId;
     modelName?: string;
     nameEntryId?: EntityId;

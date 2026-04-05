@@ -57,7 +57,9 @@ export function ItemFormFields({
     const [dimensions, setDimensions] = useState({
         categoryRef: toRefValue(product?.categoryId, product?.categoryName),
         secondaryCategoryRef: toRefValue(product?.secondaryCategoryId, product?.secondaryCategoryName),
+        tertiaryCategoryRef: toRefValue(product?.tertiaryCategoryId, product?.tertiaryCategoryName),
         brandRef: toRefValue(product?.brandId, product?.brandName),
+        productTypeRef: toRefValue(product?.productTypeName, product?.productTypeName),
         modelRef: toRefValue(product?.modelId, product?.modelName),
     });
 
@@ -67,7 +69,9 @@ export function ItemFormFields({
                 namingMode: "structured",
                 categoryName: parseRefName(dimensions.categoryRef),
                 secondaryCategoryName: parseRefName(dimensions.secondaryCategoryRef),
+                tertiaryCategoryName: parseRefName(dimensions.tertiaryCategoryRef),
                 brandName: parseRefName(dimensions.brandRef),
+                productTypeName: parseRefName(dimensions.productTypeRef),
                 modelName: parseRefName(dimensions.modelRef),
                 namingOrder: namingSettings.order,
             }),
@@ -82,8 +86,10 @@ export function ItemFormFields({
     const orderText = namingSettings.order
         .map((token) => {
             if (token === "brand") return namingUi.tokenBrand;
+            if (token === "productType") return namingUi.tokenProductType;
             if (token === "model") return namingUi.tokenModel;
             if (token === "category") return namingUi.tokenCategory;
+            if (token === "tertiaryCategory") return namingUi.tokenTertiaryCategory;
             return namingUi.tokenSecondaryCategory;
         })
         .join(" + ");
@@ -98,7 +104,9 @@ export function ItemFormFields({
                     setDimensions({
                         categoryRef: next.categoryRef ?? "",
                         secondaryCategoryRef: next.secondaryCategoryRef ?? "",
+                        tertiaryCategoryRef: next.tertiaryCategoryRef ?? "",
                         brandRef: next.brandRef ?? "",
+                        productTypeRef: next.productTypeRef ?? "",
                         modelRef: next.modelRef ?? "",
                     })
                 }

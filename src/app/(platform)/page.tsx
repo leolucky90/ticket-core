@@ -3,6 +3,7 @@ import { cookies, headers } from "next/headers";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
 import { getCurrentSessionAccountContext } from "@/lib/services/staff.service";
 import { getBusinessHomepageContentPreferences } from "@/features/business/services/businessHomepageContent.server";
+import { getPublicReleaseNotes } from "@/features/business/services/publicReleaseNotes.server";
 
 function resolveRequestOrigin(host: string | null, forwardedProto: string | null): string {
     const normalizedHost = host?.trim();
@@ -25,7 +26,10 @@ export default async function HomePage() {
     const langCookie = cookieStore.get("lang")?.value;
     const lang: "zh" | "en" = langCookie === "en" ? "en" : "zh";
     const sessionUser = await getSessionUser();
-    const homepagePreferences = await getBusinessHomepageContentPreferences();
+    const [homepagePreferences, releaseNotes] = await Promise.all([
+        getBusinessHomepageContentPreferences(),
+        getPublicReleaseNotes(),
+    ]);
     const requestOrigin = resolveRequestOrigin(
         headerStore.get("x-forwarded-host") ?? headerStore.get("host"),
         headerStore.get("x-forwarded-proto"),
@@ -46,6 +50,7 @@ export default async function HomePage() {
             dashboardHref={dashboardHref}
             homepageContent={homepagePreferences.content}
             demoEntryValue={requestOrigin}
+            releaseNotes={releaseNotes}
         />
     );
 }

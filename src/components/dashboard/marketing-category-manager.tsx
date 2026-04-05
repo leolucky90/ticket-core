@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useCallback, useMemo, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 import { ChevronRight, Plus, Save, Search, Trash2 } from "lucide-react";
 import { useUiLanguage } from "@/components/layout/ui-language-provider";
 import { EmptyStateCard } from "@/components/merchant/shell";
@@ -21,6 +21,27 @@ export type MarketingCategoryManagerProps = {
     onDeleteGuard: (event: FormEvent<HTMLFormElement>) => void;
 };
 
+function sortCategories(list: DimensionOption[]) {
+    return [...list].sort(
+        (a, b) =>
+            Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0) ||
+            (a.fullPath ?? a.name).localeCompare(b.fullPath ?? b.name, "zh-Hant"),
+    );
+}
+
+function matchesCategory(item: DimensionOption, keyword: string) {
+    const q = keyword.trim().toLowerCase();
+    if (!q) return true;
+    return [item.name, item.fullPath ?? "", item.parentCategoryName ?? ""].some((value) => value.toLowerCase().includes(q));
+}
+
+function categoryKindLabel(item: DimensionOption, t: ReturnType<typeof getUiText>["marketingCategory"]) {
+    const level = item.categoryLevel ?? 1;
+    if (level <= 1) return t.kindPrimary;
+    if (level === 2) return t.kindSecondary;
+    return t.kindTertiary;
+}
+
 export function MarketingCategoryManager({
     marketingSection,
     categories,
@@ -34,83 +55,161 @@ export function MarketingCategoryManager({
     const [searchDraft, setSearchDraft] = useState("");
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
-    const [expandedMainIds, setExpandedMainIds] = useState<Record<string, boolean>>({});
+    const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
     const [createParentId, setCreateParentId] = useState("");
+
+    const categoryById = useMemo(() => new Map(categories.map((item) => [item.id, item])), [categories]);
 
     const childrenByParent = useMemo(() => {
         const map = new Map<string, DimensionOption[]>();
-        for (const c of categories) {
-            if ((c.categoryLevel ?? 1) !== 2 || !c.parentCategoryId) continue;
-            const list = map.get(c.parentCategoryId) ?? [];
-            list.push(c);
-            map.set(c.parentCategoryId, list);
+        for (const category of categories) {
+            const parentId = (category.parentCategoryId ?? "").trim();
+            if (!parentId) continue;
+            const list = map.get(parentId) ?? [];
+            list.push(category);
+            map.set(parentId, list);
         }
-        for (const list of map.values()) {
-            list.sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
+        for (const [key, list] of map.entries()) {
+            map.set(key, sortCategories(list));
         }
         return map;
     }, [categories]);
 
-    const mainCategories = useMemo(() => {
-        return categories
-            .filter((c) => (c.categoryLevel ?? 1) === 1)
-            .sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
-    }, [categories]);
-
-    const categoryById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
-
-    const selectCategory = useCallback(
-        (id: string | null) => {
-            setSelectedCategoryId(id);
-            if (!id) {
-                setCreateParentId("");
-                return;
-            }
-            const cat = categoryById.get(id);
-            if (!cat) return;
-            if ((cat.categoryLevel ?? 1) === 1) {
-                setCreateParentId(id);
-            } else {
-                setCreateParentId(cat.parentCategoryId ?? "");
-                if (cat.categoryLevel === 2 && cat.parentCategoryId) {
-                    setExpandedMainIds((prev) => ({ ...prev, [cat.parentCategoryId!]: true }));
-                }
-            }
-        },
-        [categoryById],
+    const rootCategories = useMemo(
+        () => sortCategories(categories.filter((item) => (item.categoryLevel ?? 1) === 1)),
+        [categories],
     );
 
-    const visibleMains = useMemo(() => {
-        const q = searchTerm.trim().toLowerCase();
-        if (!q) return mainCategories;
-        return mainCategories.filter((main) => {
-            const kids = childrenByParent.get(main.id) ?? [];
-            if (main.name.toLowerCase().includes(q)) return true;
-            return kids.some(
-                (k) =>
-                    k.name.toLowerCase().includes(q) ||
-                    (k.fullPath ?? "").toLowerCase().includes(q) ||
-                    (k.parentCategoryName ?? "").toLowerCase().includes(q),
-            );
-        });
-    }, [mainCategories, childrenByParent, searchTerm]);
+    const selectableParents = useMemo(
+        () => sortCategories(categories.filter((item) => (item.categoryLevel ?? 1) < 3)),
+        [categories],
+    );
 
-    const getVisibleChildren = (mainId: string): DimensionOption[] => {
-        const kids = childrenByParent.get(mainId) ?? [];
-        const q = searchTerm.trim().toLowerCase();
-        if (!q) return kids;
-        return kids.filter(
-            (k) =>
-                k.name.toLowerCase().includes(q) ||
-                (k.fullPath ?? "").toLowerCase().includes(q) ||
-                (categoryById.get(mainId)?.name ?? "").toLowerCase().includes(q),
-        );
-    };
+    const searchKeyword = searchTerm.trim().toLowerCase();
+
+    function hasVisibleNode(category: DimensionOption): boolean {
+        if (matchesCategory(category, searchKeyword)) return true;
+        const children = childrenByParent.get(category.id) ?? [];
+        return children.some((child) => hasVisibleNode(child));
+    }
+
+    function collectDescendantIds(categoryId: string) {
+        const seen = new Set<string>();
+        const queue = [categoryId];
+        while (queue.length > 0) {
+            const currentId = queue.shift();
+            if (!currentId) continue;
+            const children = childrenByParent.get(currentId) ?? [];
+            for (const child of children) {
+                if (seen.has(child.id)) continue;
+                seen.add(child.id);
+                queue.push(child.id);
+            }
+        }
+        return seen;
+    }
+
+    function expandAncestorChain(category: DimensionOption | undefined) {
+        if (!category) return;
+        const nextExpanded: Record<string, boolean> = {};
+        let parentId = category.parentCategoryId ?? "";
+        while (parentId) {
+            nextExpanded[parentId] = true;
+            parentId = categoryById.get(parentId)?.parentCategoryId ?? "";
+        }
+        if (Object.keys(nextExpanded).length === 0) return;
+        setExpandedIds((prev) => ({ ...prev, ...nextExpanded }));
+    }
+
+    function selectCategory(id: string | null) {
+        setSelectedCategoryId(id);
+        if (!id) {
+            setCreateParentId("");
+            return;
+        }
+        const category = categoryById.get(id);
+        if (!category) return;
+        expandAncestorChain(category);
+        if ((category.categoryLevel ?? 1) >= 3) {
+            setCreateParentId(category.parentCategoryId ?? "");
+            return;
+        }
+        setCreateParentId(category.id);
+    }
 
     const selectedCategory = selectedCategoryId ? categoryById.get(selectedCategoryId) : undefined;
-
     const updateFormId = "marketing-category-update-form";
     const datalistId = "marketing-category-manager-options";
+
+    function renderCategoryNode(category: DimensionOption, depth = 1) {
+        const children = childrenByParent.get(category.id) ?? [];
+        const visibleChildren = children.filter((child) => hasVisibleNode(child));
+        const totalChildren = children.length;
+        const isOpen = searchKeyword ? true : Boolean(expandedIds[category.id]);
+        const childPaddingClass = depth === 1 ? "pl-4" : depth === 2 ? "pl-8" : "pl-12";
+        return (
+            <div key={category.id} className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))]">
+                <div className="flex min-w-0 items-stretch gap-0">
+                    <button
+                        type="button"
+                        title={isOpen ? t.collapseSubcategories : t.expandSubcategories}
+                        className="group relative flex w-9 shrink-0 items-center justify-center border-r border-[rgb(var(--border))] text-[rgb(var(--muted))] hover:bg-[rgb(var(--panel2))]"
+                        aria-expanded={isOpen}
+                        aria-label={isOpen ? t.collapseSubcategories : t.expandSubcategories}
+                        onClick={() =>
+                            setExpandedIds((prev) => ({
+                                ...prev,
+                                [category.id]: !prev[category.id],
+                            }))
+                        }
+                        disabled={totalChildren === 0}
+                    >
+                        <ChevronRight className={`h-4 w-4 transition ${isOpen ? "rotate-90" : ""} ${totalChildren === 0 ? "opacity-30" : ""}`} aria-hidden="true" />
+                        <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                            {isOpen ? t.collapseSubcategories : t.expandSubcategories}
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => selectCategory(category.id)}
+                        className={`min-w-0 flex-1 px-2 py-2 text-left text-sm transition ${
+                            selectedCategoryId === category.id
+                                ? "bg-[rgb(var(--accent))]/15 font-semibold text-[rgb(var(--text))]"
+                                : "hover:bg-[rgb(var(--panel2))]"
+                        }`}
+                    >
+                        <div className="truncate">{category.name}</div>
+                        <div className="text-[11px] text-[rgb(var(--muted))]">
+                            {categoryKindLabel(category, t)}
+                            {totalChildren > 0 ? t.secondaryCount.replace("{count}", String(totalChildren)) : ""}
+                        </div>
+                    </button>
+                </div>
+                {isOpen && visibleChildren.length > 0 ? (
+                    <div className={`border-t border-[rgb(var(--border))] py-1 ${childPaddingClass}`}>
+                        {visibleChildren.map((child) => (
+                            <div key={`child-wrap-${child.id}`} className="py-0.5">
+                                {renderCategoryNode(child, depth + 1)}
+                            </div>
+                        ))}
+                    </div>
+                ) : null}
+                {isOpen && totalChildren === 0 ? (
+                    <div className="border-t border-[rgb(var(--border))] px-3 py-2 text-xs text-[rgb(var(--muted))]">
+                        {t.emptySecondaryHint}
+                    </div>
+                ) : null}
+            </div>
+        );
+    }
+
+    const visibleRootCategories = rootCategories.filter((category) => hasVisibleNode(category));
+
+    const selectedDescendants = selectedCategoryId ? collectDescendantIds(selectedCategoryId) : new Set<string>();
+
+    const updateParentOptions = !selectedCategory
+        ? selectableParents
+        : selectableParents.filter((category) => category.id !== selectedCategory.id && !selectedDescendants.has(category.id));
 
     return (
         <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
@@ -127,7 +226,7 @@ export function MarketingCategoryManager({
                 <div className="mb-2 flex flex-wrap gap-2">
                     <Input
                         value={searchDraft}
-                        onChange={(e) => setSearchDraft(e.target.value)}
+                        onChange={(event) => setSearchDraft(event.target.value)}
                         placeholder={t.searchPlaceholder}
                         className="min-w-0 flex-1"
                         list={datalistId}
@@ -151,7 +250,7 @@ export function MarketingCategoryManager({
                 ) : null}
 
                 <div className="max-h-[min(520px,70vh)] min-w-0 overflow-x-hidden overflow-y-auto pr-1">
-                    {visibleMains.length === 0 ? (
+                    {visibleRootCategories.length === 0 ? (
                         <EmptyStateCard
                             icon={Search}
                             title={t.noResultsTitle}
@@ -160,81 +259,7 @@ export function MarketingCategoryManager({
                         />
                     ) : (
                         <div className="grid gap-1">
-                            {visibleMains.map((main) => {
-                                const open = Boolean(expandedMainIds[main.id]);
-                                const childList = getVisibleChildren(main.id);
-                                const subCount = (childrenByParent.get(main.id) ?? []).length;
-                                return (
-                                    <div key={main.id} className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel))]">
-                                        <div className="flex min-w-0 items-stretch gap-0">
-                                            <button
-                                                type="button"
-                                                title={open ? t.collapseSubcategories : t.expandSubcategories}
-                                                className="group relative flex w-9 shrink-0 items-center justify-center border-r border-[rgb(var(--border))] text-[rgb(var(--muted))] hover:bg-[rgb(var(--panel2))]"
-                                                aria-expanded={open}
-                                                aria-label={open ? t.collapseSubcategories : t.expandSubcategories}
-                                                onClick={() =>
-                                                    setExpandedMainIds((prev) => ({
-                                                        ...prev,
-                                                        [main.id]: !prev[main.id],
-                                                    }))
-                                                }
-                                            >
-                                                <ChevronRight
-                                                    className={`h-4 w-4 transition ${open ? "rotate-90" : ""}`}
-                                                    aria-hidden="true"
-                                                />
-                                                <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                                                    {open ? t.collapseSubcategories : t.expandSubcategories}
-                                                </span>
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => selectCategory(main.id)}
-                                                className={`min-w-0 flex-1 px-2 py-2 text-left text-sm transition ${
-                                                    selectedCategoryId === main.id
-                                                        ? "bg-[rgb(var(--accent))]/15 font-semibold text-[rgb(var(--text))]"
-                                                        : "hover:bg-[rgb(var(--panel2))]"
-                                                }`}
-                                            >
-                                                <div className="truncate">{main.name}</div>
-                                                <div className="text-[11px] text-[rgb(var(--muted))]">
-                                                    {t.mainCategoryLabel}
-                                                    {subCount > 0 ? t.secondaryCount.replace("{count}", String(subCount)) : ""}
-                                                </div>
-                                            </button>
-                                        </div>
-                                        {open && childList.length > 0 ? (
-                                            <div className="border-t border-[rgb(var(--border))] py-1 pl-4">
-                                                {childList.map((sub) => (
-                                                    <button
-                                                        key={sub.id}
-                                                        type="button"
-                                                        onClick={() => selectCategory(sub.id)}
-                                                        className={`w-full rounded-md px-2 py-1.5 text-left text-sm ${
-                                                            selectedCategoryId === sub.id
-                                                                ? "bg-[rgb(var(--accent))]/15 font-medium text-[rgb(var(--text))]"
-                                                                : "text-[rgb(var(--text))] hover:bg-[rgb(var(--panel2))]"
-                                                        }`}
-                                                    >
-                                                        <div className="truncate">{sub.name}</div>
-                                                        <div className="break-words text-[11px] leading-snug text-[rgb(var(--muted))]">
-                                                            {sub.fullPath && sub.fullPath !== sub.name
-                                                                ? t.secondaryPath.replace("{path}", sub.fullPath)
-                                                                : t.secondaryParent.replace("{name}", main.name)}
-                                                        </div>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        ) : null}
-                                        {open && subCount === 0 ? (
-                                            <div className="border-t border-[rgb(var(--border))] px-3 py-2 text-xs text-[rgb(var(--muted))]">
-                                                {t.emptySecondaryHint}
-                                            </div>
-                                        ) : null}
-                                    </div>
-                                );
-                            })}
+                            {visibleRootCategories.map((category) => renderCategoryNode(category))}
                         </div>
                     )}
                 </div>
@@ -252,13 +277,13 @@ export function MarketingCategoryManager({
                                 id="marketing-cat-create-parent"
                                 name="parentCategoryId"
                                 value={createParentId}
-                                onChange={(e) => setCreateParentId(e.currentTarget.value)}
+                                onChange={(event) => setCreateParentId(event.currentTarget.value)}
                                 className="h-10 w-full"
                             >
                                 <option value="">{t.parentRoot}</option>
-                                {mainCategories.map((c) => (
-                                    <option key={`create-under-${c.id}`} value={c.id}>
-                                        {t.parentUnder.replace("{name}", c.name)}
+                                {selectableParents.map((category) => (
+                                    <option key={`create-under-${category.id}`} value={category.id}>
+                                        {t.parentUnder.replace("{name}", category.fullPath ?? category.name)}
                                     </option>
                                 ))}
                             </Select>
@@ -292,15 +317,14 @@ export function MarketingCategoryManager({
                                 <div className="text-xs text-[rgb(var(--muted))]">{t.currentBadge}</div>
                                 <div className="font-medium text-[rgb(var(--text))]">{selectedCategory.name}</div>
                                 <div className="mt-1 text-xs text-[rgb(var(--muted))]">
-                                    {(selectedCategory.categoryLevel ?? 1) === 1 ? t.kindPrimary : t.kindSecondary}
+                                    {categoryKindLabel(selectedCategory, t)}
                                     {selectedCategory.fullPath && selectedCategory.fullPath !== selectedCategory.name ? (
                                         <>
                                             {t.pathLabel}
                                             {selectedCategory.fullPath}
                                         </>
                                     ) : null}
-                                    {(selectedCategory.categoryLevel ?? 1) === 2 &&
-                                    selectedCategory.parentCategoryName &&
+                                    {selectedCategory.parentCategoryName &&
                                     !(selectedCategory.fullPath && selectedCategory.fullPath !== selectedCategory.name) ? (
                                         <>
                                             {t.parentPrimaryLabel}
@@ -331,13 +355,11 @@ export function MarketingCategoryManager({
                                         className="h-10 w-full"
                                     >
                                         <option value="">{t.parentAsPrimary}</option>
-                                        {mainCategories
-                                            .filter((c) => c.id !== selectedCategory.id)
-                                            .map((c) => (
-                                                <option key={`upd-parent-${selectedCategory.id}-${c.id}`} value={c.id}>
-                                                    {c.name}
-                                                </option>
-                                            ))}
+                                        {updateParentOptions.map((category) => (
+                                            <option key={`upd-parent-${selectedCategory.id}-${category.id}`} value={category.id}>
+                                                {category.fullPath ?? category.name}
+                                            </option>
+                                        ))}
                                     </Select>
                                 </FormField>
                                 <div className="flex flex-wrap justify-end gap-2">

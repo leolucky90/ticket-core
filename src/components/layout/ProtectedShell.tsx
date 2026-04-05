@@ -143,12 +143,10 @@ export async function ProtectedShell({ children }: ProtectedShellProps) {
         ...(shellAccountType === "company"
             ? [
                   { id: "account-attributes", label: labels.attributeSettings, href: "/settings/account/attributes" },
-                  { id: "dashboard-settings", label: labels.dashboardSettings, href: "/settings/dashboard" },
                   { id: "role-settings", label: labels.roleSettings, href: "/settings/staff/roles" },
                   { id: "delete-control", label: labels.deleteControl, href: "/settings/security/delete-control" },
                   { id: "delete-logs", label: labels.deleteLogs, href: "/settings/security/delete-logs" },
                   { id: "audit-logs", label: labels.auditLogs, href: "/settings/security/audit-logs" },
-                  { id: "showcase-settings", label: labels.showcaseSettings, href: "/settings/showcase" },
               ]
             : []),
     ];

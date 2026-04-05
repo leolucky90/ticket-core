@@ -132,12 +132,12 @@ export function CompanyHomeHeader({ copy, navAccountType, storefrontSettings, na
                     {navAccountType === "company" ? <>
                         {storefrontSettings.shoppingEnabled ? <Link className="rounded-full border border-[rgb(var(--showcase-border))] px-4 py-1.5 font-medium hover:bg-[rgb(var(--showcase-accent-soft))]" href={links.shopHref}>{copy.navShop}</Link> : null}
                         <Link className="rounded-full bg-[rgb(var(--showcase-accent))] px-4 py-1.5 font-medium text-[rgb(var(--showcase-accent-contrast))] hover:opacity-90" href="/dashboard">{copy.navDashboard}</Link>
-                        <SignOutButton className="rounded-full border-[rgb(var(--showcase-border))] bg-transparent px-4 py-1.5 text-[rgb(var(--showcase-text))] hover:border-[rgb(var(--showcase-accent))] hover:bg-[rgb(var(--showcase-accent-soft))]" label={copy.navSignOut} />
+                        <SignOutButton appearance="showcase" className="rounded-full px-4 py-1.5" label={copy.navSignOut} />
                     </> : null}
                     {navAccountType === "customer" ? <>
                         {storefrontSettings.shoppingEnabled && storefrontSettings.showCartOnNavForCustomer ? <Link className="rounded-full border border-[rgb(var(--showcase-border))] px-4 py-1.5 font-medium hover:bg-[rgb(var(--showcase-accent-soft))]" href={links.shopHref}>{copy.navCart}</Link> : null}
                         <Link className="rounded-full bg-[rgb(var(--showcase-accent))] px-4 py-1.5 font-medium text-[rgb(var(--showcase-accent-contrast))] hover:opacity-90" href={links.customerDashboardHref}>{copy.navMyAccount}</Link>
-                        <SignOutButton className="rounded-full border-[rgb(var(--showcase-border))] bg-transparent px-4 py-1.5 text-[rgb(var(--showcase-text))] hover:border-[rgb(var(--showcase-accent))] hover:bg-[rgb(var(--showcase-accent-soft))]" label={copy.navSignOut} />
+                        <SignOutButton appearance="showcase" className="rounded-full px-4 py-1.5" label={copy.navSignOut} />
                     </> : null}
                     <div className="rounded-full border border-[rgb(var(--showcase-border))] bg-[rgb(var(--showcase-surface))]"><ShowcaseLanguageSwitcher currentLang={currentLang} /></div>
                 </nav>

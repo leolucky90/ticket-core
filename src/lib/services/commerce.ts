@@ -11,6 +11,7 @@ import { createDeleteLog } from "@/lib/services/delete-log.service";
 import { getItemNamingSettings } from "@/lib/services/item-naming-settings.service";
 import { syncUsedProductTypeSettings } from "@/lib/services/used-product-type-settings.service";
 import { getUserCompanyId, getUserDoc, toAccountType } from "@/lib/services/user.service";
+import { inferGenericCategoryFromProductType } from "@/lib/marketing/brand-catalog-helpers";
 import {
     createCatalogBrand,
     createCatalogCategory,
@@ -267,8 +268,11 @@ function normalizeProduct(input: Partial<Product> & { id: string }): Product {
     const categoryName = safeText(input.categoryName);
     const secondaryCategoryId = safeText(input.secondaryCategoryId, 120);
     const secondaryCategoryName = safeText(input.secondaryCategoryName);
+    const tertiaryCategoryId = safeText(input.tertiaryCategoryId, 120);
+    const tertiaryCategoryName = safeText(input.tertiaryCategoryName);
     const brandId = safeText(input.brandId, 120);
     const brandName = safeText(input.brandName);
+    const productTypeName = safeText(input.productTypeName, 120);
     const modelId = safeText(input.modelId, 120);
     const modelName = safeText(input.modelName);
     const nameEntryId = safeText(input.nameEntryId, 120);
@@ -279,7 +283,9 @@ function normalizeProduct(input: Partial<Product> & { id: string }): Product {
         namingMode,
         categoryName,
         secondaryCategoryName,
+        tertiaryCategoryName,
         brandName,
+        productTypeName,
         modelName,
         nameEntryName,
         customLabel,
@@ -301,8 +307,11 @@ function normalizeProduct(input: Partial<Product> & { id: string }): Product {
         categoryName,
         secondaryCategoryId,
         secondaryCategoryName,
+        tertiaryCategoryId,
+        tertiaryCategoryName,
         brandId,
         brandName,
+        productTypeName,
         modelId,
         modelName,
         nameEntryId,
@@ -315,7 +324,9 @@ function normalizeProduct(input: Partial<Product> & { id: string }): Product {
                 aliases,
                 categoryName,
                 secondaryCategoryName,
+                tertiaryCategoryName,
                 brandName,
+                productTypeName,
                 modelName,
                 nameEntryName,
                 customLabel,
@@ -1375,6 +1386,58 @@ function parseDimensionRef(value: unknown): { id: string; name: string } {
     };
 }
 
+function inferCategoryLevel(parent: { categoryLevel?: number } | null): 1 | 2 | 3 {
+    if (!parent) return 1;
+    if ((parent.categoryLevel ?? 1) >= 2) return 3;
+    return 2;
+}
+
+function buildCategoryPath(name: string, parent: { fullPath?: string; name?: string } | null): string {
+    const parentPath = safeText(parent?.fullPath) || safeText(parent?.name);
+    return parentPath ? `${parentPath} > ${name}` : name;
+}
+
+function collectCategoryDescendants(categories: Array<{ id: string; parentCategoryId?: string; categoryLevel?: number }>, rootId: string) {
+    const childrenByParent = new Map<string, string[]>();
+    for (const category of categories) {
+        const parentId = safeText(category.parentCategoryId, 120);
+        if (!parentId) continue;
+        const list = childrenByParent.get(parentId) ?? [];
+        list.push(category.id);
+        childrenByParent.set(parentId, list);
+    }
+    const descendants = new Set<string>();
+    const queue = [rootId];
+    while (queue.length > 0) {
+        const currentId = queue.shift();
+        if (!currentId) continue;
+        const childIds = childrenByParent.get(currentId) ?? [];
+        for (const childId of childIds) {
+            if (descendants.has(childId)) continue;
+            descendants.add(childId);
+            queue.push(childId);
+        }
+    }
+    return descendants;
+}
+
+function getCategorySubtreeDepth(
+    categories: Array<{ id: string; parentCategoryId?: string; categoryLevel?: number }>,
+    rootId: string,
+): number {
+    const current = categories.find((item) => item.id === rootId);
+    if (!current) return 1;
+    const currentLevel = current.categoryLevel ?? 1;
+    const descendants = collectCategoryDescendants(categories, rootId);
+    let maxDepthOffset = 0;
+    for (const category of categories) {
+        if (!descendants.has(category.id)) continue;
+        const offset = (category.categoryLevel ?? 1) - currentLevel;
+        if (offset > maxDepthOffset) maxDepthOffset = offset;
+    }
+    return maxDepthOffset + 1;
+}
+
 type ProductFormFields = {
     name: string;
     namingMode: Product["namingMode"];
@@ -1382,8 +1445,11 @@ type ProductFormFields = {
     categoryName: string;
     secondaryCategoryId: string;
     secondaryCategoryName: string;
+    tertiaryCategoryId: string;
+    tertiaryCategoryName: string;
     brandId: string;
     brandName: string;
+    productTypeName: string;
     modelId: string;
     modelName: string;
     nameEntryId: string;
@@ -1397,14 +1463,19 @@ type ProductFormFields = {
 async function readProductFormFields(formData: FormData, companyId: string): Promise<ProductFormFields> {
     const categoryRef = parseDimensionRef(formData.get("categoryRef"));
     const secondaryCategoryRef = parseDimensionRef(formData.get("secondaryCategoryRef"));
+    const tertiaryCategoryRef = parseDimensionRef(formData.get("tertiaryCategoryRef"));
     const brandRef = parseDimensionRef(formData.get("brandRef"));
+    const productTypeRef = parseDimensionRef(formData.get("productTypeRef"));
     const modelRef = parseDimensionRef(formData.get("modelRef"));
     const categoryId = categoryRef.id || safeText(formData.get("categoryId"), 120);
     const categoryName = categoryRef.name || safeText(formData.get("categoryName"));
     const secondaryCategoryId = secondaryCategoryRef.id || safeText(formData.get("secondaryCategoryId"), 120);
     const secondaryCategoryName = secondaryCategoryRef.name || safeText(formData.get("secondaryCategoryName"));
+    const tertiaryCategoryId = tertiaryCategoryRef.id || safeText(formData.get("tertiaryCategoryId"), 120);
+    const tertiaryCategoryName = tertiaryCategoryRef.name || safeText(formData.get("tertiaryCategoryName"));
     const brandId = brandRef.id || safeText(formData.get("brandId"), 120);
     const brandName = brandRef.name || safeText(formData.get("brandName"));
+    const productTypeName = productTypeRef.name || safeText(formData.get("productTypeName"), 120);
     const modelId = modelRef.id || safeText(formData.get("modelId"), 120);
     const modelName = modelRef.name || safeText(formData.get("modelName"));
     const namingMode: Product["namingMode"] = formData.get("namingMode") === "custom" ? "custom" : "structured";
@@ -1419,7 +1490,9 @@ async function readProductFormFields(formData: FormData, companyId: string): Pro
         namingMode: "structured",
         categoryName,
         secondaryCategoryName,
+        tertiaryCategoryName,
         brandName,
+        productTypeName,
         modelName,
         namingOrder: namingSettings?.order,
     });
@@ -1440,8 +1513,11 @@ async function readProductFormFields(formData: FormData, companyId: string): Pro
         categoryName,
         secondaryCategoryId,
         secondaryCategoryName,
+        tertiaryCategoryId,
+        tertiaryCategoryName,
         brandId,
         brandName,
+        productTypeName,
         modelId,
         modelName,
         nameEntryId,
@@ -1921,7 +1997,10 @@ export async function listRepairBrands(keyword = ""): Promise<RepairBrand[]> {
             if (!owner.models.some((row) => row.toLowerCase() === modelName.toLowerCase())) {
                 owner.models = [...owner.models, modelName];
             }
-            const inferredTypeName = safeText(model.categoryName, 120) || (owner.usedProductTypes.length === 1 ? owner.usedProductTypes[0] : "");
+            const inferredTypeName =
+                safeText((model as { productTypeName?: unknown }).productTypeName, 120) ||
+                safeText(model.categoryName, 120) ||
+                (owner.usedProductTypes.length === 1 ? owner.usedProductTypes[0] : "");
             if (inferredTypeName) {
                 owner.modelsByType = replaceBrandModelsForType(owner.modelsByType, inferredTypeName, [...getBrandModelsForType(owner, inferredTypeName), modelName]);
             }
@@ -2419,8 +2498,11 @@ export async function createProduct(formData: FormData): Promise<void> {
         categoryName: productDraft.categoryName,
         secondaryCategoryId: productDraft.secondaryCategoryId,
         secondaryCategoryName: productDraft.secondaryCategoryName,
+        tertiaryCategoryId: productDraft.tertiaryCategoryId,
+        tertiaryCategoryName: productDraft.tertiaryCategoryName,
         brandId: productDraft.brandId,
         brandName: productDraft.brandName,
+        productTypeName: productDraft.productTypeName,
         modelId: productDraft.modelId,
         modelName: productDraft.modelName,
         nameEntryId: productDraft.nameEntryId,
@@ -2476,8 +2558,11 @@ export async function updateProduct(formData: FormData): Promise<void> {
         categoryName: productDraft.categoryName,
         secondaryCategoryId: productDraft.secondaryCategoryId,
         secondaryCategoryName: productDraft.secondaryCategoryName,
+        tertiaryCategoryId: productDraft.tertiaryCategoryId,
+        tertiaryCategoryName: productDraft.tertiaryCategoryName,
         brandId: productDraft.brandId,
         brandName: productDraft.brandName,
+        productTypeName: productDraft.productTypeName,
         modelId: productDraft.modelId,
         modelName: productDraft.modelName,
         nameEntryId: productDraft.nameEntryId,
@@ -3018,16 +3103,23 @@ export async function createRepairModel(formData: FormData): Promise<void> {
     const current = (await listRepairBrands()).find((brand) => brand.id === brandId);
     if (!current) dashboardRedirect(tab, "invalid", rOpts);
     const modelTypeName = resolveBrandModelTypeName(current, modelTypeNameInput);
+    const inferredCategoryName = inferGenericCategoryFromProductType(modelTypeName);
 
     const existingCatalogModel = (await listCatalogModels()).find(
-        (item) => item.brandId === brandId && item.name.toLowerCase() === modelName.toLowerCase(),
+        (item) =>
+            item.brandId === brandId &&
+            item.name.toLowerCase() === modelName.toLowerCase() &&
+            (!modelTypeName ||
+                safeText(item.productTypeName, 120).toLowerCase() === modelTypeName.toLowerCase() ||
+                safeText(item.categoryName, 120).toLowerCase() === modelTypeName.toLowerCase()),
     );
     if (!existingCatalogModel) {
         await createCatalogModel({
             name: modelName,
             brandId,
             brandName: current.name,
-            categoryName: modelTypeName || undefined,
+            categoryName: inferredCategoryName || undefined,
+            productTypeName: modelTypeName || undefined,
             status: "active",
             isUniversal: false,
         });
@@ -3035,7 +3127,8 @@ export async function createRepairModel(formData: FormData): Promise<void> {
         await updateCatalogModel(existingCatalogModel.id, {
             brandId,
             brandName: current.name,
-            categoryName: modelTypeName,
+            categoryName: inferredCategoryName || existingCatalogModel.categoryName,
+            productTypeName: modelTypeName,
             status: "active",
         });
     }
@@ -3080,12 +3173,16 @@ export async function updateRepairModel(formData: FormData): Promise<void> {
     const current = (await listRepairBrands()).find((brand) => brand.id === brandId);
     if (!current) dashboardRedirect(tab, "invalid", rOpts);
     const modelTypeName = resolveBrandModelTypeName(current, modelTypeNameInput);
+    const inferredCategoryName = inferGenericCategoryFromProductType(modelTypeName);
 
     const targetCatalogModels = (await listCatalogModels()).filter(
         (item) =>
             item.brandId === brandId &&
             item.name.toLowerCase() === oldModel.toLowerCase() &&
-            (!modelTypeName || !safeText(item.categoryName, 120) || safeText(item.categoryName, 120).toLowerCase() === modelTypeName.toLowerCase()),
+            (!modelTypeName ||
+                !safeText(item.productTypeName, 120) ||
+                safeText(item.productTypeName, 120).toLowerCase() === modelTypeName.toLowerCase() ||
+                safeText(item.categoryName, 120).toLowerCase() === modelTypeName.toLowerCase()),
     );
     await Promise.all(
         targetCatalogModels.map((item) =>
@@ -3093,7 +3190,8 @@ export async function updateRepairModel(formData: FormData): Promise<void> {
                 name: modelName,
                 brandId,
                 brandName: current.name,
-                categoryName: modelTypeName || undefined,
+                categoryName: inferredCategoryName || item.categoryName,
+                productTypeName: modelTypeName || undefined,
                 status: "active",
             }),
         ),
@@ -3143,7 +3241,10 @@ export async function deleteRepairModel(formData: FormData): Promise<void> {
         (item) =>
             item.brandId === brandId &&
             item.name.toLowerCase() === modelName.toLowerCase() &&
-            (!modelTypeName || !safeText(item.categoryName, 120) || safeText(item.categoryName, 120).toLowerCase() === modelTypeName.toLowerCase()),
+            (!modelTypeName ||
+                !safeText(item.productTypeName, 120) ||
+                safeText(item.productTypeName, 120).toLowerCase() === modelTypeName.toLowerCase() ||
+                safeText(item.categoryName, 120).toLowerCase() === modelTypeName.toLowerCase()),
     );
     await Promise.all(targetCatalogModels.map((item) => updateCatalogModel(item.id, { status: "inactive" })));
 
@@ -3225,9 +3326,10 @@ export async function createProductCategory(formData: FormData): Promise<void> {
         const parentCategoryRef = parseDimensionRef(formData.get("parentCategoryRef"));
         const parentCategoryId = parentCategoryRef.id || safeText(formData.get("parentCategoryId"), 120);
         const parentCategory = parentCategoryId ? categoryList.find((item) => item.id === parentCategoryId && item.status === "active") ?? null : null;
-        if (parentCategoryId && (!parentCategory || parentCategory.categoryLevel !== 1)) {
+        if (parentCategoryId && (!parentCategory || (parentCategory.categoryLevel ?? 1) >= 3)) {
             throw new Error("invalid_category_parent");
         }
+        const nextCategoryLevel = inferCategoryLevel(parentCategory);
 
         const existingCategory = categoryList.find(
             (item) =>
@@ -3242,8 +3344,8 @@ export async function createProductCategory(formData: FormData): Promise<void> {
                     name: categoryName,
                     parentCategoryId: parentCategory?.id,
                     parentCategoryName: parentCategory?.name,
-                    categoryLevel: parentCategory ? 2 : 1,
-                    fullPath: parentCategory ? `${parentCategory.name} > ${categoryName}` : categoryName,
+                    categoryLevel: nextCategoryLevel,
+                    fullPath: buildCategoryPath(categoryName, parentCategory),
                     status: "active",
                 },
                 companyId,
@@ -3257,8 +3359,8 @@ export async function createProductCategory(formData: FormData): Promise<void> {
                     name: categoryName,
                     parentCategoryId: parentCategory?.id,
                     parentCategoryName: parentCategory?.name,
-                    categoryLevel: parentCategory ? 2 : 1,
-                    fullPath: parentCategory ? `${parentCategory.name} > ${categoryName}` : categoryName,
+                    categoryLevel: nextCategoryLevel,
+                    fullPath: buildCategoryPath(categoryName, parentCategory),
                     status: "active",
                 },
                 companyId,
@@ -3432,12 +3534,17 @@ export async function updateProductCategory(formData: FormData): Promise<void> {
     const parentCategoryRef = parseDimensionRef(formData.get("parentCategoryRef"));
     const parentCategoryId = parentCategoryRef.id || safeText(formData.get("parentCategoryId"), 120);
     const parentCategory = parentCategoryId ? categoryList.find((item) => item.id === parentCategoryId && item.status === "active") ?? null : null;
-    const hasChildren = categoryList.some((item) => item.parentCategoryId === categoryId && item.status === "active");
-    if (parentCategoryId && (!parentCategory || parentCategory.categoryLevel !== 1 || parentCategory.id === categoryId)) {
+    const activeDescendants = collectCategoryDescendants(categoryList, categoryId);
+    if (
+        parentCategoryId &&
+        (!parentCategory || (parentCategory.categoryLevel ?? 1) >= 3 || parentCategory.id === categoryId || activeDescendants.has(parentCategory.id))
+    ) {
         dashboardRedirect(tab, "category_invalid_parent", rOpts);
     }
-    if (hasChildren && parentCategory) {
-        dashboardRedirect(tab, "category_has_children", rOpts);
+    const nextCategoryLevel = inferCategoryLevel(parentCategory);
+    const subtreeDepth = getCategorySubtreeDepth(categoryList, categoryId);
+    if (nextCategoryLevel + subtreeDepth - 1 > 3) {
+        dashboardRedirect(tab, "category_invalid_depth", rOpts);
     }
     const duplicated = categoryList.some(
         (item) =>
@@ -3454,8 +3561,8 @@ export async function updateProductCategory(formData: FormData): Promise<void> {
             name: categoryName,
             parentCategoryId: parentCategory?.id,
             parentCategoryName: parentCategory?.name,
-            categoryLevel: parentCategory ? 2 : 1,
-            fullPath: parentCategory ? `${parentCategory.name} > ${categoryName}` : categoryName,
+            categoryLevel: nextCategoryLevel,
+            fullPath: buildCategoryPath(categoryName, parentCategory),
             status: "active",
         },
         companyId,

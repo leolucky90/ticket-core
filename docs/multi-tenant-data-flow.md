@@ -36,6 +36,21 @@ For canonical naming, role-boundary, architecture, and refactor glossary, see:
 - `companies/{companyId}/sales/{saleId}`
   - Sales data, must include `companyId`
   - checkout / POS sale 可附帶 `checkoutDocument` snapshot（businessRegion、documentMode、buyerType、TW/AU 單據欄位），作為後續 receipt center / template renderer 的 canonical 單據輸出來源
+- `companies/{companyId}/categories/{categoryId}`
+  - 商店營銷目錄分類（`CategoryDoc`）；支援 `categoryLevel: 1 | 2 | 3`
+  - canonical naming：主分類 → 第一層子分類（第二層分類）→ 第二層子分類（第三層分類）
+  - 維修配件零件等級（例如 `AMP` / `BQ7` / `Service Pack`）應落在第三層 category，不再用 model naming 冒充
+- `companies/{companyId}/brands/{brandId}`
+  - 商店營銷目錄品牌（`BrandDoc`）；`linkedCategoryNames` / `productTypes` 與 catalog-service normalize 規則對齊
+  - `linkedCategoryNames` 只承接泛用主分類（例如 `手機` / `平板` / `手錶` / `維修配件`），`productTypes` 才承接 `iPhone` / `Galaxy S` / `iWatch` 等品牌家族
+- `companies/{companyId}/models/{modelId}`
+  - 商店營銷目錄型號（`ModelDoc`）；`categoryId` / `categoryName` 只承接泛用主分類，`productTypeName` 才承接品牌家族，`name` 只放家族下型號 suffix
+  - 型號不承接維修配件零件等級；零件等級仍落在第三層 category
+  - item create / filter selector 連動基線：`linkedCategoryNames` 決定分類可用品牌，`productTypes` / `productTypeName` 決定品牌家族可用範圍，`ModelDoc.categoryId/categoryName` + `productTypeName` 共同決定最終可選型號
+  - 若主分類為 `維修配件`，第二／第三層 category 代表零件階層而非裝置家族；selector 在這條 flow 應以品牌可用 `productTypeName` 與其對應 model 為主，不可直接用 `Screen` / `Battery` / `AMP` / `BQ7` 等 category 去把 model list 篩成空
+- `companies/{companyId}/usedProductTypeSettings/{settingId}`
+  - 二手商品規格模板 baseline；canonical source 仍是品牌文件內的 `usedProductTypes`
+  - 若 brand 已啟用 `usedProductTypes` 但此 collection 尚未建立，read-side 應自動回補 active settings，避免二手商品建立頁與規格模板頁顯示 0 類型
 - `companies/{companyId}/permissionLevels/lv{1..9}`
   - 權限等級定義與 `permissions` 字串陣列（與 `StaffMember.roleLevel` 對應）
 - `companies/{companyId}/auditLogs/{auditLogId}`
@@ -56,7 +71,19 @@ For canonical naming, role-boundary, architecture, and refactor glossary, see:
 - Customer ticket history (`/ticket/history`) only reads cases under current customer's `companyId` and matches customer email.
 - Showcase / dashboard preferences read/write by tenant path `companies/{tenantId}/app_config/*`.
 - Tenant preference lookup no longer falls back to global legacy docs when `tenantId` is present.
+
+### 為何 `admina@gmail.com` 與 `adminb@gmail.com`（以及 `adminc@gmail.com`）看到的「商店／展示首頁」內容不同？
+
+這是 **預期行為（租戶隔離）**，不是同步 bug。
+
+- `admina@gmail.com` 的 `users/{uid}.companyId` 為 **`company_a`**；`adminb@gmail.com` 為 **`company_b`**；`adminc@gmail.com` 為 **`company_c`**。
+- 公開租戶首頁（例如 `/company_a`、`/company_b`、`/company_c`）與商家預覽 **`/company-home`** 讀取的展示偏好，來自 **`companies/{companyId}/app_config/showcase`**（見 `getShowcasePreferences` / `saveShowcasePreferences`）。
+- 在後台以 **某一公司管理員** 儲存的展示內容，只會寫入 **`companies/{該 companyId}/...`**，**不會**自動複製到其他租戶。因此「A 有同步到更正、B 沒有」代表 B（或 C）的 Firestore 文件仍是舊內容或種子基線，需在 **登入對應租戶** 後於 **`/settings/showcase`**（或同等 builder 流程）再存一次，或手動更新該文件／重跑 reset 種子。
+- `/settings/showcase` 目前編輯的是租戶 storefront 的 `content`、`themeColors` 與 `storefront` 設定；後台 shell 的 `light` / `dark` / `custom` appearance toggle 仍在 `/settings/dashboard`，不是 storefront builder 內被隱藏的一組 mode switch。
+- **官方入口首頁 `/`** 讀的是平台層 **`app_config/business_homepage`**（BossAdmin／官方 builder），與各租戶的 `app_config/showcase` **分開**；不要與 `/company_a`、`/company_b`、`/company_c` 混為同一資料來源。
+- 租戶首頁上的 **結構化 Builder Hero／輪播**（`ShowHomePage` 預設 props）目前共用程式內 **`TENANT_BUILDER_HOMEPAGE_CONFIG`**；租戶間主要差異通常來自 **`showcase` 文件內的 `content`／`themeColors`／`storefront`** 等已持久化欄位。種子腳本亦為 A／B／C 寫入不同預設文案（例如 `heroTitle`:「A 公司首頁」、「B 公司首頁」、「C 公司首頁」）。
 - `/settings/account` 應優先透過 focused account-settings read-model / write wrapper 讀寫 `settings/businessProfile` 與 `settings/regionalReceiptSettings`，不要在 route layer 直接拼 auth metadata 或舊 `companyProfile` 混合欄位
+- 商店營銷目錄／品項建立若需分類維度，應優先延續 shared `DimensionPicker` 與 canonical product fields：`categoryId` / `categoryName`、`secondaryCategoryId` / `secondaryCategoryName`、`tertiaryCategoryId` / `tertiaryCategoryName`、`productTypeName`、`modelId` / `modelName`
 - `/dashboard/checkout` 應優先透過 `merchant/checkout-route-data.service.ts` 讀取 customer / ticket / inventory / `settings/businessProfile` / `settings/regionalReceiptSettings`，並用 `merchant/checkout-case-selector.service.ts` 判斷是否顯示案件卡；checkout 不應自行複製一份獨立的地區設定
 - `/dashboard/checkout` 完成結帳後，應優先沿用 sale snapshot 的 `checkoutDocument` 與 `settings/invoiceSettings` 走 `invoice-issue.service.ts` 建立 `invoiceDrafts` / `receiptDocuments`；不要在 checkout route layer 臨時重組 platform payload
 - `/dashboard/receipts` 與 `/dashboard/receipts/[id]` 應以 `receiptDocuments` 為 canonical document master，透過 `merchant/invoice-admin-read-model.service.ts` / `merchant/invoice-admin-write.service.ts` 讀寫；作廢 / 重開不可刪除原單據
@@ -82,15 +109,16 @@ Run:
 pnpm reset:firebase
 ```
 
-Demo merchant/customer passwords always match `src/lib/demo-account-password.ts` (`DEMO_ACCOUNT_PASSWORD`). If sign-in fails because Auth passwords no longer match that constant (for example after manual changes), run `pnpm sync:demo-auth-passwords` to update only the four seeded Firebase Auth users, or run `pnpm reset:firebase` for a full Firestore + Auth baseline.
+Demo merchant/customer passwords always match `src/lib/demo-account-password.ts` (`DEMO_ACCOUNT_PASSWORD`). If sign-in fails because Auth passwords no longer match that constant (for example after manual changes), run `pnpm sync:demo-auth-passwords` to update only the six seeded Firebase Auth users (A/B/C 各 admin + customer), or run `pnpm reset:firebase` for a full Firestore + Auth baseline.
 
 This script clears demo Firestore baseline and recreates:
 
 - official homepage baseline at `app_config/business_homepage`
-- Company A / Company B company roots under `companies/{companyId}`
-- A/B admin and customer Firebase Auth accounts
-- A/B user docs, customer docs, staff baseline, businessProfile / regionalReceiptSettings compatibility baseline, security settings
+- Company A / Company B / Company C company roots under `companies/{companyId}`
+- A/B/C admin and customer Firebase Auth accounts
+- A/B/C user docs, customer docs, staff baseline, businessProfile / regionalReceiptSettings compatibility baseline, security settings
 - one sample ticket and one sample sale per company
+- marketing catalog suppliers / brands / categories / models are not part of the reset baseline; manage them directly in canonical company collections when needed
 - Company A baseline
   - `companyId`: `company_a`
   - public route: `/company_a`
@@ -103,6 +131,12 @@ This script clears demo Firestore baseline and recreates:
   - merchant login: `adminb@gmail.com` / `123456`
   - customer login: `cxb@gmail.com` / `123456`
   - customer dashboard: `/company_b/dashboard`
+- Company C baseline
+  - `companyId`: `company_c`
+  - public route: `/company_c`
+  - merchant login: `adminc@gmail.com` / `123456`
+  - customer login: `cxc@gmail.com` / `123456`
+  - customer dashboard: `/company_c/dashboard`
 
 Boundary note:
 

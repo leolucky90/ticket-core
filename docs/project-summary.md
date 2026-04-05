@@ -43,10 +43,17 @@
 - `cases` 已明確標成 ticket legacy bridge
 - `types/commerce.ts` 已縮成 compatibility barrel
 - merchant / platform read-side import path 已開始從大型聚合 service 抽離
-- Firebase reset / seed baseline 已補齊到 `scripts/reset-firebase-data.mjs`
+- Firebase reset / seed baseline 已補齊到 `scripts/reset-firebase-data.mjs`（demo 租戶含 `company_a`／`company_b`／`company_c` 與對應 admin／customer 帳號；商店營銷目錄資料不綁在 reset baseline）
 - demo account / tenant baseline 已整合到 `docs/multi-tenant-data-flow.md`
-- official homepage demo/test account section 已補上 A / B 公司首頁 public route 直達連結，且官方首頁入口會依目前 request host 顯示，不再寫死 `localhost`
+- official homepage demo/test account section 已補上 A / B / C 公司首頁 public route 直達連結，且官方首頁入口會依目前 request host 顯示，不再寫死 `localhost`；**各 demo 商家帳號的展示首頁內容**各自對應 `companies/{companyId}/app_config/showcase`（與官方 `/` 的 `business_homepage` 分開），詳見 `docs/multi-tenant-data-flow.md` 該節 FAQ
 - 官方 `/` 與租戶公開首頁（`ShowHomePage`）已接上結構化 **`BuilderHomepageConfig`**（`src/lib/types/builder.ts`、mock `src/lib/constants/builder-demo.ts`）：含 **`HeroBackgroundMedia`**（image / video / animated / none、`contentPanelSize`、layers 動態背景）與 **`AutoCarouselBanner`**；`BuilderMediaField`／`BuilderUploadNotice` 完成 URL／上傳預留（上傳鈕 disabled）與 i18n，媒體檔案正式儲存前預設 **external URL**。官方首頁第一屏後節奏收斂至 **`OfficialPostHeroSection`**。Demo 頁：`/demo/builder`。租戶端若啟用 builder Hero，會略過 showcase 模板內既有的 `hero` block，避免雙 Hero。
+- 官方首頁 `/` 底部新增公開 `版本更新紀錄` 區塊，並補 `/updates` 完整歷史頁；資料直接解析 `docs/DOCUMENTATION-VERSION.md`，可在有 Git metadata 的環境顯示最近 revision 時間／hash，對外展示的 changelog 不再維護第二份手寫資料源
+- 公開 changelog 視覺已再收斂成較緊湊的摘要卡 + 卡片式版本歷史；首頁與 `/updates` 的歷史列表皆改為固定高度內層捲動，避免版本表把頁面主敘事拉得過長
+- storefront / showcase 的登出 CTA 已回到 shared `SignOutButton` appearance variants，避免 dark mode root theme class 與 storefront 色票互相覆蓋，導致展示頁 navbar 的 sign-out 按鈕反白／失真
+- `settings/showcase` 目前編輯的是租戶 storefront content + `themeColors` + storefront settings；**白天 / 黑夜 / custom 外觀切換**仍屬後台 shell appearance，入口在 `/settings/dashboard`，不是隱藏在 Builder 內的第二套 storefront mode
+- 商家 shell 導覽目前將 `展示頁設定` 與 `儀表板設定` 歸在 sidebar `商店區域`（`展示頁設定` 上、`儀表板設定` 下）；右上角帳戶選單的 `帳戶設定` 已移除這兩個入口，避免 storefront / dashboard appearance link 與帳戶治理設定混在同一組
+- `settings/dashboard` 已收斂為 appearance-only 設定頁，僅保留 `ThemeModeToggle`；`連結 Google 帳號` 卡片已移除，Google 綁定邊界維持在 `account/security`
+- `company_a` 等商家之供應商 / 品牌 / 分類 / 型號資料應直接維護於 canonical collection（`suppliers` / `brands` / `categories` / `models`），不要再把特定公司目錄內容硬塞進 `reset:firebase` 種子
 - `BossAdmin` reset 邊界已明確維持在 hidden cookie login，不進 `users/{uid}`
 - shared shell / layout baseline 已集中到 `src/components/merchant/shell`
 - official / merchant / customer backend 已開始共用同一套 topbar / sidebar / account area 結構
@@ -78,8 +85,14 @@
 - Phase 8 builder template baseline 已開始收斂到 showcase block registry、instance order model 與 variant-aware preview renderer
 - storefront builder 不再只綁死固定 block map；已支援 template insertion / remove / reorder 與 hero / ad variants
 - merchant catalog 已支援主分類 / 第二分類階層與 `fullPath` 顯示基線，marketing / item management 共用同一套分類語意
+- catalog category canonical schema 已升級為三層（`categoryLevel: 1 | 2 | 3`）；維修配件應使用 `主分類 → 第一層子分類（第二層分類）→ 第二層子分類（第三層分類）`，零件等級不再塞進 model naming
+- 商店營銷目錄與品項建立流程已同步支援 `tertiaryCategory`：`DimensionPicker`、分類管理、品項快速命名、商品搜尋關鍵字與 product normalized name 皆會納入第三層分類
+- catalog canonical naming 已拆成「主分類」與「品牌分類（`productTypeName`）」兩層：主分類維持 `手機` / `平板` / `手錶` / `維修配件` 等泛用類別，`iPhone` / `Galaxy S` / `iWatch` 等品牌家族改由 `productTypeName` 承接；`ModelDoc.name` 僅存家族下型號 suffix
+- `DimensionPicker` 與 `/dashboard/products` filter 現在依 catalog relation 嚴格 cascade：分類只帶出已設定 `linkedCategoryNames` 的品牌，品牌只帶出該分類可用的品牌分類，再往下只顯示同品牌、同分類、同品牌分類的型號，避免 iPhone / iPad / iWatch 或維修配件型號互相混出
+- `維修配件` flow 已補 special-case：`Screen` / `Battery` / `AMP` / `BQ7` 等配件分類不再直接把品牌分類／型號篩成空集合；shared selector 會回到品牌可維修的裝置家族，再由 `productTypeName` / model 完成選擇
 - 商店營銷分類設定已改為左側樹狀清單（主分類可展開第二分類）+ 右側新增／編輯／刪除面板；品項自動命名支援選填「副品名」接在自動帶入名稱後（`customLabel` 在 structured 模式下僅存副品名）；品項快速命名設置預設以 `<details>` 收起
 - 儀表板「商店營銷設定」分頁已改為頂部區塊選單（分類／供應來源／品牌／二手商品）+ `MerchantBuilderShell` 左清單右編輯區；已移除重複的「商店營銷設置 · 維修品牌型號」搜尋工具列；品牌編輯與型號邏輯收斂至 `MarketingBrandEditor` + `src/lib/marketing/brand-catalog-helpers.ts`
+- `MarketingBrandEditor` 的「店內商品分類」已收斂為唯讀摘要，只顯示該品牌已設定的 `linkedCategoryNames`；分類 CRUD 邊界回到「分類」分頁
 - 商店營銷 workspace、品項快速命名（`ItemQuickNamingSettingsCard`）、品牌編輯器、二手規格模板說明等 **框架文案** 已收斂至 `src/lib/i18n/ui-text.ts`（`marketingSettingsWorkspace`、`itemQuickNaming`、`marketingBrandEditor`、`usedProductTypeSettings` 等），與 cookie `lang` 一致；`ShowcaseBuilder` 頂部產品敘述用 `showcaseBuilderIntro`，`settings/showcase` 的 `MerchantPageShell` 副標用 `merchantStandalonePages.showcaseBuilderShellSubtitle`
 - 儀表板 workspace 分頁抬頭（`dashboardWorkspaceTabs`）與結帳／收據／關聯總覽／寄店總覽／品項管理獨立路由等 shell 標題（`merchantStandalonePages`）、寄店 KPI 區塊（`consignmentsOverview`）已走同一套 `getUiLanguage`／`getUiText`，避免英文模式下殘留寫死中文
 - `CheckoutWorkspace` 已收斂成結帳中心 / 客戶 / 案件 / 商品明細 / 單據設定 / 收據預覽 / 操作區 七段結構；案件卡預設隱藏，僅在所選客戶存在 checkout-eligible cases 時顯示；TW / AU 單據欄位與 preview 直接讀取 `businessProfile` + `regionalReceiptSettings`，並在 sale snapshot 寫入 `checkoutDocument`
@@ -87,7 +100,8 @@
 - `sales.createCheckoutSale` 已在 checkout 完成後透過 `invoice-issue.service.ts` 建立 draft 並依 `settings/invoiceSettings` 決定是否自動開立；TW 電子發票、AU receipt / invoice / tax invoice 共用同一套 `receiptDocuments` materialization 流程，作廢與重開由 `invoice-void.service.ts` / `reissueVoidedReceiptDocument` 保留原單據與關聯鏈
 - `/dashboard/receipts` 已從 raw sales list 收斂到 `receiptDocuments` 清單；`/dashboard/receipts/[id]` 顯示 document detail + log + void / reissue；`/settings/account/invoices` 與 `/settings/account/invoice-tracks` 走 `merchant/invoice-admin-read-model.service.ts` + `merchant/invoice-admin-write.service.ts`
 - 「二手商品」子區塊與供應來源／品牌對齊：`UsedProductTypeSettingsCard` 使用 `MerchantBuilderShell`，左欄為啟用中的二手類型清單（搜尋、清單顯示筆數、可點選列），右欄為該類型之規格模板列表與新增／編輯規格表單（不再用整頁 `<details>` 摺疊列表）
-- merchant item naming baseline 已集中到 `companies/{companyId}/settings/itemNaming` 與 shared helper，支援品牌 / 型號 / 主分類 / 第二分類排序
+- 二手商品類型 baseline 現在會由品牌已勾選的 `usedProductTypes` 自動回補到 `usedProductTypeSettings`；當品牌頁已啟用類型但 collection 尚未建立時，二手商品新增頁與規格模板頁不再回退到 generic fallback 類型
+- merchant item naming baseline 已集中到 `companies/{companyId}/settings/itemNaming` 與 shared helper，支援品牌 / 品牌分類 / 型號 / 主分類 / 第一層子分類 / 第二層子分類排序
 - dashboard inventory `settings` / `product-management` 與 `/dashboard/products` 已共用同一套 `ItemFormFields`，避免第二分類與自動命名只存在單一路徑
 - merchant item management UI 中文已統一用「品項」，英文用 `Item`；canonical data model 仍維持 `Product`
 - shared processing state spinner 已對齊真正置中，staff 帳號登入也會正確回補 `staffProfile`
@@ -181,7 +195,7 @@
   - tenant isolation baseline
 - 已完成:
   - `scripts/reset-firebase-data.mjs` 已補齊 reset / seed 流程
-  - Company A / B demo account 與 official homepage baseline 已整合
+  - Company A / B / C demo account 與 official homepage baseline 已整合
   - `docs/multi-tenant-data-flow.md` 已收斂 demo login matrix 與 route baseline
   - `BossAdmin` reset 邊界已固定為 hidden cookie login，不進 Firebase `users/{uid}`
 - 目前基線:
@@ -423,7 +437,7 @@
 - `scripts/reset-firebase-data.mjs`
   - clean reset Firestore demo baseline
   - recreate managed company/customer Firebase Auth demo accounts
-  - seed stable `companies/{companyId}` data for Company A / B
+  - seed stable `companies/{companyId}` data for Company A / B / C
   - seed official homepage baseline
   - remove stray `bossadmin@gmail.com` Firebase Auth account if present
 

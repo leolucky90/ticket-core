@@ -12,7 +12,6 @@ import {
     getBrandTypeNames,
     rankBrandTypeSuggestions,
 } from "@/lib/marketing/brand-catalog-helpers";
-import type { DimensionPickerBundle } from "@/lib/types/catalog";
 import type { RepairBrand } from "@/lib/types/repair-brand";
 import { getUiText } from "@/lib/i18n/ui-text";
 import type { MarketingSectionId } from "@/components/dashboard/marketing-settings-workspace";
@@ -21,7 +20,6 @@ export type MarketingBrandEditorProps = {
     lang: "zh" | "en";
     marketingSection: MarketingSectionId;
     brand: RepairBrand;
-    dimensionBundle: DimensionPickerBundle;
     brandTypeSuggestionPool: string[];
     brandModelTypeById: Record<string, string>;
     setBrandModelTypeById: Dispatch<SetStateAction<Record<string, string>>>;
@@ -41,7 +39,6 @@ export function MarketingBrandEditor({
     lang,
     marketingSection,
     brand,
-    dimensionBundle,
     brandTypeSuggestionPool,
     brandModelTypeById,
     setBrandModelTypeById,
@@ -128,24 +125,24 @@ export function MarketingBrandEditor({
                             <div className="text-sm font-medium">{t.inStoreCategoriesTitle}</div>
                             <div className="text-xs text-[rgb(var(--muted))]">{t.inStoreCategoriesDescription}</div>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                            {dimensionBundle.categories.length > 0 ? (
-                                dimensionBundle.categories.map((category) => (
-                                    <label key={`${brand.id}-linked-category-${category.id}`} className="inline-flex items-center gap-2 rounded-full border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-1.5 text-xs">
-                                        <input
-                                            type="checkbox"
-                                            name="brandCategoryNames"
-                                            value={category.name}
-                                            defaultChecked={brandCategoryOptions.some((item) => item.toLowerCase() === category.name.toLowerCase())}
-                                            className="h-4 w-4 accent-[rgb(var(--accent))]"
-                                        />
-                                        {category.name}
-                                    </label>
-                                ))
-                            ) : (
-                                <div className="text-xs text-[rgb(var(--muted))]">{t.noCategoriesYet}</div>
-                            )}
-                        </div>
+                        {brandCategoryOptions.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                                {brandCategoryOptions.map((categoryName) => (
+                                    <span
+                                        key={`${brand.id}-linked-category-chip-${categoryName}`}
+                                        className="inline-flex items-center rounded-full border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-1.5 text-xs"
+                                    >
+                                        {categoryName}
+                                    </span>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-xs text-[rgb(var(--muted))]">{t.noLinkedCategoriesYet}</div>
+                        )}
+                        <div className="text-xs text-[rgb(var(--muted))]">{t.inStoreCategoriesReadonlyHint}</div>
+                        {brandCategoryOptions.map((categoryName) => (
+                            <input key={`${brand.id}-linked-category-hidden-${categoryName}`} type="hidden" name="brandCategoryNames" value={categoryName} />
+                        ))}
                     </div>
                     <div className="text-xs text-[rgb(var(--muted))]">
                         {t.deviceTypesExplainer}

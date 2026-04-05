@@ -20,6 +20,15 @@ function makeId(prefix = "upt"): string {
     return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now()}`;
 }
 
+function slugify(value: string): string {
+    const slug = toText(value, 120)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 80);
+    return slug || makeId("upt");
+}
+
 function toInputType(value: unknown): "text" | "select" {
     return value === "select" ? "select" : "text";
 }
@@ -94,6 +103,73 @@ async function getDb() {
     }
 }
 
+async function listEnabledTypeNamesFromBrandDocs(db: FirebaseFirestore.Firestore, companyId: string): Promise<string[]> {
+    const snap = await db.collection(`companies/${companyId}/brands`).get();
+    const seen = new Set<string>();
+    const names: string[] = [];
+
+    for (const doc of snap.docs) {
+        const rows = Array.isArray(doc.get("usedProductTypes")) ? doc.get("usedProductTypes") : [];
+        for (const row of rows) {
+            const name = toText(row, 120);
+            if (!name) continue;
+            const normalized = name.toLowerCase();
+            if (seen.has(normalized)) continue;
+            seen.add(normalized);
+            names.push(name);
+        }
+    }
+
+    return names.sort((a, b) => a.localeCompare(b, "zh-Hant"));
+}
+
+async function ensureSeededFromBrandDocs(
+    db: FirebaseFirestore.Firestore,
+    scope: { companyId: string; uid: string },
+    existing: UsedProductTypeSetting[],
+): Promise<UsedProductTypeSetting[]> {
+    const enabledNames = await listEnabledTypeNamesFromBrandDocs(db, scope.companyId);
+    if (enabledNames.length === 0) return existing;
+
+    const existingByName = new Map(existing.map((row) => [row.name.trim().toLowerCase(), row] as const));
+    const writes: Promise<unknown>[] = [];
+    const merged = new Map(existingByName);
+    const nowIso = new Date().toISOString();
+
+    for (const name of enabledNames) {
+        const key = name.trim().toLowerCase();
+        const current = merged.get(key) ?? null;
+        if (current) {
+            if (!current.isActive) {
+                const next = normalizeUsedProductTypeSetting({
+                    ...current,
+                    isActive: true,
+                    updatedAt: nowIso,
+                    updatedBy: scope.uid,
+                });
+                merged.set(key, next);
+                writes.push(db.collection(usedProductTypeSettingsCollectionPath(scope.companyId)).doc(next.id).set(next, { merge: true }));
+            }
+            continue;
+        }
+
+        const created = normalizeUsedProductTypeSetting({
+            id: `upt_${slugify(name)}`,
+            name,
+            isActive: true,
+            specificationTemplates: [],
+            createdAt: nowIso,
+            updatedAt: nowIso,
+            updatedBy: scope.uid,
+        });
+        merged.set(key, created);
+        writes.push(db.collection(usedProductTypeSettingsCollectionPath(scope.companyId)).doc(created.id).set(created, { merge: true }));
+    }
+
+    if (writes.length > 0) await Promise.all(writes);
+    return [...merged.values()].sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
+}
+
 function listMemory(companyId: string): UsedProductTypeSetting[] {
     return [...(memory.settingsByCompany[companyId] ?? [])].sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
 }
@@ -116,12 +192,15 @@ export async function listUsedProductTypeSettings(): Promise<UsedProductTypeSett
     if (!db) return listMemory(scope.companyId);
 
     const snap = await db.collection(usedProductTypeSettingsCollectionPath(scope.companyId)).orderBy("name", "asc").limit(300).get();
-    return snap.docs.map((doc) =>
+    const existing = snap.docs.map((doc) =>
         normalizeUsedProductTypeSetting({
             id: doc.id,
             ...(doc.data() as Partial<UsedProductTypeSetting>),
         }),
     );
+    const seeded = await ensureSeededFromBrandDocs(db, scope, existing);
+    memory.settingsByCompany[scope.companyId] = seeded;
+    return seeded;
 }
 
 export async function createUsedProductTypeSetting(input: {

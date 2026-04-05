@@ -1,7 +1,7 @@
 export type CatalogRecordStatus = "active" | "inactive";
 export type ProductNamingMode = "structured" | "custom" | "hybrid";
 export type StockDeductionMode = "immediate" | "redeem_only";
-export type ItemNamingToken = "brand" | "model" | "category" | "secondaryCategory";
+export type ItemNamingToken = "brand" | "productType" | "model" | "category" | "secondaryCategory" | "tertiaryCategory";
 
 type CatalogAuditDoc = {
     id: string;
@@ -15,7 +15,7 @@ export interface CategoryDoc extends CatalogAuditDoc {
     slug: string;
     parentCategoryId?: string;
     parentCategoryName?: string;
-    categoryLevel: 1 | 2;
+    categoryLevel: 1 | 2 | 3;
     fullPath: string;
     description?: string;
     sortOrder: number;
@@ -40,6 +40,7 @@ export interface ModelDoc extends CatalogAuditDoc {
     brandName?: string;
     categoryId?: string;
     categoryName?: string;
+    productTypeName?: string;
     isUniversal: boolean;
     description?: string;
     sortOrder: number;
@@ -74,13 +75,16 @@ export type DimensionOption = {
     slug?: string;
     parentCategoryId?: string;
     parentCategoryName?: string;
-    categoryLevel?: 1 | 2;
+    categoryLevel?: 1 | 2 | 3;
     fullPath?: string;
     brandId?: string;
     brandName?: string;
     categoryId?: string;
     categoryName?: string;
     categoryNames?: string[];
+    productTypeName?: string;
+    productTypes?: string[];
+    sortOrder?: number;
 };
 
 export type DimensionPickerBundle = {

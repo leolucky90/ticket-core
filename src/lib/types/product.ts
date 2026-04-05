@@ -15,9 +15,12 @@ export interface ProductDoc {
     categoryName?: string;
     secondaryCategoryId?: string;
     secondaryCategoryName?: string;
+    tertiaryCategoryId?: string;
+    tertiaryCategoryName?: string;
 
     brandId?: string;
     brandName?: string;
+    productTypeName?: string;
 
     modelId?: string;
     modelName?: string;

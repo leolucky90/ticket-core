@@ -9,11 +9,19 @@ import { ProcessingIndicator } from "@/components/ui/processing-indicator";
 import { getUiText } from "@/lib/i18n/ui-text";
 
 type SignOutButtonProps = {
+    appearance?: "default" | "showcase" | "shop";
     className?: string;
     label?: string;
 };
 
-export function SignOutButton({ className, label = "登出" }: SignOutButtonProps) {
+const APPEARANCE_CLASSNAME: Record<NonNullable<SignOutButtonProps["appearance"]>, string> = {
+    default: "border-[rgb(var(--border))] text-[rgb(var(--text))] hover:border-[rgb(var(--accent))]",
+    showcase:
+        "border-[rgb(var(--showcase-border))] bg-transparent text-[rgb(var(--showcase-text))] hover:border-[rgb(var(--showcase-accent))] hover:bg-[rgb(var(--showcase-accent-soft))]",
+    shop: "border-[#ffcb2d] bg-transparent text-[#ffcb2d] hover:border-[#ffcb2d] hover:bg-[#ffcb2d] hover:text-[#191815]",
+};
+
+export function SignOutButton({ appearance = "default", className, label = "登出" }: SignOutButtonProps) {
     const lang = useUiLanguage();
     const ui = getUiText(lang);
     const router = useRouter();
@@ -36,7 +44,8 @@ export function SignOutButton({ className, label = "登出" }: SignOutButtonProp
         <button
             type="button"
             className={cn(
-                "rounded-lg border border-[rgb(var(--border))] px-3 py-1.5 text-sm text-[rgb(var(--text))] hover:border-[rgb(var(--accent))] disabled:cursor-not-allowed disabled:opacity-60",
+                "rounded-lg border px-3 py-1.5 text-sm transition disabled:cursor-not-allowed disabled:opacity-60",
+                APPEARANCE_CLASSNAME[appearance],
                 className,
             )}
             onClick={handleSignOut}

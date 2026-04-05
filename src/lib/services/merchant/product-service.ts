@@ -9,7 +9,9 @@ type ProductNameSuggestionInput = {
     namingMode?: unknown;
     categoryName?: unknown;
     secondaryCategoryName?: unknown;
+    tertiaryCategoryName?: unknown;
     brandName?: unknown;
+    productTypeName?: unknown;
     modelName?: unknown;
     nameEntryName?: unknown;
     customLabel?: unknown;
@@ -20,7 +22,9 @@ type ProductDraftInput = Partial<ProductDoc> & {
     name?: string;
     categoryName?: string;
     secondaryCategoryName?: string;
+    tertiaryCategoryName?: string;
     brandName?: string;
+    productTypeName?: string;
     modelName?: string;
     nameEntryName?: string;
     customLabel?: string;
@@ -66,8 +70,11 @@ function toProductDoc(legacy: Product): ProductDoc {
         categoryName: legacy.categoryName || undefined,
         secondaryCategoryId: legacy.secondaryCategoryId || undefined,
         secondaryCategoryName: legacy.secondaryCategoryName || undefined,
+        tertiaryCategoryId: legacy.tertiaryCategoryId || undefined,
+        tertiaryCategoryName: legacy.tertiaryCategoryName || undefined,
         brandId: legacy.brandId || undefined,
         brandName: legacy.brandName || undefined,
+        productTypeName: legacy.productTypeName || undefined,
         modelId: legacy.modelId || undefined,
         modelName: legacy.modelName || undefined,
         nameEntryId: legacy.nameEntryId || undefined,
@@ -97,7 +104,9 @@ export function buildProductDraft(input: ProductDraftInput): ProductDoc {
         namingMode,
         categoryName: input.categoryName,
         secondaryCategoryName: input.secondaryCategoryName,
+        tertiaryCategoryName: input.tertiaryCategoryName,
         brandName: input.brandName,
+        productTypeName: input.productTypeName,
         modelName: input.modelName,
         nameEntryName: input.nameEntryName,
         customLabel: input.customLabel,
@@ -115,7 +124,9 @@ export function buildProductDraft(input: ProductDraftInput): ProductDoc {
             aliases,
             categoryName: input.categoryName,
             secondaryCategoryName: input.secondaryCategoryName,
+            tertiaryCategoryName: input.tertiaryCategoryName,
             brandName: input.brandName,
+            productTypeName: input.productTypeName,
             modelName: input.modelName,
             nameEntryName: input.nameEntryName,
             customLabel: input.customLabel,
@@ -126,8 +137,11 @@ export function buildProductDraft(input: ProductDraftInput): ProductDoc {
         categoryName: toText(input.categoryName) || undefined,
         secondaryCategoryId: toText(input.secondaryCategoryId) || undefined,
         secondaryCategoryName: toText(input.secondaryCategoryName) || undefined,
+        tertiaryCategoryId: toText(input.tertiaryCategoryId) || undefined,
+        tertiaryCategoryName: toText(input.tertiaryCategoryName) || undefined,
         brandId: toText(input.brandId) || undefined,
         brandName: toText(input.brandName) || undefined,
+        productTypeName: toText(input.productTypeName) || undefined,
         modelId: toText(input.modelId) || undefined,
         modelName: toText(input.modelName) || undefined,
         nameEntryId: toText(input.nameEntryId) || undefined,
@@ -155,9 +169,27 @@ export async function listMerchantProducts(): Promise<ProductDoc[]> {
 }
 
 export function buildDimensionBundleFromProducts(products: ProductDoc[]): DimensionPickerBundle {
-    const dedupe = (pairs: Array<{ id?: string; name?: string; brandId?: string; brandName?: string; categoryId?: string; categoryName?: string }>) => {
+    const dedupe = (
+        pairs: Array<{
+            id?: string;
+            name?: string;
+            brandId?: string;
+            brandName?: string;
+            categoryId?: string;
+            categoryName?: string;
+            productTypeName?: string;
+        }>,
+    ) => {
         const seen = new Set<string>();
-        const out: Array<{ id: string; name: string; brandId?: string; brandName?: string; categoryId?: string; categoryName?: string }> = [];
+        const out: Array<{
+            id: string;
+            name: string;
+            brandId?: string;
+            brandName?: string;
+            categoryId?: string;
+            categoryName?: string;
+            productTypeName?: string;
+        }> = [];
         for (const pair of pairs) {
             const name = toText(pair.name);
             if (!name) continue;
@@ -166,10 +198,11 @@ export function buildDimensionBundleFromProducts(products: ProductDoc[]): Dimens
             const brandName = toText(pair.brandName) || undefined;
             const categoryId = toText(pair.categoryId) || undefined;
             const categoryName = toText(pair.categoryName) || undefined;
+            const productTypeName = toText(pair.productTypeName) || undefined;
             const key = `${id}:${name}:${brandId || ""}:${categoryId || ""}`.toLowerCase();
             if (seen.has(key)) continue;
             seen.add(key);
-            out.push({ id, name, brandId, brandName, categoryId, categoryName });
+            out.push({ id, name, brandId, brandName, categoryId, categoryName, productTypeName });
         }
         return out.sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
     };
@@ -184,6 +217,7 @@ export function buildDimensionBundleFromProducts(products: ProductDoc[]): Dimens
             brandName: item.brandName,
             categoryId: item.categoryId,
             categoryName: item.categoryName,
+            productTypeName: item.productTypeName,
         }))),
     };
 }

@@ -329,7 +329,6 @@ export function MarketingSettingsWorkspace(props: MarketingSettingsWorkspaceProp
                 lang={lang}
                 marketingSection={section}
                 brand={selectedBrand}
-                dimensionBundle={dimensionBundle}
                 brandTypeSuggestionPool={brandTypeSuggestionPool}
                 brandModelTypeById={brandModelTypeById}
                 setBrandModelTypeById={setBrandModelTypeById}

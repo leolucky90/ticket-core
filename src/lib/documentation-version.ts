@@ -3,4 +3,4 @@
  * Must stay in sync with `docs/DOCUMENTATION-VERSION.md` (same string as the **版本** column).
  * When bumping docs, update this constant and the markdown table together.
  */
-export const DOCUMENTATION_VERSION_DISPLAY = "V1.25" as const;
+export const DOCUMENTATION_VERSION_DISPLAY = "V1.40" as const;

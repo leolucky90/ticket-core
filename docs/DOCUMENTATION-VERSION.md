@@ -15,8 +15,8 @@
 
 | 項目 | 值 |
 | --- | --- |
-| **版本** | **V1.25** |
-| **最後更正** | **2026-04-04** |
+| **版本** | **V1.40** |
+| **最後更正** | **2026-04-05** |
 
 ---
 
@@ -34,6 +34,21 @@
 
 | 版本 | 日期 | 摘要 |
 | --- | --- | --- |
+| V1.40 | 2026-04-05 | 公開 `版本更新紀錄` 視覺再收斂：首頁改為較緊湊的摘要卡 + 卡片式版本歷史，首頁與 `/updates` 歷史列表皆改為固定高度內層滾動，避免 changelog 把整頁版面拉長 |
+| V1.39 | 2026-04-05 | 官方首頁 `/` 新增公開 `版本更新紀錄` 區塊與 `/updates` 完整歷史頁；資料直接讀取 `docs/DOCUMENTATION-VERSION.md` 並顯示最新 Git revision metadata（可用時），作為對外展示的單一 changelog 來源 |
+| V1.38 | 2026-04-05 | `DimensionPicker` 修正 `維修配件` flow：配件分類不再把品牌分類／型號篩成空集合，改依品牌可維修裝置家族顯示；`usedProductTypeSettings` 若 collection 為空，會依品牌已勾選的 `usedProductTypes` 自動回補 active baseline，避免二手商品新增頁與規格模板卡片錯誤顯示 0 類型 |
+| V1.37 | 2026-04-05 | canonical item naming / catalog dimension 再收斂：主分類維持泛用類別（`手機` / `平板` / `手錶` / `維修配件`），`productTypeName`／品牌分類承接 `iPhone` / `Galaxy S` / `iWatch` 等家族；`DimensionPicker` 升為六欄（分類三層 + 品牌 + 品牌分類 + 型號），company_a catalog live data 亦同步修正 |
+| V1.36 | 2026-04-05 | `DimensionPicker` 與 `/dashboard/products` filter 改為依已設定 catalog relation 嚴格 cascade：選分類後只顯示該分類可用品牌，選品牌後只顯示該品牌且屬於該分類的型號；`MarketingBrandEditor` 的「店內商品分類」改為唯讀顯示 `linkedCategoryNames` 摘要，分類 CRUD 收斂回「分類」分頁 |
+| V1.35 | 2026-04-05 | 商店營銷目錄 canonical category schema 升級為三層（`categoryLevel: 1 | 2 | 3`）；`DimensionPicker`、品項快速命名與商品欄位同步支援第一層子分類（第二層分類）與第二層子分類（第三層分類），維修配件零件等級不再塞進 model naming |
+| V1.34 | 2026-04-05 | 補充 catalog 階層限制：canonical `CategoryDoc` 目前僅支援兩層；維修配件若需 `維修配件 > 配件部位 > 零件等級`，第三層先保留在 model naming，待後續 schema / UI 升級 |
+| V1.33 | 2026-04-05 | 移除 `reset-firebase-data.mjs` 內 demo `company_a` 專屬品牌種子；文件改回商店營銷目錄資料由 canonical company collections（`suppliers` / `brands` / `categories` / `models`）直接維護，而非 reset baseline |
+| V1.32 | 2026-04-05 | `project-summary` 同步 demo `company_a` 目錄品牌種子敘述（後續已由 V1.33 移除 reset baseline 綁定） |
+| V1.31 | 2026-04-05 | `reset-firebase-data.mjs` 曾為 demo `company_a` 加入六筆目錄品牌種子（後續已由 V1.33 移除） |
+| V1.30 | 2026-04-05 | `settings/dashboard` 移除 `連結 Google 帳號` 卡片，頁面收斂為 appearance-only 設定；`SecuritySettingsPanel` 只保留 `ThemeModeToggle`，Google 綁定邊界維持在 `account/security` |
+| V1.29 | 2026-04-05 | 商家 shell 導覽 IA 調整：`展示頁設定`、`儀表板設定` 從右上角帳戶選單 `帳戶設定` 移出，統一收進 sidebar `商店區域`，並將 `儀表板設定` 排在 `展示頁設定` 下方 |
+| V1.28 | 2026-04-05 | storefront sign-out CTA 收斂到 shared `SignOutButton` appearance variants，修正 showcase dark mode 樣式覆蓋；文件明確區分 `/settings/showcase` 的 storefront `themeColors` 與 `/settings/dashboard` 的 app shell `light` / `dark` / `custom` 外觀切換 |
+| V1.27 | 2026-04-05 | Demo 第三租戶：`company_c`、`adminc@gmail.com`／`cxc@gmail.com` 納入 `reset-firebase-data.mjs` 與 `sync-demo-auth-passwords.mjs`；`project-rules`／`multi-tenant-data-flow`／`project-summary`／首頁 `BusinessLandingPage` 測試帳號區同步 |
+| V1.26 | 2026-04-05 | `multi-tenant-data-flow`：補充 demo 兩個商家帳號展示首頁分屬不同 `companyId`／`app_config/showcase`，與官方 `/` 資料來源分離之說明；`project-summary` 加交叉引用 |
 | V1.25 | 2026-04-04 | invoice / receipt document canonical baseline：新增 `settings/invoiceSettings`、`invoiceTrackSettings`、`invoiceDrafts`、`receiptDocuments`、`invoiceVoids`、`invoiceCarriers`、`invoiceLogs` 文件；`/dashboard/receipts*` 與 `/settings/account/invoices*` 改走 merchant invoice-admin read/write wrappers |
 | V1.24 | 2026-04-04 | checkout / POS canonical baseline：`/dashboard/checkout` 改走 `checkout-route-data.service` + `checkout-case-selector.service` + `services/checkout/document-service`；案件卡預設隱藏、TW/AU 單據設定與 preview 統一吃 `businessProfile` / `regionalReceiptSettings`，sale snapshot 新增 `checkoutDocument` |
 | V1.23 | 2026-04-04 | 帳戶設定 canonical split：`/settings/account` 改為 auth summary / `businessProfile` / `regionalReceiptSettings` 三段分離；新增 receipt preview model、Firestore settings 路徑與 focused account-settings read/write docs |

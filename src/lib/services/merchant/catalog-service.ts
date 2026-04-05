@@ -192,15 +192,33 @@ function stripUndefinedFields(input: object): Record<string, unknown> {
     return Object.fromEntries(Object.entries(input as Record<string, unknown>).filter(([, value]) => value !== undefined));
 }
 
+function toCategoryLevel(value: unknown): 1 | 2 | 3 {
+    const level = Number(value);
+    if (level >= 3) return 3;
+    if (level >= 2) return 2;
+    return 1;
+}
+
+function inferCategoryLevel(parent?: Pick<CategoryDoc, "categoryLevel"> | null): 1 | 2 | 3 {
+    if (!parent) return 1;
+    if (parent.categoryLevel >= 2) return 3;
+    return 2;
+}
+
+function buildCategoryFullPath(name: string, parent?: Pick<CategoryDoc, "fullPath"> | null): string {
+    if (!parent?.fullPath) return name;
+    return `${parent.fullPath} > ${name}`;
+}
+
 function normalizeCategory(input: Partial<CategoryDoc> & { id: string; companyId: string }): CategoryDoc {
     const name = safeText(input.name) || "未命名分類";
     const parentCategoryId = safeText(input.parentCategoryId, 120) || undefined;
     const parentCategoryName = safeText(input.parentCategoryName) || undefined;
     const createdAt = safeText(input.createdAt, 40) || nowIso();
-    const categoryLevel: 1 | 2 = parentCategoryId || parentCategoryName || Number(input.categoryLevel) >= 2 ? 2 : 1;
+    const categoryLevel = parentCategoryId || parentCategoryName ? toCategoryLevel(input.categoryLevel || 2) : 1;
     const fullPath =
         safeText(input.fullPath, MAX_LONG) ||
-        (categoryLevel === 2 && parentCategoryName ? `${parentCategoryName} > ${name}` : name);
+        (parentCategoryName ? `${parentCategoryName} > ${name}` : name);
     return {
         id: safeText(input.id, 120) || id("category"),
         companyId: safeText(input.companyId, 120),
@@ -249,6 +267,7 @@ function normalizeModel(input: Partial<ModelDoc> & { id: string; companyId: stri
         brandName: safeText(input.brandName) || undefined,
         categoryId: safeText(input.categoryId, 120) || undefined,
         categoryName: safeText(input.categoryName) || undefined,
+        productTypeName: safeText(input.productTypeName, 120) || undefined,
         isUniversal: Boolean(input.isUniversal),
         description: safeText(input.description, MAX_LONG) || undefined,
         sortOrder: Number.isFinite(Number(input.sortOrder)) ? Math.round(Number(input.sortOrder)) : 0,
@@ -611,15 +630,23 @@ export async function updateCatalogCategory(categoryId: string, input: Partial<C
         return null;
     }
     upsertMemory(memory.categoriesByCompany, companyId, next);
-    if (current.categoryLevel === 1 && current.name !== next.name) {
-        const childCategories = categoryList.filter((item) => item.parentCategoryId === current.id);
+    const categoryById = new Map(categoryList.map((item) => [item.id, item]));
+    categoryById.set(next.id, next);
+    const pendingParentIds = [next.id];
+    while (pendingParentIds.length > 0) {
+        const parentId = pendingParentIds.shift();
+        if (!parentId) continue;
+        const parent = categoryById.get(parentId);
+        if (!parent) continue;
+        const childCategories = categoryList.filter((item) => item.parentCategoryId === parentId);
         for (const child of childCategories) {
             const childNext = normalizeCategory({
                 ...child,
                 id: child.id,
                 companyId,
-                parentCategoryName: next.name,
-                fullPath: `${next.name} > ${child.name}`,
+                parentCategoryName: parent.name,
+                categoryLevel: inferCategoryLevel(parent),
+                fullPath: buildCategoryFullPath(child.name, parent),
                 updatedAt: next.updatedAt,
             });
             try {
@@ -628,6 +655,8 @@ export async function updateCatalogCategory(categoryId: string, input: Partial<C
                 // fall back to memory if Firestore is temporarily unavailable
             }
             upsertMemory(memory.categoriesByCompany, companyId, childNext);
+            categoryById.set(child.id, childNext);
+            pendingParentIds.push(child.id);
         }
     }
     touchReadCache(readCacheTouchedAt.categoriesByCompany, companyId);
@@ -886,12 +915,14 @@ export async function getCatalogDimensionBundle(companyIdOverride?: string): Pro
         parentCategoryName: item.parentCategoryName,
         categoryLevel: item.categoryLevel,
         fullPath: item.fullPath,
+        sortOrder: item.sortOrder,
     });
     const toBrandOption = (item: BrandDoc) => ({
         id: item.id,
         name: item.name,
         slug: item.slug,
         categoryNames: item.linkedCategoryNames ?? [],
+        productTypes: item.productTypes ?? [],
     });
     const toModelOption = (item: ModelDoc) => ({
         id: item.id,
@@ -901,6 +932,7 @@ export async function getCatalogDimensionBundle(companyIdOverride?: string): Pro
         brandName: item.brandName,
         categoryId: item.categoryId,
         categoryName: item.categoryName,
+        productTypeName: item.productTypeName,
     });
 
     return {

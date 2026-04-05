@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import Image from "next/image";
 import { type DragEvent, type KeyboardEvent, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -69,6 +70,9 @@ type ShowcaseBuilderLabels = {
     moveDown: string;
     sectionListTitle: string;
     previewTitle: string;
+    previewAppearanceNoteTitle: string;
+    previewAppearanceNoteBody: string;
+    previewAppearanceNoteCta: string;
     inspectorTitle: string;
     libraryTitle: string;
     libraryHint: string;
@@ -1025,6 +1029,19 @@ export function ShowcaseBuilder({
                             {labels.usingDefaultTemplate}
                         </span>
                     ) : null}
+                </div>
+
+                <div className="flex flex-wrap items-start justify-between gap-3 rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-4 py-3">
+                    <div className="grid gap-1">
+                        <div className="text-sm font-medium text-[rgb(var(--text))]">{labels.previewAppearanceNoteTitle}</div>
+                        <div className="max-w-3xl text-xs leading-relaxed text-[rgb(var(--muted))]">{labels.previewAppearanceNoteBody}</div>
+                    </div>
+                    <Link
+                        href="/settings/dashboard"
+                        className="rounded-full border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-4 py-2 text-sm font-medium text-[rgb(var(--text))] transition hover:border-[rgb(var(--accent))] hover:bg-[rgb(var(--panel))]"
+                    >
+                        {labels.previewAppearanceNoteCta}
+                    </Link>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 rounded-[1.4rem] border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 py-2.5">

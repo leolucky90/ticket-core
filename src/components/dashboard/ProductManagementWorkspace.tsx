@@ -17,6 +17,7 @@ import { IconTextActionButton } from "@/components/ui/icon-text-action-button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { getUiText, type UiLanguage } from "@/lib/i18n/ui-text";
+import { filterBrandsForPrimaryCategory, filterModelsForCatalogSelection } from "@/lib/marketing/brand-catalog-helpers";
 import type { ItemNamingSettings } from "@/lib/schema/itemNamingSettings";
 import type { DimensionPickerBundle } from "@/lib/types/catalog";
 import type { Product } from "@/lib/types/merchant-product";
@@ -85,21 +86,6 @@ function formatMoney(value: number, lang: UiLanguage): string {
     return new Intl.NumberFormat(lang === "en" ? "en-US" : "zh-TW").format(Math.max(0, value));
 }
 
-function filterModelsByBrand(bundle: DimensionPickerBundle, brandId: string): DimensionPickerBundle["models"] {
-    const targetBrandId = brandId.trim();
-    if (!targetBrandId) return [];
-    const targetBrandName = (bundle.brands.find((item) => item.id === targetBrandId)?.name ?? "").trim().toLowerCase();
-    return bundle.models
-        .filter((model) => {
-            const modelBrandId = (model.brandId ?? "").trim();
-            const modelBrandName = (model.brandName ?? "").trim().toLowerCase();
-            if (modelBrandId) return modelBrandId === targetBrandId;
-            if (modelBrandName && targetBrandName) return modelBrandName === targetBrandName;
-            return false;
-        })
-        .sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
-}
-
 export function ProductManagementWorkspace({
     lang,
     products,
@@ -135,14 +121,29 @@ export function ProductManagementWorkspace({
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [showFilters, setShowFilters] = useState(true);
     const [dismissedFlashKey, setDismissedFlashKey] = useState<string | null>(null);
+    const [selectedCategoryFilter, setSelectedCategoryFilter] = useState(categoryFilter);
     const [selectedBrandFilter, setSelectedBrandFilter] = useState(brandFilter);
     const [selectedModelFilter, setSelectedModelFilter] = useState(modelFilter);
     const currentFlashKey = `${flash}:${actionTs || "no-ts"}`;
     const currentFlashText = flashLabels[flash as keyof typeof flashLabels] ?? "";
     const showFlashNotice = Boolean(currentFlashText) && dismissedFlashKey !== currentFlashKey;
+    const filteredBrandOptions = useMemo(() => {
+        const selectedCategory = dimensionBundle.categories.find((item) => item.id === selectedCategoryFilter) ?? null;
+        return filterBrandsForPrimaryCategory(
+            dimensionBundle.brands,
+            selectedCategory ? { id: selectedCategory.id, name: selectedCategory.name } : {},
+        );
+    }, [dimensionBundle.brands, dimensionBundle.categories, selectedCategoryFilter]);
     const filteredModelOptions = useMemo(
-        () => filterModelsByBrand(dimensionBundle, selectedBrandFilter),
-        [dimensionBundle, selectedBrandFilter],
+        () => {
+            const selectedBrand = dimensionBundle.brands.find((item) => item.id === selectedBrandFilter) ?? null;
+            const selectedCategory = dimensionBundle.categories.find((item) => item.id === selectedCategoryFilter) ?? null;
+            return filterModelsForCatalogSelection(dimensionBundle.models, {
+                brand: selectedBrand ? { id: selectedBrand.id, name: selectedBrand.name } : {},
+                primaryCategory: selectedCategory ? { id: selectedCategory.id, name: selectedCategory.name } : {},
+            }).sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
+        },
+        [dimensionBundle.brands, dimensionBundle.categories, dimensionBundle.models, selectedBrandFilter, selectedCategoryFilter],
     );
     const supplierNames = useMemo(
         () =>
@@ -169,7 +170,9 @@ export function ProductManagementWorkspace({
                     product.sku,
                     product.categoryName,
                     product.secondaryCategoryName,
+                    product.tertiaryCategoryName,
                     product.brandName,
+                    product.productTypeName,
                     product.modelName,
                     product.supplier,
                     ...(product.aliases ?? []),
@@ -187,12 +190,26 @@ export function ProductManagementWorkspace({
     }, [flash]);
 
     useEffect(() => {
+        setSelectedCategoryFilter(categoryFilter);
+    }, [categoryFilter]);
+
+    useEffect(() => {
         setSelectedBrandFilter(brandFilter);
     }, [brandFilter]);
 
     useEffect(() => {
         setSelectedModelFilter(modelFilter);
     }, [modelFilter]);
+
+    useEffect(() => {
+        if (!selectedCategoryFilter) return;
+        if (!selectedBrandFilter) return;
+        const exists = filteredBrandOptions.some((item) => item.id === selectedBrandFilter);
+        if (!exists) {
+            setSelectedBrandFilter("");
+            setSelectedModelFilter("");
+        }
+    }, [filteredBrandOptions, selectedBrandFilter, selectedCategoryFilter]);
 
     useEffect(() => {
         if (!selectedBrandFilter) {
@@ -298,7 +315,13 @@ export function ProductManagementWorkspace({
                 <input type="hidden" name="pageSize" value={pageSize} />
 
                 <FormField label={ui.category} htmlFor="filter-category">
-                    <Select id="filter-category" name="categoryId" defaultValue={categoryFilter} className={controlClass}>
+                    <Select
+                        id="filter-category"
+                        name="categoryId"
+                        value={selectedCategoryFilter}
+                        onChange={(event) => setSelectedCategoryFilter(event.currentTarget.value)}
+                        className={controlClass}
+                    >
                         <option value="">{ui.allCategories}</option>
                         {dimensionBundle.categories
                             .filter((category) => (category.categoryLevel ?? 1) === 1)
@@ -319,7 +342,7 @@ export function ProductManagementWorkspace({
                         className={controlClass}
                     >
                         <option value="">{ui.allBrands}</option>
-                        {dimensionBundle.brands.map((brand) => (
+                        {filteredBrandOptions.map((brand) => (
                             <option key={`brand-${brand.id}`} value={brand.id}>
                                 {brand.name}
                             </option>

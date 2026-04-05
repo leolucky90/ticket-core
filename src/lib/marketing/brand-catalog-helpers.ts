@@ -1,3 +1,4 @@
+import type { DimensionOption } from "@/lib/types/catalog";
 import type { RepairBrand } from "@/lib/types/repair-brand";
 
 export const COMMON_BRAND_TYPE_SUGGESTIONS = [
@@ -81,4 +82,122 @@ export function getBrandModelsForType(brand: RepairBrand, typeName: string): str
     if ((brand.modelsByType ?? []).length === 0) return brand.models;
     if (getBrandTypeNames(brand).length <= 1) return brand.models;
     return [];
+}
+
+export function inferGenericCategoryFromProductType(typeName: string): string {
+    const text = normalizeLookupText(typeName);
+    if (!text) return "";
+    if (text.includes("watch") || text.includes("iwatch") || text.includes("手錶")) return "手錶";
+    if (text.includes("ipad") || text.startsWith("tab ")) return "平板";
+    return "手機";
+}
+
+type CatalogLookupRef = {
+    id?: string;
+    name?: string;
+};
+
+function normalizeLookupText(value: string | undefined): string {
+    return value?.trim().toLowerCase() ?? "";
+}
+
+function isRepairPartsCategoryName(value: string | undefined): boolean {
+    const text = normalizeLookupText(value);
+    return text === "維修配件" || text === "repair parts";
+}
+
+function matchesLookupRef(
+    item: Pick<DimensionOption, "id" | "name" | "categoryId" | "categoryName" | "brandId" | "brandName">,
+    ref: CatalogLookupRef,
+    fields: {
+        id: "id" | "categoryId" | "brandId";
+        name: "name" | "categoryName" | "brandName";
+    },
+): boolean {
+    const requestedId = ref.id?.trim() ?? "";
+    const requestedName = normalizeLookupText(ref.name);
+    if (!requestedId && !requestedName) return false;
+    const itemId = (item[fields.id] ?? "").trim();
+    const itemName = normalizeLookupText(item[fields.name]);
+    if (requestedId && itemId) return itemId === requestedId;
+    if (requestedName && itemName) return itemName === requestedName;
+    return false;
+}
+
+export function filterBrandsForPrimaryCategory(
+    brands: DimensionOption[],
+    primaryCategory: CatalogLookupRef,
+): DimensionOption[] {
+    const categoryName = normalizeLookupText(primaryCategory.name);
+    if (!categoryName) return [...brands];
+    return brands.filter((brand) =>
+        (brand.categoryNames ?? []).some((name) => normalizeLookupText(name) === categoryName),
+    );
+}
+
+export function filterModelsForCatalogSelection(
+    models: DimensionOption[],
+    selection: {
+        brand: CatalogLookupRef;
+        primaryCategory?: CatalogLookupRef;
+        secondaryCategory?: CatalogLookupRef;
+        tertiaryCategory?: CatalogLookupRef;
+        productType?: CatalogLookupRef;
+    },
+): DimensionOption[] {
+    const brandId = selection.brand.id?.trim() ?? "";
+    const brandName = normalizeLookupText(selection.brand.name);
+    if (!brandId && !brandName) return [];
+
+    const primaryCategoryName = selection.primaryCategory?.name?.trim() ?? "";
+    const isRepairPartsFlow = isRepairPartsCategoryName(primaryCategoryName);
+    const requestedProductType = normalizeLookupText(selection.productType?.name);
+    const inferredCategoryFromProductType = requestedProductType
+        ? normalizeLookupText(inferGenericCategoryFromProductType(selection.productType?.name ?? ""))
+        : "";
+
+    const deepestCategory =
+        (selection.tertiaryCategory?.id || selection.tertiaryCategory?.name
+            ? selection.tertiaryCategory
+            : selection.secondaryCategory?.id || selection.secondaryCategory?.name
+              ? selection.secondaryCategory
+              : selection.primaryCategory) ?? {};
+    const hasCategoryConstraint = !isRepairPartsFlow && Boolean(deepestCategory.id?.trim() || deepestCategory.name?.trim());
+
+    return models.filter((model) => {
+        const matchesBrand = matchesLookupRef(model, selection.brand, { id: "brandId", name: "brandName" });
+        if (!matchesBrand) return false;
+        const matchesCategory = isRepairPartsFlow
+            ? !inferredCategoryFromProductType || normalizeLookupText(model.categoryName) === inferredCategoryFromProductType
+            : !hasCategoryConstraint || matchesLookupRef(model, deepestCategory, { id: "categoryId", name: "categoryName" });
+        if (!matchesCategory) return false;
+        if (!requestedProductType) return true;
+        return normalizeLookupText(model.productTypeName) === requestedProductType;
+    });
+}
+
+export function listProductTypesForCatalogSelection(
+    models: DimensionOption[],
+    brands: DimensionOption[],
+    selection: {
+        brand: CatalogLookupRef;
+        primaryCategory?: CatalogLookupRef;
+    },
+): string[] {
+    const selectedModels = filterModelsForCatalogSelection(models, {
+        brand: selection.brand,
+        primaryCategory: selection.primaryCategory,
+    });
+    const fromModels = normalizeBrandTypeNames(selectedModels.map((model) => model.productTypeName ?? ""));
+    if (fromModels.length > 0) return fromModels;
+
+    const brandId = selection.brand.id?.trim() ?? "";
+    const brandName = normalizeLookupText(selection.brand.name);
+    const selectedBrand =
+        brands.find((brand) => (brandId && brand.id === brandId) || (brandName && normalizeLookupText(brand.name) === brandName)) ?? null;
+    const allTypes = normalizeBrandTypeNames(selectedBrand?.productTypes ?? []);
+    const categoryName = selection.primaryCategory?.name?.trim() ?? "";
+    if (!categoryName) return allTypes;
+    if (isRepairPartsCategoryName(categoryName)) return allTypes;
+    return allTypes.filter((typeName) => inferGenericCategoryFromProductType(typeName) === categoryName);
 }

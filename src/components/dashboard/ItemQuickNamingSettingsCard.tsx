@@ -31,9 +31,11 @@ export function ItemQuickNamingSettingsCard({ settings, marketingSection, submit
     const t = getUiText(lang).itemQuickNaming;
     const tokenOptions: Array<{ token: ItemNamingToken; label: string; description: string }> = [
         { token: "brand", label: t.tokenBrand, description: t.tokenBrandDesc },
+        { token: "productType", label: t.tokenProductType, description: t.tokenProductTypeDesc },
         { token: "model", label: t.tokenModel, description: t.tokenModelDesc },
         { token: "category", label: t.tokenCategory, description: t.tokenCategoryDesc },
         { token: "secondaryCategory", label: t.tokenSecondaryCategory, description: t.tokenSecondaryCategoryDesc },
+        { token: "tertiaryCategory", label: t.tokenTertiaryCategory, description: t.tokenTertiaryCategoryDesc },
     ];
     const [order, setOrder] = useState<ItemNamingToken[]>(settings.order);
     const [draggingToken, setDraggingToken] = useState<ItemNamingToken | null>(null);

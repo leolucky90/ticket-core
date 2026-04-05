@@ -122,6 +122,8 @@ Path: `src/app`
 - no hard-coded colors
 - no `text-white`
 - no inline styles unless clearly necessary for controlled dynamic sizing
+- shared action controls that appear across dashboard / showcase / shop should prefer explicit appearance variants on shared components; avoid page-local utility overrides fighting root theme classes
+- showcase builder theme editing and dashboard appearance mode are separate settings: `/settings/showcase` edits tenant storefront `themeColors` / content, while `/settings/dashboard` owns the app shell `light` / `dark` / `custom` mode toggle
 - theme colors only use:
   - `rgb(var(--bg))`
   - `rgb(var(--panel))`
@@ -164,6 +166,7 @@ Path: `src/app`
 - page-size 選項一律優先共用 `src/lib/ui/list-display.ts`
 - dashboard 內的 operational tabs 若還留在大型 workspace，也應持續往 shared pagination / empty state baseline 收斂
 - 新的 list/detail panel UX 應先求一致，再考慮客製 layout
+- 商家導覽分組需維持一致資訊架構：`商店區域` 承接 storefront / marketing 相關入口（例如 `展示頁設定`、`儀表板設定`），右上角帳戶選單的 `帳戶設定` 只保留帳號 / 安全 / 權限 / 稽核等帳戶治理項目
 
 ## Iteration Guardrails
 
@@ -235,6 +238,14 @@ Company B:
 Company B customer:
 
 - `cxb@gmail.com`
+
+Company C:
+
+- `adminc@gmail.com`
+
+Company C customer:
+
+- `cxc@gmail.com`
 
 ## Canonical Naming Rules
 
@@ -457,11 +468,16 @@ UI 再翻譯顯示:
 主要相關檔案:
 
 - `src/features/business/components/BusinessLandingPage.tsx`
+- `src/features/business/components/homepage/PublicReleaseNotesSection.tsx`
+- `src/features/business/services/publicReleaseNotes.server.ts`（公開 changelog single source：解析 `docs/DOCUMENTATION-VERSION.md`，並在可用時補充最新 Git revision metadata）
 - `src/lib/types/builder.ts`、`src/lib/constants/builder-demo.ts`（首頁 Builder 結構化設定與 mock；媒體欄位預設 `storageProvider: external-url`）
 - `src/components/ui/builder/*`（`HeroBackgroundMedia`、`AutoCarouselBanner`、`BuilderMediaField` 等；媒體上傳 UI 為預留，正式儲存前請走外部 URL）
 - `src/features/business/services/businessHomepageContent.ts`
 - `src/styles/globals.css`
 - `src/app/layout.tsx`
+
+- 官方首頁 `/` 與公開 `/updates` 的版本更新紀錄，應以 `docs/DOCUMENTATION-VERSION.md` 為 single source；不要再另外手寫第二份 JSON / 常數列表。若 Git metadata 可用，可額外顯示最近 revision 時間與 hash，但「更新了什麼」仍以 docs 版本表為準。
+- 公開 changelog 區塊應優先維持「摘要卡 + 內層滾動歷史」的密度控制，不要把首頁或 `/updates` 重新做成整頁超長表格，導致公開展示頁節奏被版本歷史撐壞。
 
 ### Official / Merchant / Customer Shell Alignment
 
@@ -646,6 +662,7 @@ merchant zone 要重構成 unified page shell system。
 - 路徑：`src/components/dashboard/marketing-settings-workspace.tsx`
 - 頂部為區塊選單：分類、供應來源、品牌、二手商品。
 - **供應來源**、**品牌**、**二手商品** 三區皆應使用 `MerchantBuilderShell`（左清單／右編輯），與既有 Builder 雙欄語意一致。
+- **品牌**：`MarketingBrandEditor` 的「店內商品分類」只顯示該品牌已設定的 `linkedCategoryNames` 摘要；分類的新增、修改、刪除維持在「分類」分頁，不要在品牌編輯器再塞一整份 category CRUD / checkbox matrix。
 - **二手商品**：`src/components/used-products/used-product-type-settings-card.tsx`（`UsedProductTypeSettingsCard`）左欄為「類型清單」（來自品牌設定中已啟用之二手類型），右欄為該類型之規格模板與表單；類型啟用與否仍由品牌設定側控制，此區只維護規格模板。
 - **i18n**：上述 workspace 之區塊選單、供應商／品牌清單與表單、`ItemQuickNamingSettingsCard`、`MarketingBrandEditor`、二手規格說明等 UI 字串應自 `src/lib/i18n/ui-text.ts` 取用（例如 `marketingSettingsWorkspace`、`itemQuickNaming`、`marketingBrandEditor`、`usedProductTypeSettings`），語系與 cookie `lang`／`UiLanguageProvider` 對齊，避免 page-local 硬編中英分支。
 
@@ -866,6 +883,14 @@ Required checks:
 ## Demo / catalog data
 
 - 示範用**品項／庫存／價目**應以**手動在後台建立**或專案內明確的 seed／reset 流程為準；不維護從第三方網站自動爬取匯入商品資料的腳本，以免違反來源網站條款與資料授權。
+- canonical catalog category schema 現在支援 **三層**：`CategoryDoc.categoryLevel` 為 `1 | 2 | 3`。命名基線為：主分類 → 第一層子分類（第二層分類）→ 第二層子分類（第三層分類）。
+- 維修配件資料若要表達「`維修配件` → `Screen` → `AMP` / `BQ7` / `Service Pack`」等級，應直接落在 canonical categories 第三層；不要再把零件等級塞回 model naming、route-local prompt、或 page-local workaround。
+- catalog 的裝置家族／品牌分類必須與主分類拆開：`categoryName` 只承接泛用主分類（例如 `手機` / `平板` / `手錶` / `維修配件`），`productTypeName` 才承接 `iPhone` / `Galaxy S` / `iWatch` 等品牌家族。不要再把 `iPhone` / `Galaxy S` / `iWatch` 直接當主分類。
+- `ModelDoc.name` 應只存家族下的型號 suffix（例如 `17 Pro Max`、`S25 Ultra`、`Series 10 (46MM)`）；完整顯示名稱由 shared item naming helper 依 `brand + productType + model (+ categories...)` 組合，不要把品牌家族前綴重複塞回 model。
+- 商店營銷目錄／品項建立 UI 若有分類選擇，應延續 shared `DimensionPicker` 的三層結構與對應命名；不要在單一路由另做一套 `第二分類 / 第三分類` 自行解析規則。
+- shared `DimensionPicker` / category → brand → productType → model selector 必須尊重 catalog relation：選分類後只顯示 `linkedCategoryNames` 已涵蓋該分類的品牌；選品牌後只顯示該品牌在該主分類可用的 `productTypeName`；選品牌分類後才顯示同品牌、同主分類、同品牌分類的型號。跨分類品牌／型號不應回退顯示。
+- `維修配件` 是特殊主分類：`Screen` / `Battery` / `AMP` / `BQ7` 等第二、第三層 category 描述的是零件階層，不是裝置家族；因此 shared selector 在 `維修配件` flow 下不得用這些 category 直接把 `productTypeName` / model 篩空，而應回到品牌可維修的裝置家族（例如 `Apple -> iPhone/iPad/iWatch`）再往下選型號。
+- `companies/{companyId}/usedProductTypeSettings` 是品牌勾選 `usedProductTypes` 的衍生 baseline。若 collection 為空或缺漏，read-side 應優先依品牌已啟用的 `usedProductTypes` 自動回補 active settings；二手商品新增頁與規格模板卡片不應回退成與品牌設定脫節的 generic 類型清單。
 
 ## Storefront Builder Rule
 

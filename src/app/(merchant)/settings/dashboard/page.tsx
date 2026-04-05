@@ -16,9 +16,6 @@ export default async function DashboardSettingsPage() {
     return (
         <MerchantPageShell title={pageUi.pageTitle} subtitle={pageUi.pageSubtitle} width="default">
             <SecuritySettingsPanel
-                linkGoogleTitle={t(locale, "linkGoogle")}
-                linkedLabel={t(locale, "linked")}
-                linkNowLabel={t(locale, "linkNow")}
                 themeLabels={{
                     sectionTitle: t(locale, "themeStyle"),
                     modeLight: t(locale, "themeModeLight"),

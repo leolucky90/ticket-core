@@ -73,7 +73,8 @@ export function TenantShopPage({
                                     {lang === "en" ? "My Dashboard" : "客戶儀錶板"}
                                 </Link>
                                 <SignOutButton
-                                    className="rounded-full border-[#ffcb2d] bg-transparent px-3 py-1.5 text-[#ffcb2d] hover:border-[#ffcb2d] hover:bg-[#ffcb2d] hover:text-[#191815]"
+                                    appearance="shop"
+                                    className="rounded-full px-3 py-1.5"
                                     label={lang === "en" ? "Sign out" : "登出"}
                                 />
                             </>
@@ -84,7 +85,8 @@ export function TenantShopPage({
                                     {lang === "en" ? "Dashboard" : "儀錶板"}
                                 </Link>
                                 <SignOutButton
-                                    className="rounded-full border-[#ffcb2d] bg-transparent px-3 py-1.5 text-[#ffcb2d] hover:border-[#ffcb2d] hover:bg-[#ffcb2d] hover:text-[#191815]"
+                                    appearance="shop"
+                                    className="rounded-full px-3 py-1.5"
                                     label={lang === "en" ? "Sign out" : "登出"}
                                 />
                             </>

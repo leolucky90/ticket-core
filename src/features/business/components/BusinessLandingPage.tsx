@@ -21,6 +21,7 @@ import { SignOutButton } from "@/components/layout/SignOutButton";
 import { BusinessLanguageSwitcher } from "@/features/business/components/BusinessLanguageSwitcher";
 import { CtaStrip } from "@/features/business/components/homepage/CtaStrip";
 import { OfficialPostHeroSection } from "@/features/business/components/homepage/OfficialPostHeroSection";
+import { PublicReleaseNotesSection } from "@/features/business/components/homepage/PublicReleaseNotesSection";
 import { PortfolioIntroBlock } from "@/features/business/components/homepage/PortfolioIntroBlock";
 import { SectionShell } from "@/features/business/components/homepage/SectionShell";
 import { AutoCarouselBanner } from "@/components/ui/builder/AutoCarouselBanner";
@@ -32,6 +33,7 @@ import type {
     BusinessHomepageEditableContent,
     BusinessHomepageThemePreset,
 } from "@/features/business/services/businessHomepageContent";
+import type { PublicReleaseNotes } from "@/features/business/services/publicReleaseNotes.server";
 import { DEMO_ACCOUNT_PASSWORD } from "@/lib/demo-account-password";
 import { DOCUMENTATION_VERSION_DISPLAY } from "@/lib/documentation-version";
 import { getUiText } from "@/lib/i18n/ui-text";
@@ -42,6 +44,7 @@ type BusinessLandingPageProps = {
     dashboardHref?: string;
     homepageContent?: BusinessHomepageContentState;
     demoEntryValue?: string;
+    releaseNotes?: PublicReleaseNotes;
     /** Structured builder homepage (hero + carousel); defaults to demo official config. */
     builderHomepage?: BuilderHomepageConfig;
 };
@@ -383,7 +386,7 @@ const copyByLang: Record<"zh" | "en", LandingCopy> = {
             },
         ],
         demoEyebrow: "Demo / Test Access",
-        demoTitle: "首頁直接提供測試帳號，方便觀察者快速體驗 A / B 端與客戶端情境",
+        demoTitle: "首頁直接提供測試帳號，方便觀察者快速體驗多租戶商家端與客戶端情境",
         demoDesc: "這個作品頁也同時作為 demo 入口。若要直接測試，請先從下方官方首頁入口進入，以下帳號目前密碼皆為同一組。",
         demoEntryLabel: "官方首頁入口",
         demoEntryValue: "http://localhost:3000",
@@ -405,6 +408,14 @@ const copyByLang: Record<"zh" | "en", LandingCopy> = {
                 accounts: [
                     { label: "用戶 B 端", email: "adminb@gmail.com" },
                     { label: "B 用戶客戶端", email: "cxb@gmail.com" },
+                ],
+            },
+            {
+                title: "C 組租戶",
+                homepagePath: "/company_c",
+                accounts: [
+                    { label: "用戶 C 端", email: "adminc@gmail.com" },
+                    { label: "C 用戶客戶端", email: "cxc@gmail.com" },
                 ],
             },
         ],
@@ -704,7 +715,7 @@ const copyByLang: Record<"zh" | "en", LandingCopy> = {
             },
         ],
         demoEyebrow: "Demo / Test Access",
-        demoTitle: "Test accounts are available on the homepage so reviewers can try both tenant-side and customer-side flows quickly",
+        demoTitle: "Test accounts are available on the homepage so reviewers can try tenant-side and customer-side flows across multiple demo companies quickly",
         demoDesc: "This page also acts as a demo entry. To test the system, start from the official homepage entry below. All demo accounts currently use the same password.",
         demoEntryLabel: "Official homepage",
         demoEntryValue: "http://localhost:3000",
@@ -726,6 +737,14 @@ const copyByLang: Record<"zh" | "en", LandingCopy> = {
                 accounts: [
                     { label: "Tenant B admin", email: "adminb@gmail.com" },
                     { label: "Tenant B customer", email: "cxb@gmail.com" },
+                ],
+            },
+            {
+                title: "Tenant Group C",
+                homepagePath: "/company_c",
+                accounts: [
+                    { label: "Tenant C admin", email: "adminc@gmail.com" },
+                    { label: "Tenant C customer", email: "cxc@gmail.com" },
                 ],
             },
         ],
@@ -971,6 +990,7 @@ export function BusinessLandingPage({
     dashboardHref = "/dashboard",
     homepageContent,
     demoEntryValue,
+    releaseNotes,
     builderHomepage = OFFICIAL_BUILDER_HOMEPAGE_CONFIG,
 }: BusinessLandingPageProps) {
     const ui = copyByLang[lang];
@@ -1500,6 +1520,8 @@ export function BusinessLandingPage({
                         })}
                     </div>
                 </SectionShell>
+
+                {releaseNotes ? <PublicReleaseNotesSection lang={lang} releaseNotes={releaseNotes} /> : null}
 
                 <CtaStrip
                     title={editable.finalTitle}
