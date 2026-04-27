@@ -3,6 +3,11 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ItemFormFields } from "@/components/dashboard/ItemFormFields";
+import {
+    ActivityFormPanel,
+    createActivityFormValueFromActivity,
+    createEmptyActivityFormValue,
+} from "@/components/dashboard/ActivityFormPanel";
 import { MarketingSettingsWorkspace, type MarketingSectionId } from "@/components/dashboard/marketing-settings-workspace";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -144,14 +149,6 @@ type CompanyDashboardWorkspaceProps = {
     updateItemNamingSettingsAction: (formData: FormData) => Promise<void>;
 };
 
-type ActivityDraftItem = {
-    id: string;
-    itemName: string;
-    qty: number;
-    price: number;
-    cost: number;
-};
-
 type CustomerCaseFilter = "all" | "active_case" | "closed_case" | "no_case";
 type CustomerListOrder = "updated_latest" | "updated_earliest" | "created_latest" | "created_earliest" | "name_asc" | "name_desc";
 type ActivityListOrder = "updated_latest" | "updated_earliest" | "start_latest" | "start_earliest";
@@ -246,31 +243,31 @@ function activityStatusText(status: Activity["status"], ui: DashboardCustomerCas
     return lookupLabel(ui.activityStatus, status);
 }
 
-function activityEffectText(effectType: Activity["effectType"], ui: DashboardCustomerCaseUi): string {
-    return lookupLabel(ui.activityEffect, effectType);
-}
-
-function toDateInput(ts: number): string {
-    if (!Number.isFinite(ts) || ts <= 0) return "";
-    const d = new Date(ts);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-}
-
-function FieldLabel({ htmlFor, label }: { htmlFor: string; label: string }) {
-    return (
-        <label htmlFor={htmlFor} className="text-xs font-medium text-[rgb(var(--muted))]">
-            {label}
-        </label>
-    );
-}
-
-function openDatePicker(input: HTMLInputElement) {
-    if (typeof input.showPicker === "function") {
-        input.showPicker();
+function activityEffectSummary(activity: Activity, ui: DashboardCustomerCaseUi, lang: UiLanguage): string {
+    if (activity.effectType === "gift_item") {
+        const giftName = activity.giftProductName || activity.giftProductId || "-";
+        return `${ui.activities.effectGiftItem}: ${giftName} x ${Math.max(1, activity.giftQty || 1)}`;
     }
+    if (activity.effectType === "bundle_price") {
+        const target = activity.scopeType === "category"
+            ? activity.categoryName || activity.categoryId || "-"
+            : activity.productName || activity.productId || "-";
+        return `${ui.activities.effectBundlePrice}: ${target} / ${formatMoney(activity.bundlePriceDiscount ?? 0, lang)}`;
+    }
+    if (activity.effectType === "create_pickup_reservation") {
+        const target = activity.productName || activity.productId || "-";
+        return `${ui.activities.effectPickupReservationCompatibility}: ${target}`;
+    }
+    if (activity.effectType === "create_entitlement") {
+        const target = activity.scopeType === "category"
+            ? activity.categoryName || activity.categoryId || "-"
+            : activity.productName || activity.productId || "-";
+        return `${ui.activities.effectEntitlementCompatibility}: ${target}`;
+    }
+    if (activity.discountMode === "percentage") {
+        return `${ui.activities.effectDiscountPercentage}: ${Math.max(0, activity.discountPercentage ?? 0)}%`;
+    }
+    return `${ui.activities.effectDiscountAmount}: ${formatMoney(activity.discountAmount ?? 0, lang)}`;
 }
 
 function getPointsByRange(stats: CompanyDashboardStats, range: "day" | "month") {
@@ -654,9 +651,9 @@ export function CompanyDashboardWorkspace({
     const [showCreateActivityForm, setShowCreateActivityForm] = useState(false);
     const [showCreateProductForm, setShowCreateProductForm] = useState(false);
     const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
-    const [draftItems, setDraftItems] = useState<ActivityDraftItem[]>([
-        { id: "draft-1", itemName: "", qty: 1, price: 0, cost: 0 },
-    ]);
+    const [createActivityFormSeed, setCreateActivityFormSeed] = useState(() => createEmptyActivityFormValue());
+    const [createActivityFormKey, setCreateActivityFormKey] = useState("activity-create-blank");
+    const [createActivitySourceName, setCreateActivitySourceName] = useState("");
     const [dismissedFlashKey, setDismissedFlashKey] = useState<string | null>(null);
     const normalizedCaseStatusOptions = useMemo(
         () => dedupeStatuses(caseStatusOptions.length > 0 ? caseStatusOptions : DEFAULT_CASE_STATUS_OPTIONS),
@@ -739,6 +736,28 @@ export function CompanyDashboardWorkspace({
         url.searchParams.delete("ts");
         window.history.replaceState({}, "", url.toString());
     }, [flash]);
+
+    function scrollToCreateActivitySection() {
+        window.requestAnimationFrame(() => {
+            document.getElementById("activity-create-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+    }
+
+    function openBlankActivityForm() {
+        setCreateActivityFormSeed(createEmptyActivityFormValue());
+        setCreateActivityFormKey(`activity-create-blank-${Date.now()}`);
+        setCreateActivitySourceName("");
+        setShowCreateActivityForm(true);
+        scrollToCreateActivitySection();
+    }
+
+    function restartActivity(activity: Activity) {
+        setCreateActivityFormSeed(createActivityFormValueFromActivity(activity, { resetDates: true }));
+        setCreateActivityFormKey(`activity-restart-${activity.id}-${activity.updatedAt}`);
+        setCreateActivitySourceName(activity.name);
+        setShowCreateActivityForm(true);
+        scrollToCreateActivitySection();
+    }
 
     const activeActivities = useMemo(() => activities.filter((item) => item.status === "active"), [activities]);
     const upcomingActivities = useMemo(() => activities.filter((item) => item.status === "upcoming"), [activities]);
@@ -1505,19 +1524,22 @@ export function CompanyDashboardWorkspace({
 
                 {tab === "activities" ? (
                     <>
-                        <Card className="rounded-xl p-3">
-                            <SectionTitle title={activityUi.sectionTitle} hint={activityUi.sectionHint} />
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-                                <form action="/dashboard" method="get" className="flex w-full flex-col gap-2 sm:flex-row sm:items-center">
-                                    <input type="hidden" name="tab" value="activities" />
-                                    <MerchantPredictiveSearchInput
-                                        name="activityQ"
-                                        defaultValue={activityKeyword}
-                                        placeholder={activityUi.searchPlaceholder}
-                                        localSuggestions={activitySearchSuggestions}
-                                        className="w-full"
-                                    />
-                                    <IconOnlyButton label={activityUi.searchButton} type="submit" variant="ghost" icon={<Search className="h-4 w-4" aria-hidden="true" />} />
+                        <MerchantSectionCard title={activityUi.searchSectionTitle} description={activityUi.searchSectionHint}>
+                            <SearchToolbar
+                                searchSlot={
+                                    <form action="/dashboard" method="get" className="flex w-full flex-col gap-2 sm:flex-row sm:items-center">
+                                        <input type="hidden" name="tab" value="activities" />
+                                        <MerchantPredictiveSearchInput
+                                            name="activityQ"
+                                            defaultValue={activityKeyword}
+                                            placeholder={activityUi.searchPlaceholder}
+                                            localSuggestions={activitySearchSuggestions}
+                                            className="w-full"
+                                        />
+                                        <IconOnlyButton label={activityUi.searchButton} type="submit" variant="ghost" icon={<Search className="h-4 w-4" aria-hidden="true" />} />
+                                    </form>
+                                }
+                                toolsSlot={
                                     <IconOnlyButton
                                         label={activityUi.clearSearch}
                                         icon={<X className="h-4 w-4" aria-hidden="true" />}
@@ -1525,248 +1547,51 @@ export function CompanyDashboardWorkspace({
                                             window.location.href = "/dashboard?tab=activities";
                                         }}
                                     />
-                                </form>
-                                <Button
-                                    type="button"
-                                    variant={showCreateActivityForm ? "solid" : "ghost"}
-                                    aria-label={commonUi.add}
-                                    title={commonUi.add}
-                                    className="group relative h-10 w-10 shrink-0 !p-0 flex items-center justify-center"
-                                    onClick={() => setShowCreateActivityForm((prev) => !prev)}
-                                >
-                                    <Plus className="h-6 w-6 transition-transform group-hover:scale-110" aria-hidden="true" />
-                                    <span className="sr-only">{commonUi.add}</span>
-                                    <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-2 py-1 text-[11px] text-[rgb(var(--text))] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                                        {commonUi.add}
-                                    </span>
-                                </Button>
-                            </div>
-                            {showCreateActivityForm ? (
-                                <form action={createActivityAction} className="mt-3 grid gap-3">
-                                    <input type="hidden" name="tab" value="activities" />
-                                    <div className="grid gap-2 md:grid-cols-3">
-                                        <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-name" label={activityUi.nameLabel} />
-                                            <Input id="create-activity-name" name="activityName" placeholder={activityUi.namePlaceholder} required />
-                                        </div>
-                                        <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-start-at" label={activityUi.startDateLabel} />
-                                            <Input
-                                                id="create-activity-start-at"
-                                                type="date"
-                                                name="activityStartAt"
-                                                onClick={(event) => openDatePicker(event.currentTarget)}
-                                                required
-                                            />
-                                        </div>
-                                        <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-end-at" label={activityUi.endDateLabel} />
-                                            <Input
-                                                id="create-activity-end-at"
-                                                type="date"
-                                                name="activityEndAt"
-                                                onClick={(event) => openDatePicker(event.currentTarget)}
-                                                required
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="grid gap-2 md:grid-cols-3">
-                                        <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-effect-type" label={activityUi.effectLabel} />
-                                            <Select id="create-activity-effect-type" name="activityEffectType" defaultValue="discount">
-                                                <option value="discount">{activityEffectText("discount", customerCaseUi)}</option>
-                                                <option value="bundle_price">{activityEffectText("bundle_price", customerCaseUi)}</option>
-                                                <option value="gift_item">{activityEffectText("gift_item", customerCaseUi)}</option>
-                                                <option value="create_entitlement">{activityEffectText("create_entitlement", customerCaseUi)}</option>
-                                                <option value="create_pickup_reservation">{activityEffectText("create_pickup_reservation", customerCaseUi)}</option>
-                                            </Select>
-                                        </div>
-                                        <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-discount-amount" label={activityUi.discountAmountLabel} />
-                                            <Input id="create-activity-discount-amount" type="number" min={0} name="activityDiscountAmount" defaultValue={0} />
-                                        </div>
-                                        <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-bundle-discount" label={activityUi.bundleDiscountLabel} />
-                                            <Input id="create-activity-bundle-discount" type="number" min={0} name="activityBundlePriceDiscount" defaultValue={0} />
-                                        </div>
-                                    </div>
-                                    <div className="grid gap-2 md:grid-cols-3">
-                                        <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-gift-product-id" label={activityUi.giftProductIdLabel} />
-                                            <Input id="create-activity-gift-product-id" name="activityGiftProductId" placeholder={activityUi.giftProductIdPlaceholder} />
-                                        </div>
-                                        <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-gift-product-name" label={activityUi.giftProductNameLabel} />
-                                            <Input id="create-activity-gift-product-name" name="activityGiftProductName" placeholder={activityUi.giftProductNamePlaceholder} />
-                                        </div>
-                                        <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-gift-qty" label={activityUi.giftQtyLabel} />
-                                            <Input id="create-activity-gift-qty" type="number" min={1} name="activityGiftQty" defaultValue={1} />
-                                        </div>
-                                    </div>
-                                    <div className="grid gap-2 md:grid-cols-3">
-                                        <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-entitlement-type" label={activityUi.entitlementTypeLabel} />
-                                            <Select id="create-activity-entitlement-type" name="activityEntitlementType" defaultValue="replacement">
-                                                <option value="replacement">replacement</option>
-                                                <option value="gift">gift</option>
-                                                <option value="discount">discount</option>
-                                                <option value="service">service</option>
-                                            </Select>
-                                        </div>
-                                        <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-scope-type" label={activityUi.scopeTypeLabel} />
-                                            <Select id="create-activity-scope-type" name="activityScopeType" defaultValue="category">
-                                                <option value="category">{activityUi.scopeCategory}</option>
-                                                <option value="product">{activityUi.scopeProduct}</option>
-                                            </Select>
-                                        </div>
-                                        <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-entitlement-qty" label={activityUi.entitlementQtyLabel} />
-                                            <Input id="create-activity-entitlement-qty" type="number" min={1} name="activityEntitlementQty" defaultValue={1} />
-                                        </div>
-                                    </div>
-                                    <div className="grid gap-2 md:grid-cols-4">
-                                        <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-category-id" label={activityUi.categoryIdLabel} />
-                                            <Input id="create-activity-category-id" name="activityCategoryId" placeholder={activityUi.categoryIdPlaceholder} />
-                                        </div>
-                                        <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-category-name" label={activityUi.categoryNameLabel} />
-                                            <Input id="create-activity-category-name" name="activityCategoryName" placeholder={activityUi.categoryNamePlaceholder} />
-                                        </div>
-                                        <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-product-id" label={activityUi.productIdLabel} />
-                                            <Input id="create-activity-product-id" name="activityProductId" placeholder={activityUi.productIdPlaceholder} />
-                                        </div>
-                                        <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-product-name" label={activityUi.productNameLabel} />
-                                            <Input id="create-activity-product-name" name="activityProductName" placeholder={activityUi.productNamePlaceholder} />
-                                        </div>
-                                    </div>
-                                    <div className="grid gap-2 md:grid-cols-4">
-                                        <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-entitlement-expire" label={activityUi.entitlementExpireLabel} />
-                                            <Input
-                                                id="create-activity-entitlement-expire"
-                                                type="date"
-                                                name="activityEntitlementExpiresAt"
-                                                onClick={(event) => openDatePicker(event.currentTarget)}
-                                            />
-                                        </div>
-                                        <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-reservation-qty" label={activityUi.reservationQtyLabel} />
-                                            <Input id="create-activity-reservation-qty" type="number" min={1} name="activityReservationQty" defaultValue={1} />
-                                        </div>
-                                        <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-reservation-expire" label={activityUi.reservationExpireLabel} />
-                                            <Input
-                                                id="create-activity-reservation-expire"
-                                                type="date"
-                                                name="activityReservationExpiresAt"
-                                                onClick={(event) => openDatePicker(event.currentTarget)}
-                                            />
-                                        </div>
-                                        <div className="grid gap-1">
-                                            <FieldLabel htmlFor="create-activity-default-store-qty" label={activityUi.defaultStoreQtyLabel} />
-                                            <Input id="create-activity-default-store-qty" type="number" min={0} name="activityDefaultStoreQty" defaultValue={0} />
-                                        </div>
-                                    </div>
-                                    <div className="grid gap-1">
-                                        <FieldLabel htmlFor="create-activity-message" label={activityUi.messageLabel} />
-                                        <Textarea id="create-activity-message" name="activityMessage" rows={3} placeholder={activityUi.messagePlaceholder} />
-                                    </div>
-                                    <div className="grid gap-2">
-                                        {draftItems.map((item, index) => (
-                                            <div key={item.id} className="grid gap-2 rounded-lg border border-[rgb(var(--border))] p-3 md:grid-cols-4">
-                                                <div className="text-xs font-semibold text-[rgb(var(--muted))] md:col-span-4">{activityUi.itemCardTitle.replace("{index}", String(index + 1))}</div>
-                                                <div className="grid gap-1">
-                                                    <FieldLabel htmlFor={`create-item-name-${item.id}`} label={activityUi.itemNameLabel} />
-                                                    <Input
-                                                        id={`create-item-name-${item.id}`}
-                                                        name="activityItemName[]"
-                                                        value={item.itemName}
-                                                        onChange={(event) => {
-                                                            const value = event.target.value;
-                                                            setDraftItems((prev) => prev.map((row, rowIndex) => (rowIndex === index ? { ...row, itemName: value } : row)));
-                                                        }}
-                                                        placeholder={activityUi.itemNamePlaceholder}
-                                                        required
-                                                    />
-                                                </div>
-                                                <div className="grid gap-1">
-                                                    <FieldLabel htmlFor={`create-item-qty-${item.id}`} label={activityUi.itemQtyLabel} />
-                                                    <Input
-                                                        id={`create-item-qty-${item.id}`}
-                                                        type="number"
-                                                        min={0}
-                                                        name="activityItemQty[]"
-                                                        value={item.qty}
-                                                        onChange={(event) => {
-                                                            const value = Number(event.target.value || "0");
-                                                            setDraftItems((prev) => prev.map((row, rowIndex) => (rowIndex === index ? { ...row, qty: value } : row)));
-                                                        }}
-                                                        placeholder={activityUi.itemQtyPlaceholder}
-                                                        required
-                                                    />
-                                                </div>
-                                                <div className="grid gap-1">
-                                                    <FieldLabel htmlFor={`create-item-price-${item.id}`} label={activityUi.itemPriceLabel} />
-                                                    <Input
-                                                        id={`create-item-price-${item.id}`}
-                                                        type="number"
-                                                        min={0}
-                                                        name="activityItemPrice[]"
-                                                        value={item.price}
-                                                        onChange={(event) => {
-                                                            const value = Number(event.target.value || "0");
-                                                            setDraftItems((prev) => prev.map((row, rowIndex) => (rowIndex === index ? { ...row, price: value } : row)));
-                                                        }}
-                                                        placeholder={activityUi.itemPricePlaceholder}
-                                                        required
-                                                    />
-                                                </div>
-                                                <div className="grid gap-1">
-                                                    <FieldLabel htmlFor={`create-item-cost-${item.id}`} label={activityUi.itemCostLabel} />
-                                                    <Input
-                                                        id={`create-item-cost-${item.id}`}
-                                                        type="number"
-                                                        min={0}
-                                                        name="activityItemCost[]"
-                                                        value={item.cost}
-                                                        onChange={(event) => {
-                                                            const value = Number(event.target.value || "0");
-                                                            setDraftItems((prev) => prev.map((row, rowIndex) => (rowIndex === index ? { ...row, cost: value } : row)));
-                                                        }}
-                                                        placeholder={activityUi.itemCostPlaceholder}
-                                                        required
-                                                    />
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <div className="flex flex-wrap items-center gap-2">
+                                }
+                            />
+                        </MerchantSectionCard>
+
+                        <MerchantSectionCard
+                            title={activityUi.createSectionTitle}
+                            description={
+                                createActivitySourceName
+                                    ? activityUi.restartCreateHint.replace("{name}", createActivitySourceName)
+                                    : activityUi.createSectionHint
+                            }
+                            actions={
+                                <>
+                                    <Button type="button" variant={showCreateActivityForm && !createActivitySourceName ? "solid" : "ghost"} onClick={openBlankActivityForm}>
+                                        {activityUi.createBlank}
+                                    </Button>
+                                    {showCreateActivityForm ? (
                                         <Button
                                             type="button"
                                             variant="ghost"
-                                            onClick={() =>
-                                                setDraftItems((prev) => [...prev, { id: `draft-${Date.now()}`, itemName: "", qty: 1, price: 0, cost: 0 }])
-                                            }
+                                            onClick={() => {
+                                                setShowCreateActivityForm(false);
+                                                setCreateActivitySourceName("");
+                                            }}
                                         >
-                                            {activityUi.addItemCard}
+                                            {activityUi.collapseCreate}
                                         </Button>
-                                        <div className="text-sm text-[rgb(var(--muted))]">
-                                            {activityUi.totalPrice}：
-                                            {formatMoney(
-                                                draftItems.reduce((sum, item) => sum + Math.max(0, item.qty) * Math.max(0, item.price), 0),
-                                                lang,
-                                            )}
-                                        </div>
-                                        <Button type="submit">{activityUi.createActivity}</Button>
-                                    </div>
-                                </form>
+                                    ) : null}
+                                </>
+                            }
+                            className="scroll-mt-24"
+                        >
+                            <div id="activity-create-section" />
+                            {showCreateActivityForm ? (
+                                <ActivityFormPanel
+                                    key={createActivityFormKey}
+                                    lang={lang}
+                                    formAction={createActivityAction}
+                                    initialValue={createActivityFormSeed}
+                                    submitLabel={activityUi.createActivity}
+                                    formIdPrefix="create"
+                                    hiddenFields={[{ name: "tab", value: "activities" }]}
+                                />
                             ) : null}
-                        </Card>
+                        </MerchantSectionCard>
 
                         <Card className="rounded-xl p-3">
                             <div className="overflow-x-auto">
@@ -1828,14 +1653,13 @@ export function CompanyDashboardWorkspace({
                                     <IconOnlyButton label={activityUi.applyPageSize} type="submit" icon={<Search className="h-4 w-4" aria-hidden="true" />} />
                                 </form>
                             </div>
-                            <div className="mb-2 hidden grid-cols-7 gap-1 px-3 text-xs text-[rgb(var(--muted))] sm:grid">
+                            <div className="mb-2 hidden grid-cols-6 gap-1 px-3 text-xs text-[rgb(var(--muted))] sm:grid">
                                 <span>{activityUi.activityName}</span>
-                                <span>{activityUi.itemName}</span>
-                                <span>{activityUi.totalQty}</span>
-                                <span>{activityUi.effectType}</span>
                                 <span>{activityUi.startDate}</span>
                                 <span>{activityUi.endDate}</span>
-                                <span>{activityUi.status}</span>
+                                <span>{activityUi.effectType}</span>
+                                <span>{activityUi.reservationQtyLabel}</span>
+                                <span>{activityUi.messageLabel}</span>
                             </div>
                             <div className="max-h-[720px] overflow-y-auto pr-1">
                             {visibleActivities.length === 0 ? (
@@ -1849,287 +1673,50 @@ export function CompanyDashboardWorkspace({
                             <div className="grid gap-2">
                                 {visibleActivities.map((activity) => (
                                     <details key={activity.id} className="rounded-lg border border-[rgb(var(--border))]">
-                                        <summary className="grid cursor-pointer list-none gap-1 px-3 py-2 text-sm sm:grid-cols-7 [&::-webkit-details-marker]:hidden">
+                                        <summary className="grid cursor-pointer list-none gap-1 px-3 py-2 text-sm sm:grid-cols-6 [&::-webkit-details-marker]:hidden">
                                             <span><span className="text-[rgb(var(--muted))] sm:hidden">{activityUi.activityName}：</span>{activity.name}</span>
-                                            <span><span className="text-[rgb(var(--muted))] sm:hidden">{activityUi.itemName}：</span>{activity.items[0]?.itemName || "-"}</span>
-                                            <span><span className="text-[rgb(var(--muted))] sm:hidden">{activityUi.totalQty}：</span>{activity.items.reduce((sum, item) => sum + item.totalQty, 0)}</span>
-                                            <span><span className="text-[rgb(var(--muted))] sm:hidden">{activityUi.effectType}：</span>{activityEffectText(activity.effectType, customerCaseUi)}</span>
                                             <span><span className="text-[rgb(var(--muted))] sm:hidden">{activityUi.startDate}：</span>{formatTime(activity.startAt, lang)}</span>
                                             <span><span className="text-[rgb(var(--muted))] sm:hidden">{activityUi.endDate}：</span>{formatTime(activity.endAt, lang)}</span>
-                                            <span><span className="text-[rgb(var(--muted))] sm:hidden">{activityUi.status}：</span>{activityStatusText(activity.status, customerCaseUi)}</span>
+                                            <span><span className="text-[rgb(var(--muted))] sm:hidden">{activityUi.effectType}：</span>{activityEffectSummary(activity, customerCaseUi, lang)}</span>
+                                            <span><span className="text-[rgb(var(--muted))] sm:hidden">{activityUi.reservationQtyLabel}：</span>{activity.reservationQty ?? 0}</span>
+                                            <span className="truncate"><span className="text-[rgb(var(--muted))] sm:hidden">{activityUi.messageLabel}：</span>{activity.message || "-"}</span>
                                         </summary>
                                         <div className="border-t border-[rgb(var(--border))] p-3 text-sm">
-                                            <div className="mb-2 whitespace-pre-wrap text-[rgb(var(--muted))]">{activity.message || "-"}</div>
-                                            <div className="mb-2 text-xs text-[rgb(var(--muted))]">{activityUi.effectSummary}：{activityEffectText(activity.effectType, customerCaseUi)}</div>
-                                            <div className="overflow-x-auto">
-                                                <table className="min-w-full text-xs">
-                                                    <thead>
-                                                        <tr className="text-left text-[rgb(var(--muted))]">
-                                                            <th className="px-1 py-1">{activityUi.itemName}</th>
-                                                            <th className="px-1 py-1">{activityUi.totalQty}</th>
-                                                            <th className="px-1 py-1">{activityUi.amount}</th>
-                                                            <th className="px-1 py-1">{activityUi.cost}</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {activity.items.map((item) => (
-                                                            <tr key={item.id}>
-                                                                <td className="px-1 py-1">{item.itemName}</td>
-                                                                <td className="px-1 py-1">{item.totalQty}</td>
-                                                                <td className="px-1 py-1">{formatMoney(item.amount, lang)}</td>
-                                                                <td className="px-1 py-1">{formatMoney(item.cost, lang)}</td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
+                                            <div className="mb-3 grid gap-2 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3 text-xs text-[rgb(var(--muted))] md:grid-cols-3">
+                                                <div>{activityUi.effectSummary}：{activityEffectSummary(activity, customerCaseUi, lang)}</div>
+                                                <div>{activityUi.status}：{activityStatusText(activity.status, customerCaseUi)}</div>
+                                                <div>{activityUi.reservationQtyLabel}：{activity.reservationQty ?? 0}</div>
                                             </div>
+                                            <div className="mb-2 whitespace-pre-wrap text-[rgb(var(--muted))]">{activity.message || "-"}</div>
+                                            {activity.items.length > 0 ? (
+                                                <div className="mb-3 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-3 text-xs text-[rgb(var(--muted))]">
+                                                    {activityUi.advancedItemsTitle}：{activity.items.map((item) => `${item.itemName} x ${item.totalQty}`).join(" / ")}
+                                                </div>
+                                            ) : null}
 
                                             <div className="mt-3 grid gap-2">
-                                                <form action={updateActivityAction} className="grid gap-2 rounded-lg border border-[rgb(var(--border))] p-3">
-                                                    <input type="hidden" name="tab" value="activities" />
-                                                    <input type="hidden" name="activityId" value={activity.id} />
-                                                    <div className="grid gap-2 md:grid-cols-3">
-                                                        <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-name-${activity.id}`} label={activityUi.nameLabel} />
-                                                            <Input id={`update-activity-name-${activity.id}`} name="activityName" defaultValue={activity.name} required />
-                                                        </div>
-                                                        <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-start-at-${activity.id}`} label={activityUi.startDateLabel} />
-                                                            <Input
-                                                                id={`update-activity-start-at-${activity.id}`}
-                                                                type="date"
-                                                                name="activityStartAt"
-                                                                defaultValue={toDateInput(activity.startAt)}
-                                                                onClick={(event) => openDatePicker(event.currentTarget)}
-                                                                required
-                                                            />
-                                                        </div>
-                                                        <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-end-at-${activity.id}`} label={activityUi.endDateLabel} />
-                                                            <Input
-                                                                id={`update-activity-end-at-${activity.id}`}
-                                                                type="date"
-                                                                name="activityEndAt"
-                                                                defaultValue={toDateInput(activity.endAt)}
-                                                                onClick={(event) => openDatePicker(event.currentTarget)}
-                                                                required
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <div className="grid gap-2 md:grid-cols-3">
-                                                        <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-effect-type-${activity.id}`} label={activityUi.effectLabel} />
-                                                            <Select id={`update-activity-effect-type-${activity.id}`} name="activityEffectType" defaultValue={activity.effectType}>
-                                                                <option value="discount">{activityEffectText("discount", customerCaseUi)}</option>
-                                                                <option value="bundle_price">{activityEffectText("bundle_price", customerCaseUi)}</option>
-                                                                <option value="gift_item">{activityEffectText("gift_item", customerCaseUi)}</option>
-                                                                <option value="create_entitlement">{activityEffectText("create_entitlement", customerCaseUi)}</option>
-                                                                <option value="create_pickup_reservation">{activityEffectText("create_pickup_reservation", customerCaseUi)}</option>
-                                                            </Select>
-                                                        </div>
-                                                        <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-discount-${activity.id}`} label={activityUi.discountAmountLabel} />
-                                                            <Input
-                                                                id={`update-activity-discount-${activity.id}`}
-                                                                type="number"
-                                                                min={0}
-                                                                name="activityDiscountAmount"
-                                                                defaultValue={activity.discountAmount ?? 0}
-                                                            />
-                                                        </div>
-                                                        <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-bundle-${activity.id}`} label={activityUi.bundleDiscountLabel} />
-                                                            <Input
-                                                                id={`update-activity-bundle-${activity.id}`}
-                                                                type="number"
-                                                                min={0}
-                                                                name="activityBundlePriceDiscount"
-                                                                defaultValue={activity.bundlePriceDiscount ?? 0}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <div className="grid gap-2 md:grid-cols-3">
-                                                        <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-gift-product-id-${activity.id}`} label={activityUi.giftProductIdLabel} />
-                                                            <Input
-                                                                id={`update-activity-gift-product-id-${activity.id}`}
-                                                                name="activityGiftProductId"
-                                                                defaultValue={activity.giftProductId ?? ""}
-                                                            />
-                                                        </div>
-                                                        <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-gift-product-name-${activity.id}`} label={activityUi.giftProductNameLabel} />
-                                                            <Input
-                                                                id={`update-activity-gift-product-name-${activity.id}`}
-                                                                name="activityGiftProductName"
-                                                                defaultValue={activity.giftProductName ?? ""}
-                                                            />
-                                                        </div>
-                                                        <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-gift-qty-${activity.id}`} label={activityUi.giftQtyLabel} />
-                                                            <Input
-                                                                id={`update-activity-gift-qty-${activity.id}`}
-                                                                type="number"
-                                                                min={1}
-                                                                name="activityGiftQty"
-                                                                defaultValue={activity.giftQty ?? 1}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <div className="grid gap-2 md:grid-cols-3">
-                                                        <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-entitlement-type-${activity.id}`} label={activityUi.entitlementTypeLabel} />
-                                                            <Select
-                                                                id={`update-activity-entitlement-type-${activity.id}`}
-                                                                name="activityEntitlementType"
-                                                                defaultValue={activity.entitlementType ?? "replacement"}
-                                                            >
-                                                                <option value="replacement">replacement</option>
-                                                                <option value="gift">gift</option>
-                                                                <option value="discount">discount</option>
-                                                                <option value="service">service</option>
-                                                            </Select>
-                                                        </div>
-                                                        <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-scope-${activity.id}`} label={activityUi.scopeTypeLabel} />
-                                                            <Select
-                                                                id={`update-activity-scope-${activity.id}`}
-                                                                name="activityScopeType"
-                                                                defaultValue={activity.scopeType === "product" ? "product" : "category"}
-                                                            >
-                                                                <option value="category">{activityUi.scopeCategory}</option>
-                                                                <option value="product">{activityUi.scopeProduct}</option>
-                                                            </Select>
-                                                        </div>
-                                                        <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-entitlement-qty-${activity.id}`} label={activityUi.entitlementQtyLabel} />
-                                                            <Input
-                                                                id={`update-activity-entitlement-qty-${activity.id}`}
-                                                                type="number"
-                                                                min={1}
-                                                                name="activityEntitlementQty"
-                                                                defaultValue={activity.entitlementQty ?? 1}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <div className="grid gap-2 md:grid-cols-4">
-                                                        <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-category-id-${activity.id}`} label={activityUi.categoryIdLabel} />
-                                                            <Input id={`update-activity-category-id-${activity.id}`} name="activityCategoryId" defaultValue={activity.categoryId ?? ""} />
-                                                        </div>
-                                                        <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-category-name-${activity.id}`} label={activityUi.categoryNameLabel} />
-                                                            <Input
-                                                                id={`update-activity-category-name-${activity.id}`}
-                                                                name="activityCategoryName"
-                                                                defaultValue={activity.categoryName ?? ""}
-                                                            />
-                                                        </div>
-                                                        <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-product-id-${activity.id}`} label={activityUi.productIdLabel} />
-                                                            <Input id={`update-activity-product-id-${activity.id}`} name="activityProductId" defaultValue={activity.productId ?? ""} />
-                                                        </div>
-                                                        <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-product-name-${activity.id}`} label={activityUi.productNameLabel} />
-                                                            <Input id={`update-activity-product-name-${activity.id}`} name="activityProductName" defaultValue={activity.productName ?? ""} />
-                                                        </div>
-                                                    </div>
-                                                    <div className="grid gap-2 md:grid-cols-4">
-                                                        <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-entitlement-expire-${activity.id}`} label={activityUi.entitlementExpireLabel} />
-                                                            <Input
-                                                                id={`update-activity-entitlement-expire-${activity.id}`}
-                                                                type="date"
-                                                                name="activityEntitlementExpiresAt"
-                                                                defaultValue={toDateInput(activity.entitlementExpiresAt ?? 0)}
-                                                                onClick={(event) => openDatePicker(event.currentTarget)}
-                                                            />
-                                                        </div>
-                                                        <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-reservation-qty-${activity.id}`} label={activityUi.reservationQtyLabel} />
-                                                            <Input
-                                                                id={`update-activity-reservation-qty-${activity.id}`}
-                                                                type="number"
-                                                                min={1}
-                                                                name="activityReservationQty"
-                                                                defaultValue={activity.reservationQty ?? 1}
-                                                            />
-                                                        </div>
-                                                        <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-reservation-expire-${activity.id}`} label={activityUi.reservationExpireLabel} />
-                                                            <Input
-                                                                id={`update-activity-reservation-expire-${activity.id}`}
-                                                                type="date"
-                                                                name="activityReservationExpiresAt"
-                                                                defaultValue={toDateInput(activity.reservationExpiresAt ?? 0)}
-                                                                onClick={(event) => openDatePicker(event.currentTarget)}
-                                                            />
-                                                        </div>
-                                                        <div className="grid gap-1">
-                                                            <FieldLabel htmlFor={`update-activity-default-store-qty-${activity.id}`} label={activityUi.defaultStoreQtyLabel} />
-                                                            <Input
-                                                                id={`update-activity-default-store-qty-${activity.id}`}
-                                                                type="number"
-                                                                min={0}
-                                                                name="activityDefaultStoreQty"
-                                                                defaultValue={activity.defaultStoreQty}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <div className="grid gap-1">
-                                                        <FieldLabel htmlFor={`update-activity-message-${activity.id}`} label={activityUi.messageLabel} />
-                                                        <Textarea id={`update-activity-message-${activity.id}`} name="activityMessage" rows={2} defaultValue={activity.message} />
-                                                    </div>
-                                                    <div className="grid gap-2">
-                                                        {activity.items.map((item, itemIndex) => (
-                                                            <div key={item.id} className="grid gap-2 md:grid-cols-4">
-                                                                <div className="text-xs font-semibold text-[rgb(var(--muted))] md:col-span-4">{activityUi.itemCardTitle.replace("{index}", String(itemIndex + 1))}</div>
-                                                                <div className="grid gap-1">
-                                                                    <FieldLabel htmlFor={`update-item-name-${activity.id}-${item.id}`} label={activityUi.itemNameLabel} />
-                                                                    <Input id={`update-item-name-${activity.id}-${item.id}`} name="activityItemName[]" defaultValue={item.itemName} required />
-                                                                </div>
-                                                                <div className="grid gap-1">
-                                                                    <FieldLabel htmlFor={`update-item-qty-${activity.id}-${item.id}`} label={activityUi.itemQtyLabel} />
-                                                                    <Input
-                                                                        id={`update-item-qty-${activity.id}-${item.id}`}
-                                                                        type="number"
-                                                                        min={0}
-                                                                        name="activityItemQty[]"
-                                                                        defaultValue={item.totalQty}
-                                                                        required
-                                                                    />
-                                                                </div>
-                                                                <div className="grid gap-1">
-                                                                    <FieldLabel htmlFor={`update-item-price-${activity.id}-${item.id}`} label={activityUi.itemPriceLabel} />
-                                                                    <Input
-                                                                        id={`update-item-price-${activity.id}-${item.id}`}
-                                                                        type="number"
-                                                                        min={0}
-                                                                        name="activityItemPrice[]"
-                                                                        defaultValue={item.unitPrice}
-                                                                        required
-                                                                    />
-                                                                </div>
-                                                                <div className="grid gap-1">
-                                                                    <FieldLabel htmlFor={`update-item-cost-${activity.id}-${item.id}`} label={activityUi.itemCostLabel} />
-                                                                    <Input
-                                                                        id={`update-item-cost-${activity.id}-${item.id}`}
-                                                                        type="number"
-                                                                        min={0}
-                                                                        name="activityItemCost[]"
-                                                                        defaultValue={item.unitCost}
-                                                                        required
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                    <div className="flex flex-wrap gap-2">
-                                                        <Button type="submit">{activityUi.updateActivity}</Button>
-                                                    </div>
-                                                </form>
+                                                <div className="rounded-lg border border-[rgb(var(--border))] p-3">
+                                                    <ActivityFormPanel
+                                                        key={`update-${activity.id}-${activity.updatedAt}`}
+                                                        lang={lang}
+                                                        formAction={updateActivityAction}
+                                                        initialValue={createActivityFormValueFromActivity(activity)}
+                                                        submitLabel={activityUi.updateActivity}
+                                                        formIdPrefix={`update-${activity.id}`}
+                                                        hiddenFields={[
+                                                            { name: "tab", value: "activities" },
+                                                            { name: "activityId", value: activity.id },
+                                                        ]}
+                                                        messageRows={2}
+                                                    />
+                                                </div>
 
                                                 <div className="flex flex-wrap gap-2">
+                                                    {activity.status === "ended" ? (
+                                                        <Button type="button" variant="ghost" onClick={() => restartActivity(activity)}>
+                                                            {activityUi.restartActivity}
+                                                        </Button>
+                                                    ) : null}
                                                     <form action={cancelActivityAction}>
                                                         <input type="hidden" name="tab" value="activities" />
                                                         <input type="hidden" name="activityId" value={activity.id} />

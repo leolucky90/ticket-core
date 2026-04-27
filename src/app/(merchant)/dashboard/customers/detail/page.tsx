@@ -249,6 +249,8 @@ export default async function CustomerDetailPage({ searchParams }: { searchParam
                                 <div>{ui.labels.orderReservationId}：{reservation.id}</div>
                                 <div>{ui.labels.status}：{ui.reservationStatus[reservation.status] ?? reservation.status}</div>
                                 <div>{ui.labels.lineItemCount}：{reservation.lineItems.length}</div>
+                                <div>{ui.labels.reservedQty}：{reservation.totalReservedQty}</div>
+                                <div>{ui.labels.product}：{reservation.lineItems.map((line) => `${line.productSnapshot.name} x ${line.qty}`).join(" / ") || "-"}</div>
                                 <div>{ui.labels.reservedAt}：{formatTime(reservation.reservedAt ?? 0, locale)}</div>
                                 <div>{ui.labels.readyAt}：{formatTime(reservation.readyAt ?? 0, locale)}</div>
                                 <div>{ui.labels.expiryAt}：{formatTime(reservation.expiresAt ?? 0, locale)}</div>

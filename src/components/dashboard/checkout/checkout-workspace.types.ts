@@ -6,6 +6,8 @@ export type CheckoutLineDraft = {
     id: string;
     productId: string;
     qty: number;
+    activityPromotionId?: string;
+    activityPromotionName?: string;
     isUsedProduct: boolean;
     usedProductId?: string;
 };
@@ -15,6 +17,7 @@ export type CheckoutPromotionSelectionDraft = {
     promotionName: string;
     note: string;
     effectType: Activity["effectType"];
+    discountMode: "amount" | "percentage";
     scopeType: "category" | "product";
     entitlementType: "replacement" | "gift" | "discount" | "service";
     categoryId: string;
@@ -22,6 +25,7 @@ export type CheckoutPromotionSelectionDraft = {
     productId: string;
     productName: string;
     discountAmount: number;
+    discountPercentage: number;
     bundlePriceDiscount: number;
     giftProductId: string;
     giftProductName: string;

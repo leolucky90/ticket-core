@@ -60,6 +60,8 @@
 - official / merchant / customer backend 已開始共用同一套 topbar / sidebar / account area 結構
 - merchant result-heavy pages 已開始共用 `query-controls` + `LIST_DISPLAY_OPTIONS` pagination baseline
 - merchant operational index pages 已開始共用 `MerchantPageShell` + `SearchToolbar` + `MerchantListShell` + `MerchantSectionCard`
+- `dashboard?tab=activities` 已把搜尋 toolbar 與新增表單拆開；`ActivityFormPanel` 成為活動 create / update / restart 的 shared helper，主表單收斂為活動名稱 / 日期 / 活動效果 / 寄貨數量 / 說明，其他組合品項與 legacy 欄位移到進階區；過期活動可直接複製原設定並重新設定日期後重建
+- checkout promotion baseline 已延續 `activities -> selectedPromotions -> sales/pickupReservations -> customer detail` 這條 canonical data flow：活動可用折扣金額 / 折扣百分比 / 贈品 / 組合價建立，結帳商品命中活動時可轉成活動商品 line，組合價搭配寄貨數量會直接落到既有 `pickupReservations` 追蹤，customer detail 也會回顯寄貨總數與商品快照
 - merchant settings/detail pages 已開始共用 `MerchantPageShell` + `MerchantSectionCard` section baseline
 - merchant 帳戶設定頁已改成 **auth account summary / business profile / regional receipt settings** 三段分離：`/settings/account` 走 `merchant/account-settings-read-model.service.ts` + `merchant/account-settings-write.service.ts`；公司主資料 canonical doc 為 `settings/businessProfile`，地區單據設定 canonical doc 為 `settings/regionalReceiptSettings`，舊 `settings/companyProfile` 只保留 compatibility sync / fallback
 - merchant workflow pages 已開始共用 `MerchantSectionCard` workflow section baseline
@@ -602,7 +604,7 @@
 4. 把後續 MOF / VAC adapter payload mapping、response mapping、retry / webhook / reconciliation 補進 `invoice-platform.service.ts`，維持 mock / test / production 同一 adapter 邊界
 5. 視需要補上 draft review / manual issue UI，讓 `autoIssueOnCheckout = false` 時可從後台完成審核與開立
 6. 視需要讓 downstream receipt / checkout / invoice generation 直接吃 `BusinessProfile` + `RegionalReceiptSettings` + `receiptDocuments` / preview model，逐步移除對舊 `settings/companyProfile` compatibility doc 的需求
-7. 視需要把 `src/components/dashboard/CompanyDashboardWorkspace.tsx` 內的大型 tab 拆成 focused workspace，降低 shared list UX 與 item form 後續維護成本
+7. 視需要把 `src/components/dashboard/CompanyDashboardWorkspace.tsx` 內剩餘大型 tab 拆成 focused workspace；activities form 已抽成 `ActivityFormPanel`，後續可優先處理 customers / cases 與 list-detail orchestration
 8. 繼續把剩餘 shared settings / list / builder framework text 收斂到 `ui-text.ts`，完成 Phase 7 邊角補漏
 9. 視需要把 checkout / 活動 / 庫存報表 等 downstream flow 一起接上第二分類與 item naming settings，完成 merchant item baseline 擴散
 

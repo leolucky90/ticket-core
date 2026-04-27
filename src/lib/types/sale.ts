@@ -7,9 +7,13 @@ export type SalePromotionEffectType = "discount" | "bundle_price" | "gift_item" 
 export type SaleLineItem = {
     productId: string;
     productName: string;
+    categoryId?: string;
+    categoryName?: string;
     qty: number;
     unitPrice: number;
     subtotal: number;
+    activityPromotionId?: string;
+    activityPromotionName?: string;
     isUsedProduct?: boolean;
     usedProductId?: string;
     usedBrand?: string;

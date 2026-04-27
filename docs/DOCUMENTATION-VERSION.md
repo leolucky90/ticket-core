@@ -15,8 +15,8 @@
 
 | 項目 | 值 |
 | --- | --- |
-| **版本** | **V1.41** |
-| **最後更正** | **2026-04-05** |
+| **版本** | **V1.44** |
+| **最後更正** | **2026-04-27** |
 
 ---
 
@@ -34,6 +34,9 @@
 
 | 版本 | 日期 | 摘要 |
 | --- | --- | --- |
+| V1.44 | 2026-04-27 | 對齊目前未提交的 activities / checkout / customer detail baseline：活動主表單與活動商品 line 關聯維持既有 `selectedPromotions -> pickupReservations` 資料流，customer detail 補回顯寄貨總數與商品快照；同步校正 docs 版本與日期 |
+| V1.43 | 2026-04-13 | activities / checkout baseline 再收斂：活動主表單精簡為名稱 / 日期 / 效果 / 寄貨數量 / 說明並保留進階相容區；checkout 商品命中活動時可轉成活動商品 line，折扣百分比與 bundle+reservation 會沿用既有 `selectedPromotions -> pickupReservations -> customer detail` 資料流 |
+| V1.42 | 2026-04-13 | activities tab baseline 更新：搜尋 toolbar 與新增表單拆分，新增 shared `ActivityFormPanel` 供 create / update / restart 共用；過期活動可帶入既有內容後重新設定日期再建立 |
 | V1.41 | 2026-04-05 | 官方首頁視覺節奏再收斂：`HeroBackgroundMedia` 與 `AutoCarouselBanner` 新增 inline/panel 文案呈現邏輯，official hero / carousel 改為文字直接疊在背景媒體上；`OfficialPostHeroSection`、platform architecture steps 與 demo 帳號區重排成較高密度版型，減少桌面大留白 |
 | V1.40 | 2026-04-05 | 公開 `版本更新紀錄` 視覺再收斂：首頁改為較緊湊的摘要卡 + 卡片式版本歷史，首頁與 `/updates` 歷史列表皆改為固定高度內層滾動，避免 changelog 把整頁版面拉長 |
 | V1.39 | 2026-04-05 | 官方首頁 `/` 新增公開 `版本更新紀錄` 區塊與 `/updates` 完整歷史頁；資料直接讀取 `docs/DOCUMENTATION-VERSION.md` 並顯示最新 Git revision metadata（可用時），作為對外展示的單一 changelog 來源 |

@@ -222,15 +222,32 @@ export function CheckoutItemsCard({
                                                 </label>
                                                 {activity.effectType === "discount" || activity.effectType === "bundle_price" ? (
                                                     <label className="grid gap-1 text-sm">
-                                                        <span className="text-xs text-[rgb(var(--muted))]">{activity.effectType === "bundle_price" ? ui.bundleDiscountAmount : ui.discountAmount}</span>
+                                                        <span className="text-xs text-[rgb(var(--muted))]">
+                                                            {activity.effectType === "bundle_price"
+                                                                ? ui.bundleDiscountAmount
+                                                                : activity.discountMode === "percentage"
+                                                                  ? ui.discountPercentage
+                                                                  : ui.discountAmount}
+                                                        </span>
                                                         <Input
                                                             type="number"
                                                             min={0}
-                                                            value={activity.effectType === "bundle_price" ? activity.bundlePriceDiscount : activity.discountAmount}
+                                                            max={activity.effectType === "discount" && activity.discountMode === "percentage" ? 100 : undefined}
+                                                            value={
+                                                                activity.effectType === "bundle_price"
+                                                                    ? activity.bundlePriceDiscount
+                                                                    : activity.discountMode === "percentage"
+                                                                      ? activity.discountPercentage
+                                                                      : activity.discountAmount
+                                                            }
                                                             onChange={(event) => {
                                                                 const value = Math.max(0, Number.parseInt(event.target.value || "0", 10));
                                                                 onUpdateSelectedPromotion(activity.promotionId, (current) =>
-                                                                    current.effectType === "bundle_price" ? { ...current, bundlePriceDiscount: value } : { ...current, discountAmount: value },
+                                                                    current.effectType === "bundle_price"
+                                                                        ? { ...current, bundlePriceDiscount: value }
+                                                                        : current.discountMode === "percentage"
+                                                                          ? { ...current, discountPercentage: Math.min(100, value) }
+                                                                          : { ...current, discountAmount: value },
                                                                 );
                                                             }}
                                                         />
@@ -325,6 +342,9 @@ export function CheckoutItemsCard({
                         <div key={line.id} className="grid gap-3 rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-4 md:grid-cols-[minmax(0,2fr)_100px_120px_120px_auto]">
                             <label className="grid gap-1 text-sm">
                                 <span className="text-xs text-[rgb(var(--muted))]">{ui.lineProduct.replace("{n}", String(index + 1))}</span>
+                                {line.activityPromotionName ? (
+                                    <div className="text-xs font-medium text-[rgb(var(--accent))]">{ui.activityLineBadge.replace("{activity}", line.activityPromotionName)}</div>
+                                ) : null}
                                 {line.isUsedProduct ? (
                                     <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))] px-3 py-2">
                                         <div className="font-medium">{usedProduct?.name ?? ui.delistedUsed}</div>
@@ -360,8 +380,12 @@ export function CheckoutItemsCard({
 
                             <input type="hidden" name="lineProductId[]" value={resolvedId} />
                             <input type="hidden" name="lineProductName[]" value={resolvedName} />
+                            <input type="hidden" name="lineCategoryId[]" value={product?.categoryId ?? ""} />
+                            <input type="hidden" name="lineCategoryName[]" value={product?.categoryName ?? ""} />
                             <input type="hidden" name="lineQty[]" value={String(line.isUsedProduct ? 1 : Math.max(1, line.qty))} />
                             <input type="hidden" name="lineUnitPrice[]" value={String(unitPrice)} />
+                            <input type="hidden" name="lineActivityPromotionId[]" value={line.activityPromotionId ?? ""} />
+                            <input type="hidden" name="lineActivityPromotionName[]" value={line.activityPromotionName ?? ""} />
                             <input type="hidden" name="lineIsUsedProduct[]" value={line.isUsedProduct ? "1" : "0"} />
                             <input type="hidden" name="lineUsedProductId[]" value={line.usedProductId ?? ""} />
                             <input type="hidden" name="lineUsedBrand[]" value={usedProduct?.brand ?? ""} />

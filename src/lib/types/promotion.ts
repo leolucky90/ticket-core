@@ -22,7 +22,9 @@ export type Activity = {
     status: ActivityStatus;
     message: string;
     effectType: PromotionEffectType;
+    discountMode?: "amount" | "percentage";
     discountAmount: number;
+    discountPercentage?: number;
     bundlePriceDiscount: number;
     giftProductId?: string;
     giftProductName?: string;

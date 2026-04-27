@@ -71,6 +71,7 @@ export type CheckoutPromotionSelection = {
     promotionName: string;
     promotionType?: PromotionType;
     effectType: PromotionEffectType;
+    discountMode?: "amount" | "percentage";
     scopeType?: EntitlementScopeType;
     entitlementType?: EntitlementType;
     categoryId?: string;
@@ -78,6 +79,7 @@ export type CheckoutPromotionSelection = {
     productId?: string;
     productName?: string;
     discountAmount?: number;
+    discountPercentage?: number;
     bundlePriceDiscount?: number;
     giftProductId?: string;
     giftProductName?: string;

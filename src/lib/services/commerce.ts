@@ -220,11 +220,13 @@ function normalizeActivity(input: Partial<Activity> & { id: string }): Activity 
     const totalAmount = items.reduce((sum, item) => sum + item.amount, 0);
     const totalCost = items.reduce((sum, item) => sum + item.cost, 0);
     const effectType = parsePromotionEffectType(input.effectType);
+    const discountMode = input.discountMode === "percentage" ? "percentage" : "amount";
     const discountAmount = toMoney(input.discountAmount);
+    const discountPercentage = Math.min(100, Math.max(0, Math.round(toNumber(input.discountPercentage, 0))));
     const bundlePriceDiscount = toMoney(input.bundlePriceDiscount);
     const giftQty = Math.max(1, Math.round(toNumber(input.giftQty, 1)));
     const entitlementQty = Math.max(1, Math.round(toNumber(input.entitlementQty, 1)));
-    const reservationQty = Math.max(1, Math.round(toNumber(input.reservationQty, 1)));
+    const reservationQty = Math.max(0, Math.round(toNumber(input.reservationQty, 0)));
 
     return {
         id: safeText(input.id, 120) || id("act"),
@@ -234,7 +236,9 @@ function normalizeActivity(input: Partial<Activity> & { id: string }): Activity 
         status: computeActivityStatus(startAt, Math.max(endAt, startAt), input.status),
         message: safeText(input.message, MAX_LONG_TEXT),
         effectType,
+        discountMode,
         discountAmount,
+        discountPercentage,
         bundlePriceDiscount,
         giftProductId: safeText(input.giftProductId, 120) || undefined,
         giftProductName: safeText(input.giftProductName) || undefined,
@@ -1314,7 +1318,9 @@ function parseActivityItems(formData: FormData): ActivityItem[] {
 
 type ActivityEffectFields = {
     effectType: Activity["effectType"];
+    discountMode: "amount" | "percentage";
     discountAmount: number;
+    discountPercentage: number;
     bundlePriceDiscount: number;
     giftProductId?: string;
     giftProductName?: string;
@@ -1335,7 +1341,9 @@ function parseActivityEffectFields(formData: FormData): ActivityEffectFields {
     const effectType = parsePromotionEffectType(formData.get("activityEffectType"));
     return {
         effectType,
+        discountMode: formData.get("activityDiscountMode") === "percentage" ? "percentage" : "amount",
         discountAmount: toMoney(formData.get("activityDiscountAmount")),
+        discountPercentage: Math.min(100, Math.max(0, Math.round(toNumber(formData.get("activityDiscountPercentage"), 0)))),
         bundlePriceDiscount: toMoney(formData.get("activityBundlePriceDiscount")),
         giftProductId: safeText(formData.get("activityGiftProductId"), 120) || undefined,
         giftProductName: safeText(formData.get("activityGiftProductName")) || undefined,
@@ -1353,7 +1361,7 @@ function parseActivityEffectFields(formData: FormData): ActivityEffectFields {
         productName: safeText(formData.get("activityProductName")) || undefined,
         entitlementQty: Math.max(1, Math.round(toNumber(formData.get("activityEntitlementQty"), 1))),
         entitlementExpiresAt: toTimestamp(formData.get("activityEntitlementExpiresAt"), 0) || undefined,
-        reservationQty: Math.max(1, Math.round(toNumber(formData.get("activityReservationQty"), 1))),
+        reservationQty: Math.max(0, Math.round(toNumber(formData.get("activityReservationQty"), 0))),
         reservationExpiresAt: toTimestamp(formData.get("activityReservationExpiresAt"), 0) || undefined,
     };
 }
@@ -1369,6 +1377,12 @@ function isActivityEffectValid(effect: ActivityEffectFields): boolean {
     }
     if (effect.effectType === "create_pickup_reservation") {
         return Boolean(effect.productId || effect.productName) && effect.reservationQty > 0;
+    }
+    if (effect.effectType === "discount") {
+        return effect.discountMode === "percentage" ? effect.discountPercentage > 0 : effect.discountAmount > 0;
+    }
+    if (effect.effectType === "bundle_price") {
+        return effect.bundlePriceDiscount > 0;
     }
     return true;
 }
@@ -2278,7 +2292,7 @@ export async function createActivity(formData: FormData): Promise<void> {
     const items = parseActivityItems(formData);
     const effect = parseActivityEffectFields(formData);
 
-    if (!name || startAt <= 0 || endAt <= 0 || endAt < startAt || items.length === 0 || !isActivityEffectValid(effect)) {
+    if (!name || startAt <= 0 || endAt <= 0 || endAt < startAt || !isActivityEffectValid(effect)) {
         dashboardRedirect(tab, "invalid");
     }
 
@@ -2291,7 +2305,9 @@ export async function createActivity(formData: FormData): Promise<void> {
         message,
         defaultStoreQty,
         effectType: effect.effectType,
+        discountMode: effect.discountMode,
         discountAmount: effect.discountAmount,
+        discountPercentage: effect.discountPercentage,
         bundlePriceDiscount: effect.bundlePriceDiscount,
         giftProductId: effect.giftProductId,
         giftProductName: effect.giftProductName,
@@ -2339,7 +2355,7 @@ export async function updateActivity(formData: FormData): Promise<void> {
     const items = parseActivityItems(formData);
     const effect = parseActivityEffectFields(formData);
 
-    if (!activityId || !name || startAt <= 0 || endAt <= 0 || endAt < startAt || items.length === 0 || !isActivityEffectValid(effect)) {
+    if (!activityId || !name || startAt <= 0 || endAt <= 0 || endAt < startAt || !isActivityEffectValid(effect)) {
         dashboardRedirect(tab, "invalid");
     }
 
@@ -2356,7 +2372,9 @@ export async function updateActivity(formData: FormData): Promise<void> {
         message,
         defaultStoreQty,
         effectType: effect.effectType,
+        discountMode: effect.discountMode,
         discountAmount: effect.discountAmount,
+        discountPercentage: effect.discountPercentage,
         bundlePriceDiscount: effect.bundlePriceDiscount,
         giftProductId: effect.giftProductId,
         giftProductName: effect.giftProductName,

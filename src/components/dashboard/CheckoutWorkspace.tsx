@@ -87,6 +87,52 @@ function activityEffectText(effectType: Activity["effectType"], ui: ReturnType<t
     return ui.effectDiscount;
 }
 
+function buildPromotionDraftFromActivity(activity: Activity): CheckoutPromotionSelectionDraft {
+    return {
+        promotionId: activity.id,
+        promotionName: activity.name,
+        note: activity.message || "",
+        effectType: activity.effectType,
+        discountMode: activity.discountMode === "percentage" ? "percentage" : "amount",
+        scopeType: activity.scopeType === "product" ? "product" : "category",
+        entitlementType: activity.entitlementType ?? "replacement",
+        categoryId: activity.categoryId ?? "",
+        categoryName: activity.categoryName ?? "",
+        productId: activity.productId ?? "",
+        productName: activity.productName ?? "",
+        discountAmount: Math.max(0, Math.round(activity.discountAmount ?? 0)),
+        discountPercentage: Math.min(100, Math.max(0, Math.round(activity.discountPercentage ?? 0))),
+        bundlePriceDiscount: Math.max(0, Math.round(activity.bundlePriceDiscount ?? 0)),
+        giftProductId: activity.giftProductId ?? "",
+        giftProductName: activity.giftProductName ?? "",
+        giftQty: Math.max(1, Math.round(activity.giftQty ?? 1)),
+        entitlementQty: Math.max(1, Math.round(activity.entitlementQty ?? 1)),
+        entitlementExpiresAt: activity.entitlementExpiresAt,
+        reservationQty: Math.max(0, Math.round(activity.reservationQty ?? 0)),
+        reservationExpiresAt: activity.reservationExpiresAt,
+    };
+}
+
+function findMatchingActivitiesForProduct(product: Product, activities: Activity[]): Activity[] {
+    const productName = normalizeComparable(product.name);
+    const categoryName = normalizeComparable(product.categoryName ?? "");
+
+    return activities.filter((activity) => {
+        const activityProductId = normalizeComparable(activity.productId ?? "");
+        const activityProductName = normalizeComparable(activity.productName ?? "");
+        const activityCategoryId = normalizeComparable(activity.categoryId ?? "");
+        const activityCategoryName = normalizeComparable(activity.categoryName ?? "");
+
+        if (activityProductId && activityProductId === normalizeComparable(product.id)) return true;
+        if (activityProductName && activityProductName === productName) return true;
+        if (activity.scopeType === "category") {
+            if (activityCategoryId && activityCategoryId === normalizeComparable(product.categoryId ?? "")) return true;
+            if (activityCategoryName && activityCategoryName === categoryName) return true;
+        }
+        return false;
+    });
+}
+
 export function CheckoutWorkspace({
     customers,
     tickets,
@@ -274,23 +320,6 @@ export function CheckoutWorkspace({
         },
         [resolvedReceiptSettings],
     );
-    const appendLine = (productId?: string, options?: { isUsedProduct?: boolean; usedProductId?: string }) => {
-        setLines((prev) => [
-            ...prev,
-            {
-                id: `line_${Date.now()}_${prev.length}`,
-                productId: productId ?? products[0]?.id ?? "",
-                qty: 1,
-                isUsedProduct: options?.isUsedProduct === true,
-                usedProductId: options?.usedProductId,
-            },
-        ]);
-    };
-    const appendUsedProductLine = (usedProductId: string) => {
-        const exists = lines.some((line) => line.isUsedProduct && line.usedProductId === usedProductId);
-        if (exists) return;
-        appendLine(usedProductId, { isUsedProduct: true, usedProductId });
-    };
 
     const resolveProductFromSuggestion = useCallback(
         (item: PredictiveSearchSuggestion): Product | null => {
@@ -316,6 +345,66 @@ export function CheckoutWorkspace({
         for (const product of usedProducts) map.set(product.id, product);
         return map;
     }, [usedProducts]);
+
+    const ensurePromotionSelection = useCallback((activity: Activity) => {
+        setSelectedPromotions((prev) => {
+            if (prev.some((row) => row.promotionId === activity.id)) return prev;
+            return [...prev, buildPromotionDraftFromActivity(activity)];
+        });
+    }, []);
+
+    const removePromotionSelection = useCallback((promotionId: string) => {
+        setSelectedPromotions((prev) => prev.filter((row) => row.promotionId !== promotionId));
+    }, []);
+
+    const maybeConvertLineToActivity = useCallback(
+        (product: Product): Activity | null => {
+            const matchedActivities = findMatchingActivitiesForProduct(product, activeActivities);
+            const activity = matchedActivities[0] ?? null;
+            if (!activity) return null;
+            if (selectedActivityIdSet.has(activity.id)) return activity;
+
+            const confirmed = window.confirm(
+                ui.activityConvertPrompt
+                    .replace("{product}", product.name)
+                    .replace("{activity}", activity.name),
+            );
+            if (!confirmed) return null;
+
+            ensurePromotionSelection(activity);
+            return activity;
+        },
+        [activeActivities, ensurePromotionSelection, selectedActivityIdSet, ui.activityConvertPrompt],
+    );
+
+    const appendLine = useCallback(
+        (productId?: string, options?: { isUsedProduct?: boolean; usedProductId?: string }) => {
+            const matchedProduct = !options?.isUsedProduct && productId ? productMap.get(productId) ?? null : null;
+            const matchedActivity = matchedProduct ? maybeConvertLineToActivity(matchedProduct) : null;
+            setLines((prev) => [
+                ...prev,
+                {
+                    id: `line_${Date.now()}_${prev.length}`,
+                    productId: productId ?? products[0]?.id ?? "",
+                    qty: 1,
+                    activityPromotionId: matchedActivity?.id,
+                    activityPromotionName: matchedActivity?.name,
+                    isUsedProduct: options?.isUsedProduct === true,
+                    usedProductId: options?.usedProductId,
+                },
+            ]);
+        },
+        [maybeConvertLineToActivity, productMap, products],
+    );
+
+    const appendUsedProductLine = useCallback(
+        (usedProductId: string) => {
+            const exists = lines.some((line) => line.isUsedProduct && line.usedProductId === usedProductId);
+            if (exists) return;
+            appendLine(usedProductId, { isUsedProduct: true, usedProductId });
+        },
+        [appendLine, lines],
+    );
 
     const lineDetails = useMemo(
         () =>
@@ -351,34 +440,20 @@ export function CheckoutWorkspace({
         setSelectedPromotions((prev) => {
             if (checked) {
                 if (prev.some((row) => row.promotionId === activity.id)) return prev;
-                return [
-                    ...prev,
-                    {
-                        promotionId: activity.id,
-                        promotionName: activity.name,
-                        note: activity.message || "",
-                        effectType: activity.effectType,
-                        scopeType: activity.scopeType === "product" ? "product" : "category",
-                        entitlementType: activity.entitlementType ?? "replacement",
-                        categoryId: activity.categoryId ?? "",
-                        categoryName: activity.categoryName ?? "",
-                        productId: activity.productId ?? "",
-                        productName: activity.productName ?? "",
-                        discountAmount: Math.max(0, Math.round(activity.discountAmount ?? 0)),
-                        bundlePriceDiscount: Math.max(0, Math.round(activity.bundlePriceDiscount ?? 0)),
-                        giftProductId: activity.giftProductId ?? "",
-                        giftProductName: activity.giftProductName ?? "",
-                        giftQty: Math.max(1, Math.round(activity.giftQty ?? 1)),
-                        entitlementQty: Math.max(1, Math.round(activity.entitlementQty ?? 1)),
-                        entitlementExpiresAt: activity.entitlementExpiresAt,
-                        reservationQty: Math.max(1, Math.round(activity.reservationQty ?? 1)),
-                        reservationExpiresAt: activity.reservationExpiresAt,
-                    },
-                ];
+                return [...prev, buildPromotionDraftFromActivity(activity)];
             }
 
             return prev.filter((row) => row.promotionId !== activity.id);
         });
+        if (!checked) {
+            setLines((prev) =>
+                prev.map((row) =>
+                    row.activityPromotionId === activity.id
+                        ? { ...row, activityPromotionId: undefined, activityPromotionName: undefined }
+                        : row,
+                ),
+            );
+        }
     };
     const updateSelectedPromotion = (
         promotionId: string,
@@ -501,17 +576,32 @@ export function CheckoutWorkspace({
                         onPromotionsPickerOpenChange={setPromotionsPickerOpen}
                         onAppendLine={appendLine}
                         onAppendUsedProductLine={appendUsedProductLine}
-                        onRemoveLine={(lineId) => setLines((prev) => prev.filter((row) => row.id !== lineId))}
+                        onRemoveLine={(lineId) => {
+                            const current = lines.find((row) => row.id === lineId) ?? null;
+                            if (current?.activityPromotionId) {
+                                const stillLinkedElsewhere = lines.some((row) => row.id !== lineId && row.activityPromotionId === current.activityPromotionId);
+                                if (!stillLinkedElsewhere) removePromotionSelection(current.activityPromotionId);
+                            }
+                            setLines((prev) => prev.filter((row) => row.id !== lineId));
+                        }}
                         onLineQtyChange={(lineId, qty) => setLines((prev) => prev.map((row) => (row.id === lineId ? { ...row, qty } : row)))}
                         onLineProductSelect={(lineId, suggestion) => {
                             const matched = resolveProductFromSuggestion(suggestion);
                             if (!matched) return;
+                            const current = lines.find((row) => row.id === lineId) ?? null;
+                            const matchedActivity = maybeConvertLineToActivity(matched);
+                            if (current?.activityPromotionId && current.activityPromotionId !== matchedActivity?.id) {
+                                const stillLinkedElsewhere = lines.some((row) => row.id !== lineId && row.activityPromotionId === current.activityPromotionId);
+                                if (!stillLinkedElsewhere) removePromotionSelection(current.activityPromotionId);
+                            }
                             setLines((prev) =>
                                 prev.map((row) =>
                                     row.id === lineId
                                         ? {
                                               ...row,
                                               productId: matched.id,
+                                              activityPromotionId: matchedActivity?.id,
+                                              activityPromotionName: matchedActivity?.name,
                                               isUsedProduct: false,
                                               usedProductId: undefined,
                                           }

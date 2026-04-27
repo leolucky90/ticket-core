@@ -240,9 +240,13 @@ function normalizeSale(input: Partial<Sale> & { id: string }): Sale {
                   return {
                       productId,
                       productName,
+                      categoryId: safeText(toStr(item.categoryId), 120) || undefined,
+                      categoryName: safeText(toStr(item.categoryName), MAX_TEXT) || undefined,
                       qty,
                       unitPrice,
                       subtotal,
+                      activityPromotionId: safeText(toStr(item.activityPromotionId), 120) || undefined,
+                      activityPromotionName: safeText(toStr(item.activityPromotionName), MAX_TEXT) || undefined,
                       isUsedProduct: item.isUsedProduct === true,
                       usedProductId: safeText(toStr(item.usedProductId), 120) || undefined,
                       usedBrand: safeText(toStr(item.usedBrand), 120) || undefined,
@@ -893,6 +897,7 @@ function parsePromotionSelections(formData: FormData): {
                 promotionId,
                 promotionName,
                 effectType,
+                discountMode: parsed.discountMode === "percentage" ? "percentage" : "amount",
                 scopeType,
                 entitlementType:
                     parsed.entitlementType === "gift" || parsed.entitlementType === "discount" || parsed.entitlementType === "service"
@@ -903,6 +908,7 @@ function parsePromotionSelections(formData: FormData): {
                 productId: safeText(toStr(parsed.productId), 120) || undefined,
                 productName: safeText(toStr(parsed.productName), MAX_TEXT) || undefined,
                 discountAmount: parseMoney(parsed.discountAmount),
+                discountPercentage: Math.min(100, Math.max(0, parseMoney(parsed.discountPercentage))),
                 bundlePriceDiscount: parseMoney(parsed.bundlePriceDiscount),
                 giftProductId: safeText(toStr(parsed.giftProductId), 120) || undefined,
                 giftProductName: safeText(toStr(parsed.giftProductName), MAX_TEXT) || undefined,
@@ -912,7 +918,7 @@ function parsePromotionSelections(formData: FormData): {
                     typeof parsed.entitlementExpiresAt === "number" && Number.isFinite(parsed.entitlementExpiresAt)
                         ? Math.round(parsed.entitlementExpiresAt)
                         : parseOptionalTimestamp(parsed.entitlementExpiresAt),
-                reservationQty: Math.max(1, parseMoney(parsed.reservationQty)),
+                reservationQty: Math.max(0, parseMoney(parsed.reservationQty)),
                 reservationExpiresAt:
                     typeof parsed.reservationExpiresAt === "number" && Number.isFinite(parsed.reservationExpiresAt)
                         ? Math.round(parsed.reservationExpiresAt)
@@ -936,10 +942,12 @@ function parsePromotionSelections(formData: FormData): {
                 promotionId: "",
                 promotionName: fallbackName,
                 effectType: "discount",
+                discountMode: "amount",
                 discountAmount: 0,
+                discountPercentage: 0,
                 giftQty: 1,
                 entitlementQty: 1,
-                reservationQty: 1,
+                reservationQty: 0,
             });
             refs.push({
                 activityId: "",
@@ -993,13 +1001,15 @@ function parsePromotionSelections(formData: FormData): {
                 promotionId: activityId,
                 promotionName: activityName,
                 effectType,
+                discountMode: "amount",
                 scopeType: "category",
                 entitlementType: "replacement",
                 categoryName: activityName,
                 entitlementQty: Math.max(1, storeQty || 1),
                 discountAmount: 0,
+                discountPercentage: 0,
                 giftQty: 1,
-                reservationQty: 1,
+                reservationQty: 0,
                 note: activityContent || undefined,
             });
         } catch {
@@ -1016,10 +1026,12 @@ function parsePromotionSelections(formData: FormData): {
                 promotionId: "",
                 promotionName: fallbackName,
                 effectType: "discount",
+                discountMode: "amount",
                 discountAmount: 0,
+                discountPercentage: 0,
                 giftQty: 1,
                 entitlementQty: 1,
-                reservationQty: 1,
+                reservationQty: 0,
             });
         }
         if (refs.length >= MAX_ACTIVITY_REFS) break;
@@ -1034,8 +1046,12 @@ function parsePromotionSelections(formData: FormData): {
 function parseCheckoutLineItems(formData: FormData): SaleLineItem[] {
     const productIds = formData.getAll("lineProductId[]");
     const productNames = formData.getAll("lineProductName[]");
+    const categoryIds = formData.getAll("lineCategoryId[]");
+    const categoryNames = formData.getAll("lineCategoryName[]");
     const quantities = formData.getAll("lineQty[]");
     const unitPrices = formData.getAll("lineUnitPrice[]");
+    const activityPromotionIds = formData.getAll("lineActivityPromotionId[]");
+    const activityPromotionNames = formData.getAll("lineActivityPromotionName[]");
     const isUsedFlags = formData.getAll("lineIsUsedProduct[]");
     const usedProductIds = formData.getAll("lineUsedProductId[]");
     const usedBrands = formData.getAll("lineUsedBrand[]");
@@ -1057,9 +1073,13 @@ function parseCheckoutLineItems(formData: FormData): SaleLineItem[] {
         items.push({
             productId,
             productName,
+            categoryId: safeText(toStr(categoryIds[index]), 120) || undefined,
+            categoryName: safeText(toStr(categoryNames[index]), MAX_TEXT) || undefined,
             qty,
             unitPrice,
             subtotal,
+            activityPromotionId: safeText(toStr(activityPromotionIds[index]), 120) || undefined,
+            activityPromotionName: safeText(toStr(activityPromotionNames[index]), MAX_TEXT) || undefined,
             isUsedProduct,
             usedProductId: usedProductId || undefined,
             usedBrand: safeText(toStr(usedBrands[index]), 120) || undefined,

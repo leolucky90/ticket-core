@@ -48,11 +48,6 @@ export function normalizePromotionEffectType(value: unknown): PromotionEffectTyp
 }
 
 function getMatchedCartLines(selection: CheckoutPromotionSelection, cartLines: PromotionCartLine[]): PromotionCartLine[] {
-    const targetProductId = toText(selection.productId, 120);
-    if (targetProductId) {
-        return cartLines.filter((line) => line.productId === targetProductId);
-    }
-
     if (selection.scopeType === "category") {
         const targetCategoryId = toText(selection.categoryId, 120);
         const targetCategoryName = toText(selection.categoryName).toLowerCase();
@@ -63,7 +58,25 @@ function getMatchedCartLines(selection: CheckoutPromotionSelection, cartLines: P
         });
     }
 
+    const targetProductId = toText(selection.productId, 120);
+    const targetProductName = toText(selection.productName).toLowerCase();
+    if (targetProductId) {
+        return cartLines.filter((line) => line.productId === targetProductId);
+    }
+    if (targetProductName) {
+        return cartLines.filter((line) => line.productName.trim().toLowerCase() === targetProductName);
+    }
+
     return cartLines;
+}
+
+function computeDiscountAmount(selection: CheckoutPromotionSelection, matchedSubtotal: number): number {
+    const discountMode = selection.discountMode === "percentage" ? "percentage" : "amount";
+    if (discountMode === "percentage") {
+        const percentage = Math.min(100, toNonNegativeInt(selection.discountPercentage, 0));
+        return Math.min(matchedSubtotal, Math.round((matchedSubtotal * percentage) / 100));
+    }
+    return Math.min(matchedSubtotal, toNonNegativeInt(selection.discountAmount, 0));
 }
 
 function buildPromotionRecommendation(
@@ -79,9 +92,17 @@ function buildPromotionRecommendation(
     let reason = matchedLines.length > 0 ? `符合 ${matchedLines.length} 筆商品` : "購物車目前不符合條件";
 
     if (effectType === "discount") {
-        estimatedDiscount = Math.min(matchedSubtotal, toNonNegativeInt(selection.discountAmount, 0));
+        const discountMode = selection.discountMode === "percentage" ? "percentage" : "amount";
+        estimatedDiscount = computeDiscountAmount(selection, matchedSubtotal);
         recommended = recommended && estimatedDiscount > 0;
-        reason = recommended ? `可折抵 ${estimatedDiscount}` : "折扣金額為 0 或無符合商品";
+        reason =
+            discountMode === "percentage"
+                ? recommended
+                    ? `可折抵 ${estimatedDiscount}（${Math.min(100, toNonNegativeInt(selection.discountPercentage, 0))}%）`
+                    : "折扣百分比為 0 或無符合商品"
+                : recommended
+                    ? `可折抵 ${estimatedDiscount}`
+                    : "折扣金額為 0 或無符合商品";
     }
 
     if (effectType === "bundle_price") {
@@ -104,9 +125,10 @@ function buildPromotionRecommendation(
     }
 
     if (effectType === "create_pickup_reservation") {
-        const reservationQty = Math.max(1, toNonNegativeInt(selection.reservationQty, 1));
-        recommended = recommended && Boolean(toText(selection.productId, 120));
-        reason = recommended ? `可建立 ${reservationQty} 件待取貨` : "缺少留貨 productId 或無符合商品";
+        const reservationQty = toNonNegativeInt(selection.reservationQty, 0);
+        const productOk = Boolean(toText(selection.productId, 120) || toText(selection.productName));
+        recommended = recommended && productOk && reservationQty > 0;
+        reason = recommended ? `可建立 ${reservationQty} 件待取貨` : "缺少留貨商品或留貨數量為 0";
     }
 
     return {
@@ -144,7 +166,9 @@ export function evaluatePromotionsForCart(input: {
         const promotionName = toText(selection.promotionName) || "Untitled Promotion";
 
         if (effectType === "discount" || effectType === "bundle_price") {
-            const amount = effectType === "discount" ? toNonNegativeInt(selection.discountAmount, 0) : toNonNegativeInt(selection.bundlePriceDiscount, 0);
+            const matchedLines = getMatchedCartLines(selection, input.cartLines);
+            const matchedSubtotal = matchedLines.reduce((sum, line) => sum + Math.max(0, line.subtotal), 0);
+            const amount = effectType === "discount" ? computeDiscountAmount(selection, matchedSubtotal) : Math.min(matchedSubtotal, toNonNegativeInt(selection.bundlePriceDiscount, 0));
             if (amount > 0) {
                 pricingAdjustments.push({
                     promotionId,
@@ -153,6 +177,26 @@ export function evaluatePromotionsForCart(input: {
                     amount,
                     reason: recommendation.reason,
                 });
+            }
+            if (effectType === "bundle_price") {
+                const reservationQty = toNonNegativeInt(selection.reservationQty, 0);
+                const matchedLine = matchedLines[0] ?? null;
+                const targetProductId = toText(selection.productId, 120) || matchedLine?.productId || "";
+                const targetProductName = toText(selection.productName) || matchedLine?.productName || "Reserved Item";
+                const targetUnitPrice = matchedLine?.unitPrice ?? 0;
+                if (reservationQty > 0 && targetProductId) {
+                    pickupReservationsToCreate.push({
+                        promotionId,
+                        promotionName,
+                        sourceChannel: "pos",
+                        productId: targetProductId,
+                        productName: targetProductName,
+                        qty: reservationQty,
+                        unitPrice: Math.max(0, toNonNegativeInt(targetUnitPrice, 0)),
+                        expiresAt: toTimestamp(selection.reservationExpiresAt),
+                        note: toText(selection.note, 800) || recommendation.reason,
+                    });
+                }
             }
             continue;
         }
