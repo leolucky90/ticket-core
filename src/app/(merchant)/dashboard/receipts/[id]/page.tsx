@@ -21,6 +21,7 @@ export default async function ReceiptDocumentDetailPage({ params, searchParams }
     const sp = await searchParams;
     const lang = getUiLanguage((await cookies()).get("lang")?.value);
     const ui = getUiText(lang).invoiceAdmin;
+    const receiptUi = getUiText(lang).receiptWorkspace;
     const data = await getReceiptDocumentDetailRouteData(id);
 
     if (!data) {
@@ -56,6 +57,21 @@ export default async function ReceiptDocumentDetailPage({ params, searchParams }
         redirect(`/dashboard/receipts/${encodeURIComponent(next.id)}?flash=${encodeURIComponent(ui.reissued)}&ts=${Date.now()}`);
     }
 
+    async function voidAndRebuildAction(formData: FormData): Promise<void> {
+        "use server";
+
+        const result = await voidReceiptDocumentFromFormData(formData);
+        if (!result.document) {
+            redirect(`/dashboard/receipts/${encodeURIComponent(id)}?flash=${encodeURIComponent(ui.voidFailed)}&ts=${Date.now()}`);
+        }
+        if (result.document.status !== "voided" || !result.document.checkoutId) {
+            redirect(`/dashboard/receipts/${encodeURIComponent(id)}?flash=${encodeURIComponent(receiptUi.voidRebuildFailed)}&ts=${Date.now()}`);
+        }
+        redirect(
+            `/dashboard/checkout?rebuildSaleId=${encodeURIComponent(result.document.checkoutId)}&rebuildDocumentId=${encodeURIComponent(result.document.id)}&flash=rebuild&ts=${Date.now()}`,
+        );
+    }
+
     return (
         <MerchantPageShell
             title={ui.detailPageTitle}
@@ -74,9 +90,11 @@ export default async function ReceiptDocumentDetailPage({ params, searchParams }
                 <InvoiceDocumentDetailPanel
                     lang={lang}
                     ui={ui}
+                    receiptUi={receiptUi}
                     document={data.document}
                     logs={data.logs}
                     voidAction={voidAction}
+                    voidAndRebuildAction={voidAndRebuildAction}
                     reissueAction={reissueAction}
                 />
             </div>

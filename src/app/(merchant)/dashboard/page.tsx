@@ -16,7 +16,7 @@ import { getMerchantDashboardRouteData } from "@/lib/services/merchant/dashboard
 import { createStockIn, createStockOut } from "@/lib/services/merchant/inventory-write.service";
 import { createRepairBrand, createRepairModel, deleteRepairBrand, deleteRepairBrandType, deleteRepairModel, renameRepairBrandType, updateRepairBrand, updateRepairModel } from "@/lib/services/merchant/marketing-write.service";
 import { createProduct, deleteProduct, updateProduct } from "@/lib/services/merchant/product-write.service";
-import { createTicket, createWarrantyCaseFromExistingCase, updateTicket } from "@/lib/services/ticket";
+import { createTicket, createWarrantyCaseFromExistingCase, setTicketQuoteStatusById, setTicketStatusById, updateTicket } from "@/lib/services/ticket";
 import {
     listUsedProductTypeSettings,
     updateUsedProductTypeSetting,
@@ -186,6 +186,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     const {
         bundle,
         customerPage,
+        caseCustomerLookup,
         casePage,
         activityPage,
         repairTechnicians,
@@ -336,15 +337,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 .map((item) => item.trim())
                 .filter((item) => item.length > 0);
             await updateItemNamingSettings({ patch: { order: order as ItemNamingToken[] } });
-            redirect(
-                appendMarketingSectionQuery(
-                    `/dashboard?tab=marketing&flash=${encodeURIComponent("item_naming_saved")}&ts=${Date.now()}`,
-                    formData,
-                ),
-            );
         } catch {
-            redirect(appendMarketingSectionQuery(`/dashboard?tab=marketing&flash=${encodeURIComponent("error")}&ts=${Date.now()}`, formData));
+            return redirect(appendMarketingSectionQuery(`/dashboard?tab=marketing&flash=${encodeURIComponent("error")}&ts=${Date.now()}`, formData));
         }
+        return redirect(
+            appendMarketingSectionQuery(
+                `/dashboard?tab=marketing&flash=${encodeURIComponent("item_naming_saved")}&ts=${Date.now()}`,
+                formData,
+            ),
+        );
     }
 
     return (
@@ -360,7 +361,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 stats={bundle.stats}
                 sales={bundle.sales}
                 tickets={needsCaseSupport ? casePage.items : bundle.tickets}
-                customers={needsCustomerSupport ? customerPage.items.map((row) => row.customer) : bundle.customers}
+                customers={needsCustomerSupport ? customerPage.items.map((row) => row.customer) : needsCaseSupport ? caseCustomerLookup : bundle.customers}
                 activities={needsActivitySupport ? activityPage.items : bundle.activities}
                 purchases={bundle.purchases}
                 products={bundle.products}
@@ -389,6 +390,28 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                     redirect(`/dashboard?tab=cases&caseQ=${encodeURIComponent(created.id)}&flash=warranty_case_created&ts=${Date.now()}`);
                 }}
                 updateCaseAction={updateTicket}
+                acceptCaseQuoteAction={async (formData: FormData) => {
+                    "use server";
+
+                    const caseId = String(formData.get("caseId") ?? "").trim();
+                    if (!caseId) return false;
+                    return setTicketQuoteStatusById(caseId, "accepted");
+                }}
+                completeCaseAndCheckoutAction={async (formData: FormData) => {
+                    "use server";
+
+                    const caseId = String(formData.get("caseId") ?? "").trim();
+                    const customerId = String(formData.get("customerId") ?? "").trim();
+                    const shouldMarkComplete = String(formData.get("markComplete") ?? "") === "1";
+                    if (caseId && shouldMarkComplete) {
+                        await setTicketStatusById(caseId, "resolved");
+                    }
+                    const query = new URLSearchParams();
+                    if (customerId) query.set("customerId", customerId);
+                    if (caseId) query.set("caseId", caseId);
+                    const suffix = query.toString();
+                    redirect(`/dashboard/checkout${suffix ? `?${suffix}` : ""}`);
+                }}
                 repairTechnicians={repairTechnicians.map((row) => ({
                     id: row.id,
                     name: row.name,

@@ -15,8 +15,8 @@
 
 | 項目 | 值 |
 | --- | --- |
-| **版本** | **V1.44** |
-| **最後更正** | **2026-04-27** |
+| **版本** | **V1.56** |
+| **最後更正** | **2026-04-29** |
 
 ---
 
@@ -34,6 +34,18 @@
 
 | 版本 | 日期 | 摘要 |
 | --- | --- | --- |
+| V1.56 | 2026-04-29 | read-cost baseline 再收斂：shared merchant shell links / icon action links 預設關閉 prefetch，收據/作廢 tab 改為本地切換；receipt document status filter 與 invoice log document/draft 查詢先嘗試精準 Firestore query，缺索引時退回既有 broad query |
+| V1.55 | 2026-04-29 | receipt detail 查詢再優化：`invoice-log.service` 的 `listInvoiceLogs` 新增 query-level TTL cache，並在 `appendInvoiceLog` 寫入時清除公司範圍 cache |
+| V1.54 | 2026-04-29 | activities 分頁再優化：`queryActivitiesPage` 新增 query-level TTL cache，並在 activity create/update/cancel/delete 路徑同步失效，降低活動分頁切換重讀 |
+| V1.53 | 2026-04-29 | dashboard read scope 新增 `cases`：cases tab route-data 不再載入 inventory stock logs，並延續 query-level cache 策略縮小切頁讀取成本 |
+| V1.52 | 2026-04-29 | cases/customer summary 查詢再優化：`queryTicketsPage` 新增 query-level TTL cache 並在 ticket 寫入路徑失效；customer summary read-model 新增短 TTL page cache，降低重頁切換的重複讀取與重算 |
+| V1.51 | 2026-04-29 | 新增成本導向規則：新功能與日常維護需在開發當下預設納入 read-cost 設計，優先降低資料庫讀取次數，避免後期再做大規模優化 |
+| V1.50 | 2026-04-29 | checkout deferred data 拆成 activities / used products / receipt settings 三支按需 API；收據中心新增月份區間預設當月；dashboard customers/cases/inventory 導航連結補 `prefetch={false}`，落實「明確動作才查詢」 |
+| V1.49 | 2026-04-28 | dashboard cases 維修配件改為庫存商品智慧搜尋 + 多筆 `repairParts[]`；加入後顯示品名、庫存數量、使用數量，儲存維修資訊時依新舊使用數量差額扣庫存或補回庫存 |
+| V1.48 | 2026-04-28 | dashboard cases 維修資訊更新改為專用表單，只保留維修人員、維修狀態、維修配件、備註、歷史摘要與報價狀態；quote status 新增 `requote`（再次報價），ticket `resolved` 顯示為完成維修 |
+| V1.47 | 2026-04-28 | dashboard cases 維修資訊分頁改為固定顯示；若報價未 accepted，進入前顯示目前報價狀態，並提供「不改狀態進入」或「客戶已接受報價」兩個選擇，後者會先寫入 accepted |
+| V1.46 | 2026-04-28 | dashboard cases 展開列新增「案件資訊／維修資訊」分頁；維修資訊進入後可處理維修資訊與結帳守門，結帳前若維修未完成會提示是否先改成完成維修並帶入 checkout caseId |
+| V1.45 | 2026-04-28 | dashboard cases 新增案件表單加入「新增客戶／加入現有客戶」模式切換；現有客戶以電話／姓名 lookup 後提交 `existingCustomerId`，server 端以 company-scoped `customerId` 綁定案件；同步更新 route-data / docs baseline |
 | V1.44 | 2026-04-27 | 對齊目前未提交的 activities / checkout / customer detail baseline：活動主表單與活動商品 line 關聯維持既有 `selectedPromotions -> pickupReservations` 資料流，customer detail 補回顯寄貨總數與商品快照；同步校正 docs 版本與日期 |
 | V1.43 | 2026-04-13 | activities / checkout baseline 再收斂：活動主表單精簡為名稱 / 日期 / 效果 / 寄貨數量 / 說明並保留進階相容區；checkout 商品命中活動時可轉成活動商品 line，折扣百分比與 bundle+reservation 會沿用既有 `selectedPromotions -> pickupReservations -> customer detail` 資料流 |
 | V1.42 | 2026-04-13 | activities tab baseline 更新：搜尋 toolbar 與新增表單拆分，新增 shared `ActivityFormPanel` 供 create / update / restart 共用；過期活動可帶入既有內容後重新設定日期再建立 |

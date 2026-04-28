@@ -33,6 +33,7 @@ For canonical naming, role-boundary, architecture, and refactor glossary, see:
   - Company customer profile (`emailLower`, `userUid`, `name`, `phone`, ...)
 - `companies/{companyId}/cases/{caseId}`
   - Case data, must include `companyId` and `customerId`
+  - Merchant dashboard create flow supports either creating a new customer profile or selecting an existing company-scoped customer by phone/name lookup; existing-customer linkage must submit `existingCustomerId` / `customerId`, while name and phone remain display/search fields.
 - `companies/{companyId}/sales/{saleId}`
   - Sales data, must include `companyId`
   - checkout / POS sale 可附帶 `checkoutDocument` snapshot（businessRegion、documentMode、buyerType、TW/AU 單據欄位），作為後續 receipt center / template renderer 的 canonical 單據輸出來源
@@ -85,6 +86,9 @@ For canonical naming, role-boundary, architecture, and refactor glossary, see:
 - `/settings/account` 應優先透過 focused account-settings read-model / write wrapper 讀寫 `settings/businessProfile` 與 `settings/regionalReceiptSettings`，不要在 route layer 直接拼 auth metadata 或舊 `companyProfile` 混合欄位
 - 商店營銷目錄／品項建立若需分類維度，應優先延續 shared `DimensionPicker` 與 canonical product fields：`categoryId` / `categoryName`、`secondaryCategoryId` / `secondaryCategoryName`、`tertiaryCategoryId` / `tertiaryCategoryName`、`productTypeName`、`modelId` / `modelName`
 - `/dashboard/checkout` 應優先透過 `merchant/checkout-route-data.service.ts` 讀取 customer / ticket / inventory / `settings/businessProfile` / `settings/regionalReceiptSettings`，並用 `merchant/checkout-case-selector.service.ts` 判斷是否顯示案件卡；checkout 不應自行複製一份獨立的地區設定
+- `/dashboard?tab=cases` 新增案件若選擇現有客戶，應透過 dashboard read-model 取得 company-scoped customer lookup，並提交 `existingCustomerId` 讓 server 端以 `customerId` 綁定案件；不要以客戶姓名作為唯一 linkage。
+- `/dashboard?tab=cases` 展開列的維修資訊分頁固定顯示；若報價尚未 accepted，進入前應顯示目前報價狀態，並讓使用者選擇不改狀態進入或先將同 tenant 案件 quote status 更新為 accepted。若從該分頁結帳且維修尚未完成，server action 可先將同 tenant 案件狀態更新為完成，再以 `customerId` / `caseId` 導向 `/dashboard/checkout` 讓 checkout 預選該案件。
+- cases repair edit mode 應只更新維修人員、維修狀態、維修配件、備註、歷史摘要與報價狀態；維修配件應儲存在 Ticket `repairParts[]`，以庫存商品 `productId` 為主鍵，儲存時依舊/新使用數量差額走 focused inventory service 扣庫存或補回庫存，不要回退到單一 `linkedUsedProduct*` 欄位；`requote` 是 canonical quote status（再次報價），`resolved` 是 canonical 完成維修狀態，避免另建重複的完成狀態。
 - `/dashboard/checkout` 完成結帳後，應優先沿用 sale snapshot 的 `checkoutDocument` 與 `settings/invoiceSettings` 走 `invoice-issue.service.ts` 建立 `invoiceDrafts` / `receiptDocuments`；不要在 checkout route layer 臨時重組 platform payload
 - `/dashboard/receipts` 與 `/dashboard/receipts/[id]` 應以 `receiptDocuments` 為 canonical document master，透過 `merchant/invoice-admin-read-model.service.ts` / `merchant/invoice-admin-write.service.ts` 讀寫；作廢 / 重開不可刪除原單據
 - `/settings/account/invoices` 與 `/settings/account/invoice-tracks` 應優先讀寫 `settings/invoiceSettings`、`invoiceTrackSettings`，不要把字軌或整合模式資訊塞回 `regionalReceiptSettings`

@@ -83,6 +83,8 @@
 - auth routes、二手商品 create/edit/detail、customer detail、receipts、relationships、`not-found`／`global-error`、`settings/dashboard` 與 `settings/showcase` 已進一步收斂到 `ui-text.ts`；page route 不再維持 route-local 中英字典
 - `ItemFormFields`、dashboard flash、staff create/edit flash 也已改走 shared i18n key；獨立頁與 workspace 不再依賴 page-local flash 中文字串
 - merchant dashboard 主 workspace（dashboard / customers / cases / activities）與 `/dashboard/products` 已補齊 shared i18n；`dashboardCustomerCaseWorkspace`、`productManagementWorkspace`、`customerDashboardPanel` 等 key 已涵蓋 KPI、list filters、pagination、活動表單與 delete prompt
+- dashboard cases 新增案件表單已拆出 `CaseCustomerSelector`：可切換「新增客戶」或「加入現有客戶」，現有客戶以電話／姓名關鍵字篩選後提交 `existingCustomerId`，server 端以 `customerId` 綁定案件，不再靠姓名文字臨時關聯
+- dashboard cases 展開列已拆成「案件資訊／維修資訊」分頁；維修資訊分頁固定顯示，若 `quoteStatus` 尚未 accepted，進入前會顯示目前報價狀態，並可選擇不改狀態進入或先寫入客戶已接受報價；維修資訊更新使用專用表單，只保留維修人員、維修狀態、維修配件、備註、歷史摘要與報價狀態；維修配件改走庫存商品搜尋與多筆 `repairParts[]`，儲存時依使用數量差額扣庫存或補回庫存；結帳前若維修狀態尚未完成會提示是否先把案件狀態改成 `resolved`（顯示為完成維修），同意後再帶 `customerId` / `caseId` 進 `/dashboard/checkout`
 - merchant 共用 UI 補漏已延伸到 `DimensionPicker` 與 predictive search dropdown / error copy；英文模式下不再因底層 selector / 搜尋狀態而回退中文
 - 示範品項／庫存資料以手動建立或既有 seed 為準；不內建第三方網站商品爬取匯入腳本
 - Phase 8 builder template baseline 已開始收斂到 showcase block registry、instance order model 與 variant-aware preview renderer
@@ -99,9 +101,17 @@
 - 商店營銷 workspace、品項快速命名（`ItemQuickNamingSettingsCard`）、品牌編輯器、二手規格模板說明等 **框架文案** 已收斂至 `src/lib/i18n/ui-text.ts`（`marketingSettingsWorkspace`、`itemQuickNaming`、`marketingBrandEditor`、`usedProductTypeSettings` 等），與 cookie `lang` 一致；`ShowcaseBuilder` 頂部產品敘述用 `showcaseBuilderIntro`，`settings/showcase` 的 `MerchantPageShell` 副標用 `merchantStandalonePages.showcaseBuilderShellSubtitle`
 - 儀表板 workspace 分頁抬頭（`dashboardWorkspaceTabs`）與結帳／收據／關聯總覽／寄店總覽／品項管理獨立路由等 shell 標題（`merchantStandalonePages`）、寄店 KPI 區塊（`consignmentsOverview`）已走同一套 `getUiLanguage`／`getUiText`，避免英文模式下殘留寫死中文
 - `CheckoutWorkspace` 已收斂成結帳中心 / 客戶 / 案件 / 商品明細 / 單據設定 / 收據預覽 / 操作區 七段結構；案件卡預設隱藏，僅在所選客戶存在 checkout-eligible cases 時顯示；TW / AU 單據欄位與 preview 直接讀取 `businessProfile` + `regionalReceiptSettings`，並在 sale snapshot 寫入 `checkoutDocument`
+- checkout route data 已進一步改成分段按需載入：base（customers/tickets/products）先載，deferred 拆成三支 API（activities、used products、receipt settings）；僅在明確動作（開啟活動或二手選單、載入單據設定）時才查詢
 - invoice / receipt document 模組已建立 canonical baseline：`src/lib/schema/invoice-*.schema.ts` + `receipt-document.schema.ts` 定義 draft / issue / void / reissue / carrier / log / track / integration mode；`receiptDocuments` 為 canonical 已開立單據主資料，`invoiceDrafts` / `invoiceVoids` / `invoiceLogs` / `invoiceTrackSettings` / `settings/invoiceSettings` 為配套集合
 - `sales.createCheckoutSale` 已在 checkout 完成後透過 `invoice-issue.service.ts` 建立 draft 並依 `settings/invoiceSettings` 決定是否自動開立；TW 電子發票、AU receipt / invoice / tax invoice 共用同一套 `receiptDocuments` materialization 流程，作廢與重開由 `invoice-void.service.ts` / `reissueVoidedReceiptDocument` 保留原單據與關聯鏈
 - `/dashboard/receipts` 已從 raw sales list 收斂到 `receiptDocuments` 清單；`/dashboard/receipts/[id]` 顯示 document detail + log + void / reissue；`/settings/account/invoices` 與 `/settings/account/invoice-tracks` 走 `merchant/invoice-admin-read-model.service.ts` + `merchant/invoice-admin-write.service.ts`
+- receipts list 已加入月份區間查詢（預設當月），查詢條件下推至 `receipt-document.service` 的 `issuedAt` 範圍，並搭配 `prefetch={false}` 降低分頁切換前預抓讀取
+- 收據中心 `收據 / 作廢` view 切換已改為本地切換同一批月份資料，避免每次 tab 切換重跑 route-data；`receipt-document.service` 在明確 status filter 時會先嘗試下推 `status + issuedAt` 精準查詢，若 Firestore 尚缺 composite index 則退回既有月份範圍 query
+- cases tab `queryTicketsPage` 已補 query-level TTL cache（含 cursor/status/order/keyword key）並在 ticket 寫入路徑自動失效；`customer-summary-read-model` 亦補短 TTL page cache，降低 customers/cases 高頻切頁重算與重讀
+- dashboard bundle scope 已新增 `cases`，cases tab 不再連動讀取 inventory stock logs（僅保留案件頁必要 products），進一步降低 cases route load 成本
+- activities tab 分頁查詢（`queryActivitiesPage`）已補 query-level TTL cache（含 keyword/status/order/cursor key）並在 activity 寫入與刪除路徑失效，降低活動分頁切換重讀
+- receipt detail 使用的 `invoice-log.service` 清單查詢已補 query-level TTL cache（company/document/draft/limit key）並在 `appendInvoiceLog` 寫入時失效，降低單據詳情重開時的重複讀取
+- receipt detail 的 log 查詢在帶 `documentId` / `draftId` 時會先嘗試精準 Firestore query，再於缺索引時 fallback 到原本 broad query；shared merchant shell links、PageTabs、topbar links 與 icon action links 也預設 `prefetch={false}`，避免後台可見導航提前觸發多個高成本 route reads
 - 「二手商品」子區塊與供應來源／品牌對齊：`UsedProductTypeSettingsCard` 使用 `MerchantBuilderShell`，左欄為啟用中的二手類型清單（搜尋、清單顯示筆數、可點選列），右欄為該類型之規格模板列表與新增／編輯規格表單（不再用整頁 `<details>` 摺疊列表）
 - 二手商品類型 baseline 現在會由品牌已勾選的 `usedProductTypes` 自動回補到 `usedProductTypeSettings`；當品牌頁已啟用類型但 collection 尚未建立時，二手商品新增頁與規格模板頁不再回退到 generic fallback 類型
 - merchant item naming baseline 已集中到 `companies/{companyId}/settings/itemNaming` 與 shared helper，支援品牌 / 品牌分類 / 型號 / 主分類 / 第一層子分類 / 第二層子分類排序
@@ -232,6 +242,8 @@
 - inventory `settings` / `product-management` 與 `/dashboard/products` 已進一步共用 `ItemFormFields`，主分類 / 第二分類 / 自動命名欄位不再雙軌
 - marketing category / supplier 已共用 create form 與 editable lookup list helper
 - checkout customer lookup 已改成 walk-in 隱藏搜尋欄 + keyword-only suggestions；案件勾選卡只在 selected customer 有 checkout-eligible cases 時顯示，且 checkout UI 已拆到 `components/dashboard/checkout/*`
+- dashboard cases create flow 已補 customer mode selector；新增客戶維持既有建立／合併客戶流程，加入現有客戶則要求選定 company-scoped `existingCustomerId`
+- dashboard cases detail 的 repair info tab 會固定顯示；未 accepted quote 進入時先走報價狀態 gate，可不改狀態進入或更新為 accepted。維修資訊仍沿用 Ticket 欄位與既有 update action，但 repair edit mode 只暴露維修人員、維修狀態、維修配件、備註、歷史摘要、報價狀態；`repairParts[]` 以庫存商品 `productId` 為主鍵，可新增多筆並調整使用數量，server 以舊/新數量差額呼叫 focused inventory service 扣庫存或補回庫存；`quoteStatus` 新增 `requote`（再次報價），`resolved` 作為完成維修顯示。結帳守門由 case detail action 先完成 status transition，再讓 checkout 以 `caseId` 預選案件
 - 目前基線:
   - operational list/index UX 新 work 應優先回到 shared toolbar / list shell / empty state / pagination pattern
 
@@ -252,6 +264,7 @@
   - customer list page 已改為 shared summary read-model，customer/ticket/sale linkage 規則開始一致
   - customer detail page 已進一步收斂到 one-shot detail read-model，集中 relationship / entitlements / redemptions / pickup reservations
   - dashboard route load 已開始集中到 `dashboard-read-model.service.ts`，避免 page-local orchestration 漂移
+  - cases tab route data 會透過 focused customer read-model 載入 customer lookup，供新增案件表單綁定現有客戶，不新增 route / component 對 `commerce.ts` 的直接依賴
   - `listActivityPurchases` 已抽到 focused read-model，避免 customer / relationship flow 直接依賴 `commerce.ts`
   - customer identity linkage 已移除最後的 plain-name fallback；僅以 `id` / `email` / `phone` 關聯，避免同名客戶誤併
   - activity purchase linkage 已優先帶 `activityId`；若缺 id，只在名稱唯一時才 fallback 到 `activityName`
@@ -264,7 +277,11 @@
 - 目前基線:
   - relationship-heavy pages 應優先共用 shared read-model service，不要在 route layer 針對每筆資料 fan-out 查詢
   - catalog read-heavy pages 應優先依賴 service cache / invalidation baseline，不要在 route layer 自行重複抓 lookup lists
+  - heavy workflow/list route data 應採 base + segmented deferred 策略；deferred 查詢需由使用者明確動作觸發，不要 page enter 時一次打包抓完
+  - heavy tab/list links 預設關閉 prefetch（`prefetch={false}`）以避免切頁前預先觸發高成本 route-data 讀取
+  - 新功能與日常維護一律預設納入 read-cost 設計（查詢範圍、觸發時機、快取與失效），在開發當下就降低資料庫讀取次數，避免累積到後期才做大規模成本優化
   - customer list / detail / relationship overview 應共用同一套 customer linkage helper，不要各自定義關聯規則
+  - 新增案件若需綁現有客戶，應以 company-scoped `customerId` / `existingCustomerId` 作為關聯鍵；姓名／電話只作搜尋與顯示，不作唯一關聯來源
   - dashboard / workspace route 應優先收斂到 focused route-data service，再把結果交給 page / workspace
   - route action import 應優先走 `merchant/*-write.service.ts` wrappers，不要新增對 `commerce.ts` action 的直接依賴
   - item naming / catalog hierarchy 這類 merchant lookup 設定，應優先走 focused schema / service helper，不要回退成 page-local 字串拼接規則

@@ -23,6 +23,7 @@ export function MerchantTopbarLinkBar({ links }: MerchantTopbarLinkBarProps) {
                     <Link
                         key={link.id}
                         href={link.href}
+                        prefetch={false}
                         className="rounded-md border border-[rgb(var(--border))] px-2 py-1 text-xs hover:bg-[rgb(var(--panel2))]"
                     >
                         {link.label}

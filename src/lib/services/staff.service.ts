@@ -102,6 +102,21 @@ function normalizeEmail(value: unknown): string {
     return toText(value, 160).toLowerCase();
 }
 
+function isAuthUserNotFound(error: unknown): boolean {
+    const code = typeof error === "object" && error !== null ? (error as { code?: unknown }).code : null;
+    return code === "auth/user-not-found";
+}
+
+function isAuthEmailAlreadyExists(error: unknown): boolean {
+    const code = typeof error === "object" && error !== null ? (error as { code?: unknown }).code : null;
+    return code === "auth/email-already-exists";
+}
+
+function mapStaffCreateError(error: unknown): Error {
+    if (error instanceof Error && error.message.trim()) return error;
+    return new Error("Failed to create staff member");
+}
+
 function extractCompanyIdFromStaffPath(path: string): string | null {
     const parts = path.split("/");
     if (parts.length >= 4 && parts[0] === "companies" && parts[2] === "staffMembers") {
@@ -337,13 +352,46 @@ export async function createStaff(input: StaffCreateInput): Promise<StaffMember>
     const roleNameSnapshot = await loadRoleName(operator.companyId, roleLevel);
     const email = normalizeEmail(input.email);
     if (!email || !toText(input.password, 120)) throw new Error("Invalid email or password");
+    const existingStaff = await fbAdminDb.collection(staffMembersCollectionPath(operator.companyId)).where("email", "==", email).limit(1).get();
+    if (!existingStaff.empty) throw new Error("此信箱已有員工資料");
 
-    const authUser = await fbAdminAuth.createUser({
-        email,
-        password: toText(input.password, 120),
-        disabled: !toBool(input.enabled, true),
-        displayName: toText(input.name, 120),
+    const password = toText(input.password, 120);
+    let createdAuthUser = false;
+    let authUser = await fbAdminAuth.getUserByEmail(email).catch((error) => {
+        if (isAuthUserNotFound(error)) return null;
+        throw error;
     });
+    if (authUser) {
+        const userDocSnap = await fbAdminDb.doc(`users/${authUser.uid}`).get();
+        const userCompanyId = normalizeCompanyId((userDocSnap.data() as { companyId?: unknown } | undefined)?.companyId);
+        if (userCompanyId && userCompanyId !== operator.companyId) {
+            throw new Error("此信箱已被其他公司使用");
+        }
+        authUser = await fbAdminAuth.updateUser(authUser.uid, {
+            email,
+            password,
+            disabled: !toBool(input.enabled, true),
+            displayName: toText(input.name, 120),
+        });
+    } else {
+        try {
+            authUser = await fbAdminAuth.createUser({
+                email,
+                password,
+                disabled: !toBool(input.enabled, true),
+                displayName: toText(input.name, 120),
+            });
+            createdAuthUser = true;
+        } catch (error) {
+            if (!isAuthEmailAlreadyExists(error)) throw mapStaffCreateError(error);
+            authUser = await fbAdminAuth.getUserByEmail(email);
+            const userDocSnap = await fbAdminDb.doc(`users/${authUser.uid}`).get();
+            const userCompanyId = normalizeCompanyId((userDocSnap.data() as { companyId?: unknown } | undefined)?.companyId);
+            if (userCompanyId && userCompanyId !== operator.companyId) {
+                throw new Error("此信箱已被其他公司使用");
+            }
+        }
+    }
 
     const nowIso = new Date().toISOString();
     const doc = normalizeStaffMember({
@@ -366,22 +414,29 @@ export async function createStaff(input: StaffCreateInput): Promise<StaffMember>
         note: input.note,
     });
 
-    await fbAdminDb.doc(`${staffMembersCollectionPath(operator.companyId)}/${doc.id}`).set(toFirestoreData(doc), { merge: false });
-    await writeUserDocFromStaff({
-        uid: authUser.uid,
-        email: doc.email,
-        companyId: operator.companyId,
-        roleLevel: doc.roleLevel,
-        operatorUid: operator.uid,
-    });
-    await createAuditLog({
-        companyId: operator.companyId,
-        module: "staff",
-        action: "create",
-        targetId: doc.id,
-        targetType: "staffMember",
-        metadata: { roleLevel: doc.roleLevel },
-    });
+    try {
+        await fbAdminDb.doc(`${staffMembersCollectionPath(operator.companyId)}/${doc.id}`).set(toFirestoreData(doc), { merge: false });
+        await writeUserDocFromStaff({
+            uid: authUser.uid,
+            email: doc.email,
+            companyId: operator.companyId,
+            roleLevel: doc.roleLevel,
+            operatorUid: operator.uid,
+        });
+        await createAuditLog({
+            companyId: operator.companyId,
+            module: "staff",
+            action: "create",
+            targetId: doc.id,
+            targetType: "staffMember",
+            metadata: { roleLevel: doc.roleLevel },
+        });
+    } catch (error) {
+        if (createdAuthUser) {
+            await fbAdminAuth.deleteUser(authUser.uid).catch(() => undefined);
+        }
+        throw mapStaffCreateError(error);
+    }
     return doc;
 }
 

@@ -137,7 +137,7 @@ export default async function CustomerDetailPage({ searchParams }: { searchParam
 
             <Card className="rounded-xl p-3">
                 <div className="mb-2 text-sm font-semibold">{ui.warrantyAndDiagnostics}</div>
-                {!customerSnapshot || (customerSnapshot.warranties.length === 0 && customerSnapshot.diagnosticReports.length === 0) ? (
+                {!customerSnapshot || customerSnapshot.warranties.length === 0 ? (
                     <div className="text-sm text-[rgb(var(--muted))]">{ui.noWarrantyOrDiagnostics}</div>
                 ) : (
                     <div className="grid gap-2">
@@ -164,14 +164,6 @@ export default async function CustomerDetailPage({ searchParams }: { searchParam
                                 </div>
                             );
                         })}
-                        {customerSnapshot.diagnosticReports.map((report) => (
-                            <div key={report.id} className="rounded-lg border border-[rgb(var(--border))] p-3 text-sm">
-                                <div>{ui.labels.diagnosticNo}：{report.reportNo}</div>
-                                <div>{ui.labels.status}：{report.status === "published" ? ui.reportPublished : report.status === "draft" ? ui.reportDraft : ui.reportArchived}</div>
-                                <div>{ui.labels.summary}：{report.summary || "-"}</div>
-                                <div>{ui.labels.updatedAt}：{formatTime(report.updatedAt, locale)}</div>
-                            </div>
-                        ))}
                     </div>
                 )}
             </Card>

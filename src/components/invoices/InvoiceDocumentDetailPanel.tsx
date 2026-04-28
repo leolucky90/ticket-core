@@ -8,9 +8,11 @@ import { uiLocale, type UiLanguage } from "@/lib/i18n/ui-text";
 type InvoiceDocumentDetailPanelProps = {
     lang: UiLanguage;
     ui: ReturnType<typeof import("@/lib/i18n/ui-text").getUiText>["invoiceAdmin"];
+    receiptUi: ReturnType<typeof import("@/lib/i18n/ui-text").getUiText>["receiptWorkspace"];
     document: ReceiptDocumentRecord;
     logs: InvoiceLogRecord[];
     voidAction: (formData: FormData) => Promise<void>;
+    voidAndRebuildAction: (formData: FormData) => Promise<void>;
     reissueAction: (formData: FormData) => Promise<void>;
 };
 
@@ -47,9 +49,11 @@ function getDocumentTypeLabel(
 export function InvoiceDocumentDetailPanel({
     lang,
     ui,
+    receiptUi,
     document,
     logs,
     voidAction,
+    voidAndRebuildAction,
     reissueAction,
 }: InvoiceDocumentDetailPanelProps) {
     const locale = uiLocale(lang);
@@ -62,16 +66,28 @@ export function InvoiceDocumentDetailPanel({
                 actions={
                     <div className="flex flex-wrap gap-2">
                         {document.status !== "voided" && document.status !== "void_pending" ? (
-                            <InvoiceVoidDialog
-                                title={ui.voidDialogTitle}
-                                description={ui.voidDialogDescription}
-                                reasonLabel={ui.voidReason}
-                                cancelLabel={ui.cancel}
-                                submitLabel={ui.confirmVoid}
-                                triggerLabel={ui.voidDocument}
-                                documentId={document.id}
-                                action={voidAction}
-                            />
+                            <>
+                                <InvoiceVoidDialog
+                                    title={ui.voidDialogTitle}
+                                    description={ui.voidDialogDescription}
+                                    reasonLabel={ui.voidReason}
+                                    cancelLabel={ui.cancel}
+                                    submitLabel={ui.confirmVoid}
+                                    triggerLabel={ui.voidDocument}
+                                    documentId={document.id}
+                                    action={voidAction}
+                                />
+                                <InvoiceVoidDialog
+                                    title={receiptUi.voidRebuildDialogTitle}
+                                    description={receiptUi.voidRebuildDialogDescription}
+                                    reasonLabel={receiptUi.voidReason}
+                                    cancelLabel={receiptUi.cancel}
+                                    submitLabel={receiptUi.confirmVoidRebuild}
+                                    triggerLabel={receiptUi.voidAndCorrect}
+                                    documentId={document.id}
+                                    action={voidAndRebuildAction}
+                                />
+                            </>
                         ) : null}
                         {document.status === "voided" ? (
                             <form action={reissueAction}>
@@ -166,11 +182,7 @@ export function InvoiceDocumentDetailPanel({
                                 <span className="text-xs text-[rgb(var(--muted))]">{formatDate(log.createdAt, locale)}</span>
                             </div>
                             <div className="text-sm text-[rgb(var(--text))]">{log.message}</div>
-                            {log.payload ? (
-                                <pre className="overflow-x-auto rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--panel))] p-3 text-xs text-[rgb(var(--muted))]">
-                                    {JSON.stringify(log.payload, null, 2)}
-                                </pre>
-                            ) : null}
+                            {/* Hide raw platform payload in normal detail UI to reduce noise and prevent exposing low-level internals. */}
                         </div>
                     ))
                 )}

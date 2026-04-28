@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { CirclePlus, Eye, PackagePlus, ShoppingCart, Tag, Trash2 } from "lucide-react";
 import { MerchantSectionCard } from "@/components/merchant/shell";
 import { Input } from "@/components/ui/input";
@@ -25,6 +26,10 @@ type CheckoutItemsCardProps = {
         usedProduct: UsedProduct | null;
         unitPrice: number;
         subtotal: number;
+        resolvedName: string;
+        resolvedId: string;
+        resolvedCategoryId: string;
+        resolvedCategoryName: string;
     }>;
     filteredUsedProducts: UsedProduct[];
     selectedPromotions: CheckoutPromotionSelectionDraft[];
@@ -74,6 +79,8 @@ export function CheckoutItemsCard({
     formatDateOnly,
     activityEffectText,
 }: CheckoutItemsCardProps) {
+    const lastQuickAddRef = useRef<{ productId: string; at: number } | null>(null);
+
     return (
         <MerchantSectionCard
             title={ui.linesSection}
@@ -105,6 +112,10 @@ export function CheckoutItemsCard({
                 onSelect={(item) => {
                     const matched = onResolveProductFromSuggestion(item);
                     if (!matched) return;
+                    const nowTs = Date.now();
+                    const last = lastQuickAddRef.current;
+                    if (last && last.productId === matched.id && nowTs - last.at < 260) return;
+                    lastQuickAddRef.current = { productId: matched.id, at: nowTs };
                     onAppendLine(matched.id);
                 }}
             />
@@ -335,9 +346,7 @@ export function CheckoutItemsCard({
             </div>
 
             <div className="grid gap-3">
-                {lineDetails.map(({ line, product, usedProduct, unitPrice, subtotal }, index) => {
-                    const resolvedName = usedProduct?.name ?? product?.name ?? "";
-                    const resolvedId = usedProduct?.id ?? product?.id ?? "";
+                {lineDetails.map(({ line, product, usedProduct, unitPrice, subtotal, resolvedName, resolvedId, resolvedCategoryId, resolvedCategoryName }, index) => {
                     return (
                         <div key={line.id} className="grid gap-3 rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-4 md:grid-cols-[minmax(0,2fr)_100px_120px_120px_auto]">
                             <label className="grid gap-1 text-sm">
@@ -353,7 +362,7 @@ export function CheckoutItemsCard({
                                 ) : (
                                     <MerchantPredictiveSearchInput
                                         key={`${line.id}-${line.productId}`}
-                                        defaultValue={product?.name ?? ""}
+                                        defaultValue={product?.name ?? line.snapshotProductName ?? ""}
                                         placeholder={ui.lineProductSearchPlaceholder}
                                         targets={["checkout_items"]}
                                         inputClassName="h-10 w-full"
@@ -380,8 +389,8 @@ export function CheckoutItemsCard({
 
                             <input type="hidden" name="lineProductId[]" value={resolvedId} />
                             <input type="hidden" name="lineProductName[]" value={resolvedName} />
-                            <input type="hidden" name="lineCategoryId[]" value={product?.categoryId ?? ""} />
-                            <input type="hidden" name="lineCategoryName[]" value={product?.categoryName ?? ""} />
+                            <input type="hidden" name="lineCategoryId[]" value={resolvedCategoryId} />
+                            <input type="hidden" name="lineCategoryName[]" value={resolvedCategoryName} />
                             <input type="hidden" name="lineQty[]" value={String(line.isUsedProduct ? 1 : Math.max(1, line.qty))} />
                             <input type="hidden" name="lineUnitPrice[]" value={String(unitPrice)} />
                             <input type="hidden" name="lineActivityPromotionId[]" value={line.activityPromotionId ?? ""} />

@@ -66,6 +66,19 @@ const memory: {
     brandsByCompany: {},
     customersByCompany: {},
 };
+const READ_CACHE_TTL_MS = 20_000;
+const PAGE_QUERY_CACHE_TTL_MS = 15_000;
+const activityCacheTouchedAt: Record<string, number> = {};
+const productCacheTouchedAt: Record<string, number> = {};
+const stockLogCacheTouchedAt: Record<string, number> = {};
+const customerCacheTouchedAt: Record<string, number> = {};
+const activityPageQueryCache: Record<
+    string,
+    {
+        touchedAt: number;
+        page: CursorPageResult<Activity>;
+    }
+> = {};
 
 type SessionScope = {
     uid: string;
@@ -679,6 +692,35 @@ function removeFromMemory<T extends { id: string }>(store: Record<string, T[]>, 
     store[companyId] = list.filter((item) => item.id !== idValue);
 }
 
+function hasFreshReadCache(touchedStore: Record<string, number>, companyId: string): boolean {
+    const touchedAt = touchedStore[companyId] ?? 0;
+    return touchedAt > 0 && Date.now() - touchedAt <= READ_CACHE_TTL_MS;
+}
+
+function touchReadCache(touchedStore: Record<string, number>, companyId: string): void {
+    touchedStore[companyId] = Date.now();
+}
+
+function buildActivityPageQueryCacheKey(companyId: string, params: ActivityPageQuery, pageSize: number): string {
+    const keyword = safeText(params.keyword ?? "", 120).toLowerCase();
+    const status = safeText(params.status ?? "all", 40);
+    const order = safeText(params.order ?? "updated_latest", 40);
+    const cursor = safeText(params.cursor ?? "", 240);
+    return [companyId, keyword, status, order, String(pageSize), cursor].join("|");
+}
+
+function hasFreshActivityPageQueryCache(key: string): boolean {
+    const touchedAt = activityPageQueryCache[key]?.touchedAt ?? 0;
+    return touchedAt > 0 && Date.now() - touchedAt <= PAGE_QUERY_CACHE_TTL_MS;
+}
+
+function clearActivityPageQueryCache(companyId: string): void {
+    const prefix = `${companyId}|`;
+    for (const key of Object.keys(activityPageQueryCache)) {
+        if (key.startsWith(prefix)) delete activityPageQueryCache[key];
+    }
+}
+
 async function listActivitiesFromFirebase(companyId: string): Promise<Activity[] | null> {
     const db = await getFirestoreDb();
     if (!db) return null;
@@ -842,6 +884,8 @@ async function createStockLogInFirebase(companyId: string, stockLog: InventorySt
     if (!db) return null;
 
     await companyStockLogRef(db, companyId).doc(stockLog.id).set(stockLog, { merge: false });
+    upsertMemory(memory.stockLogsByCompany, companyId, stockLog);
+    touchReadCache(stockLogCacheTouchedAt, companyId);
     return true;
 }
 
@@ -850,6 +894,9 @@ async function setActivityToFirebase(companyId: string, activity: Activity) {
     if (!db) return false;
 
     await companyActivityRef(db, companyId).doc(activity.id).set(activity, { merge: true });
+    upsertMemory(memory.activitiesByCompany, companyId, activity);
+    touchReadCache(activityCacheTouchedAt, companyId);
+    clearActivityPageQueryCache(companyId);
     return true;
 }
 
@@ -858,6 +905,8 @@ async function setProductToFirebase(companyId: string, product: Product) {
     if (!db) return false;
 
     await companyProductRef(db, companyId).doc(product.id).set(product, { merge: true });
+    upsertMemory(memory.productsByCompany, companyId, product);
+    touchReadCache(productCacheTouchedAt, companyId);
     return true;
 }
 
@@ -883,6 +932,8 @@ async function setCustomerToFirebase(companyId: string, customer: CompanyCustome
             },
             { merge: true },
         );
+    upsertMemory(memory.customersByCompany, companyId, customer);
+    touchReadCache(customerCacheTouchedAt, companyId);
     return true;
 }
 
@@ -1612,17 +1663,22 @@ export async function listActivities(keyword = ""): Promise<Activity[]> {
     if (!scope) return [];
 
     let list: Activity[] = [];
-
-    try {
-        const firebaseList = await listActivitiesFromFirebase(scope.companyId);
-        if (firebaseList) {
-            list = firebaseList;
-            replaceMemoryList(memory.activitiesByCompany, scope.companyId, firebaseList);
-        } else {
-            list = listFromMemory(memory.activitiesByCompany, scope.companyId);
+    const memoryList = listFromMemory(memory.activitiesByCompany, scope.companyId);
+    if (memoryList.length > 0 && hasFreshReadCache(activityCacheTouchedAt, scope.companyId)) {
+        list = memoryList;
+    } else {
+        try {
+            const firebaseList = await listActivitiesFromFirebase(scope.companyId);
+            if (firebaseList) {
+                list = firebaseList;
+                replaceMemoryList(memory.activitiesByCompany, scope.companyId, firebaseList);
+                touchReadCache(activityCacheTouchedAt, scope.companyId);
+            } else {
+                list = memoryList;
+            }
+        } catch {
+            list = memoryList;
         }
-    } catch {
-        list = listFromMemory(memory.activitiesByCompany, scope.companyId);
     }
 
     const normalized = list
@@ -1644,6 +1700,11 @@ export async function queryActivitiesPage(params: ActivityPageQuery = {}): Promi
             nextCursor: "",
             hasNextPage: false,
         };
+    }
+
+    const queryCacheKey = buildActivityPageQueryCacheKey(scope.companyId, params, pageSize);
+    if (hasFreshActivityPageQueryCache(queryCacheKey)) {
+        return activityPageQueryCache[queryCacheKey].page;
     }
 
     const sort = getActivityPageSort(params.order);
@@ -1679,12 +1740,14 @@ export async function queryActivitiesPage(params: ActivityPageQuery = {}): Promi
                 items.push(activity);
                 if (items.length >= pageSize) {
                     const hasNextPage = index < docs.length - 1 || docs.length === batchSize;
-                    return {
+                    const page = {
                         items,
                         pageSize,
                         nextCursor: hasNextPage && lastCursorInBatch ? encodeActivityCursorValue(lastCursorInBatch) : "",
                         hasNextPage,
                     };
+                    activityPageQueryCache[queryCacheKey] = { touchedAt: Date.now(), page };
+                    return page;
                 }
             }
 
@@ -1692,12 +1755,14 @@ export async function queryActivitiesPage(params: ActivityPageQuery = {}): Promi
             query = buildBaseQuery().startAfter(lastCursorInBatch.orderValue, lastCursorInBatch.id);
         }
 
-        return {
+        const page = {
             items,
             pageSize,
             nextCursor: "",
             hasNextPage: false,
         };
+        activityPageQueryCache[queryCacheKey] = { touchedAt: Date.now(), page };
+        return page;
     }
 
     const ordered = listFromMemory(memory.activitiesByCompany, scope.companyId)
@@ -1719,12 +1784,14 @@ export async function queryActivitiesPage(params: ActivityPageQuery = {}): Promi
     const items = ordered.slice(startIndex, startIndex + pageSize);
     const lastItem = items.at(-1);
     const hasNextPage = startIndex + pageSize < ordered.length;
-    return {
+    const page = {
         items,
         pageSize,
         nextCursor: hasNextPage && lastItem ? encodeActivityCursorValue({ orderValue: sort.getValue(lastItem), id: lastItem.id }) : "",
         hasNextPage,
     };
+    activityPageQueryCache[queryCacheKey] = { touchedAt: Date.now(), page };
+    return page;
 }
 
 export async function listProducts(keyword = ""): Promise<Product[]> {
@@ -1732,17 +1799,22 @@ export async function listProducts(keyword = ""): Promise<Product[]> {
     if (!scope) return [];
 
     let list: Product[] = [];
-
-    try {
-        const firebaseList = await listProductsFromFirebase(scope.companyId);
-        if (firebaseList) {
-            list = firebaseList;
-            replaceMemoryList(memory.productsByCompany, scope.companyId, firebaseList);
-        } else {
-            list = listFromMemory(memory.productsByCompany, scope.companyId);
+    const memoryList = listFromMemory(memory.productsByCompany, scope.companyId);
+    if (memoryList.length > 0 && hasFreshReadCache(productCacheTouchedAt, scope.companyId)) {
+        list = memoryList;
+    } else {
+        try {
+            const firebaseList = await listProductsFromFirebase(scope.companyId);
+            if (firebaseList) {
+                list = firebaseList;
+                replaceMemoryList(memory.productsByCompany, scope.companyId, firebaseList);
+                touchReadCache(productCacheTouchedAt, scope.companyId);
+            } else {
+                list = memoryList;
+            }
+        } catch {
+            list = memoryList;
         }
-    } catch {
-        list = listFromMemory(memory.productsByCompany, scope.companyId);
     }
 
     const normalized = list
@@ -1883,16 +1955,22 @@ export async function listInventoryStockLogs(keyword = ""): Promise<InventorySto
     if (!scope) return [];
 
     let list: InventoryStockLog[] = [];
-    try {
-        const firebaseList = await listStockLogsFromFirebase(scope.companyId);
-        if (firebaseList) {
-            list = firebaseList;
-            replaceMemoryList(memory.stockLogsByCompany, scope.companyId, firebaseList);
-        } else {
-            list = listFromMemory(memory.stockLogsByCompany, scope.companyId);
+    const memoryList = listFromMemory(memory.stockLogsByCompany, scope.companyId);
+    if (memoryList.length > 0 && hasFreshReadCache(stockLogCacheTouchedAt, scope.companyId)) {
+        list = memoryList;
+    } else {
+        try {
+            const firebaseList = await listStockLogsFromFirebase(scope.companyId);
+            if (firebaseList) {
+                list = firebaseList;
+                replaceMemoryList(memory.stockLogsByCompany, scope.companyId, firebaseList);
+                touchReadCache(stockLogCacheTouchedAt, scope.companyId);
+            } else {
+                list = memoryList;
+            }
+        } catch {
+            list = memoryList;
         }
-    } catch {
-        list = listFromMemory(memory.stockLogsByCompany, scope.companyId);
     }
 
     const normalized = list
@@ -2078,11 +2156,21 @@ export async function listRepairBrands(keyword = ""): Promise<RepairBrand[]> {
 export async function listCompanyCustomers(keyword = ""): Promise<CompanyCustomer[]> {
     const scope = await resolveSessionScope(true);
     if (!scope) return [];
+    const memoryCustomers = listFromMemory(memory.customersByCompany, scope.companyId)
+        .filter((item) => !isSoftDeletedRow(item))
+        .map((item) => normalizeCustomer(item))
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .slice(0, MAX_LIST_SIZE);
+
+    if (memoryCustomers.length > 0 && hasFreshReadCache(customerCacheTouchedAt, scope.companyId)) {
+        return queryByKeyword(memoryCustomers, keyword, (item) => [item.name, item.phone, item.email]);
+    }
 
     try {
         const firebaseCustomers = await listCustomersFromFirebase(scope.companyId);
         if (firebaseCustomers && firebaseCustomers.length > 0) {
             replaceMemoryList(memory.customersByCompany, scope.companyId, firebaseCustomers);
+            touchReadCache(customerCacheTouchedAt, scope.companyId);
         }
         if (firebaseCustomers && firebaseCustomers.length > 0) {
             const normalized = firebaseCustomers
@@ -2096,11 +2184,6 @@ export async function listCompanyCustomers(keyword = ""): Promise<CompanyCustome
         // fallback to ticket-derived customers
     }
 
-    const memoryCustomers = listFromMemory(memory.customersByCompany, scope.companyId)
-        .filter((item) => !isSoftDeletedRow(item))
-        .map((item) => normalizeCustomer(item))
-        .sort((a, b) => b.updatedAt - a.updatedAt)
-        .slice(0, MAX_LIST_SIZE);
     if (memoryCustomers.length > 0) {
         return queryByKeyword(memoryCustomers, keyword, (item) => [item.name, item.phone, item.email]);
     }
@@ -2285,8 +2368,10 @@ export async function createActivity(formData: FormData): Promise<void> {
     if (!scope) dashboardRedirect(tab, "invalid");
 
     const name = safeText(formData.get("activityName"));
+    const activityDateMode = safeText(formData.get("activityDateMode"), 32) === "unlimited" ? "unlimited" : "limited";
     const startAt = toActivityBoundaryTimestamp(formData.get("activityStartAt"), "start", 0);
-    const endAt = toActivityBoundaryTimestamp(formData.get("activityEndAt"), "end", 0);
+    const endAtInput = activityDateMode === "unlimited" ? "9999-12-31" : formData.get("activityEndAt");
+    const endAt = toActivityBoundaryTimestamp(endAtInput, "end", 0);
     const message = safeText(formData.get("activityMessage"), MAX_LONG_TEXT);
     const defaultStoreQty = Math.max(0, Math.round(toNumber(formData.get("activityDefaultStoreQty"), 0)));
     const items = parseActivityItems(formData);
@@ -2330,9 +2415,13 @@ export async function createActivity(formData: FormData): Promise<void> {
 
     try {
         const saved = await setActivityToFirebase(scope.companyId, draft);
-        if (!saved) upsertMemory(memory.activitiesByCompany, scope.companyId, draft);
+        if (!saved) {
+            upsertMemory(memory.activitiesByCompany, scope.companyId, draft);
+            clearActivityPageQueryCache(scope.companyId);
+        }
     } catch {
         upsertMemory(memory.activitiesByCompany, scope.companyId, draft);
+        clearActivityPageQueryCache(scope.companyId);
     }
 
     revalidatePath("/dashboard");
@@ -2348,8 +2437,10 @@ export async function updateActivity(formData: FormData): Promise<void> {
 
     const activityId = safeText(formData.get("activityId"), 120);
     const name = safeText(formData.get("activityName"));
+    const activityDateMode = safeText(formData.get("activityDateMode"), 32) === "unlimited" ? "unlimited" : "limited";
     const startAt = toActivityBoundaryTimestamp(formData.get("activityStartAt"), "start", 0);
-    const endAt = toActivityBoundaryTimestamp(formData.get("activityEndAt"), "end", 0);
+    const endAtInput = activityDateMode === "unlimited" ? "9999-12-31" : formData.get("activityEndAt");
+    const endAt = toActivityBoundaryTimestamp(endAtInput, "end", 0);
     const message = safeText(formData.get("activityMessage"), MAX_LONG_TEXT);
     const defaultStoreQty = Math.max(0, Math.round(toNumber(formData.get("activityDefaultStoreQty"), 0)));
     const items = parseActivityItems(formData);
@@ -2396,9 +2487,13 @@ export async function updateActivity(formData: FormData): Promise<void> {
 
     try {
         const saved = await setActivityToFirebase(scope.companyId, next);
-        if (!saved) upsertMemory(memory.activitiesByCompany, scope.companyId, next);
+        if (!saved) {
+            upsertMemory(memory.activitiesByCompany, scope.companyId, next);
+            clearActivityPageQueryCache(scope.companyId);
+        }
     } catch {
         upsertMemory(memory.activitiesByCompany, scope.companyId, next);
+        clearActivityPageQueryCache(scope.companyId);
     }
 
     revalidatePath("/dashboard");
@@ -2427,9 +2522,13 @@ export async function cancelActivity(formData: FormData): Promise<void> {
 
     try {
         const saved = await setActivityToFirebase(scope.companyId, next);
-        if (!saved) upsertMemory(memory.activitiesByCompany, scope.companyId, next);
+        if (!saved) {
+            upsertMemory(memory.activitiesByCompany, scope.companyId, next);
+            clearActivityPageQueryCache(scope.companyId);
+        }
     } catch {
         upsertMemory(memory.activitiesByCompany, scope.companyId, next);
+        clearActivityPageQueryCache(scope.companyId);
     }
 
     revalidatePath("/dashboard");
@@ -2467,9 +2566,11 @@ export async function deleteActivity(formData: FormData): Promise<void> {
                 );
         } else {
             removeFromMemory(memory.activitiesByCompany, scope.companyId, activityId);
+            clearActivityPageQueryCache(scope.companyId);
         }
     } catch {
         removeFromMemory(memory.activitiesByCompany, scope.companyId, activityId);
+        clearActivityPageQueryCache(scope.companyId);
     }
 
     await createDeleteLog({
@@ -3718,7 +3819,7 @@ export async function getDashboardBundle(params?: {
     activityKeyword?: string;
     productKeyword?: string;
     brandKeyword?: string;
-    scope?: "full" | "inventory" | "marketing" | "basic";
+    scope?: "full" | "inventory" | "cases" | "marketing" | "basic";
 }) {
     const scope = await resolveSessionScope(true);
     if (!scope) {
@@ -3737,9 +3838,15 @@ export async function getDashboardBundle(params?: {
     }
 
     const scopeMode =
-        params?.scope === "inventory" || params?.scope === "marketing" || params?.scope === "basic" ? params.scope : "full";
+        params?.scope === "inventory" ||
+        params?.scope === "cases" ||
+        params?.scope === "marketing" ||
+        params?.scope === "basic"
+            ? params.scope
+            : "full";
     const needsFullRelations = scopeMode === "full";
-    const needsInventoryData = scopeMode === "full" || scopeMode === "inventory";
+    const needsInventoryData = scopeMode === "full" || scopeMode === "inventory" || scopeMode === "cases";
+    const needsStockLogsData = scopeMode === "full" || scopeMode === "inventory";
     const needsMarketingData = scopeMode === "full" || scopeMode === "marketing";
 
     const [sales, tickets, customers, activities, products, brands, purchases, stockLogs] = await Promise.all([
@@ -3750,7 +3857,7 @@ export async function getDashboardBundle(params?: {
         needsInventoryData ? listProducts(params?.productKeyword ?? "") : Promise.resolve([] as Product[]),
         needsMarketingData ? listRepairBrands(params?.brandKeyword ?? "") : Promise.resolve([] as RepairBrand[]),
         needsFullRelations ? listActivityPurchases() : Promise.resolve([] as Awaited<ReturnType<typeof listActivityPurchases>>),
-        needsInventoryData ? listInventoryStockLogs(params?.productKeyword ?? "") : Promise.resolve([] as InventoryStockLog[]),
+        needsStockLogsData ? listInventoryStockLogs(params?.productKeyword ?? "") : Promise.resolve([] as InventoryStockLog[]),
     ]);
 
     const caseStatus = safeText(params?.caseStatus);

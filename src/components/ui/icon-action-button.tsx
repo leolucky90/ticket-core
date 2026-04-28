@@ -47,6 +47,7 @@ export function IconActionButton(props: IconActionButtonProps) {
             <span className="group relative z-10 inline-flex">
                 <Link
                     href={href}
+                    prefetch={false}
                     aria-label={label}
                     aria-describedby={tooltipId}
                     title={tooltipText}

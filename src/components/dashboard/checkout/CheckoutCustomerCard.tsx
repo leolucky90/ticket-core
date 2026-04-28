@@ -35,9 +35,9 @@ export function CheckoutCustomerCard({
     onCustomerSelect,
 }: CheckoutCustomerCardProps) {
     const activeCustomer = customerMode === "customer" ? selectedCustomer : null;
-    const previewName = customerMode === "customer" ? activeCustomer?.name || ui.notSelected : defaultCustomer.name;
-    const previewPhone = customerMode === "customer" ? activeCustomer?.phone || "-" : defaultCustomer.phone || "-";
-    const previewEmail = customerMode === "customer" ? activeCustomer?.email || "-" : defaultCustomer.email || "-";
+    const previewName = activeCustomer?.name || ui.notSelected;
+    const previewPhone = activeCustomer?.phone || "-";
+    const previewEmail = activeCustomer?.email || "-";
 
     return (
         <MerchantSectionCard title={ui.customerSection} description={ui.customerSectionDescription} bodyClassName="grid gap-3">
@@ -82,20 +82,22 @@ export function CheckoutCustomerCard({
                 </div>
             ) : null}
 
-            <div className="grid gap-2 rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-4 md:grid-cols-3">
-                <div className="grid gap-1">
-                    <span className="text-xs text-[rgb(var(--muted))]">{ui.previewCustomer}</span>
-                    <span className="text-sm font-medium text-[rgb(var(--text))]">{previewName}</span>
+            {customerMode === "customer" ? (
+                <div className="grid gap-2 rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] p-4 md:grid-cols-3">
+                    <div className="grid gap-1">
+                        <span className="text-xs text-[rgb(var(--muted))]">{ui.previewCustomer}</span>
+                        <span className="text-sm font-medium text-[rgb(var(--text))]">{previewName}</span>
+                    </div>
+                    <div className="grid gap-1">
+                        <span className="text-xs text-[rgb(var(--muted))]">{ui.customerPhoneLabel}</span>
+                        <span className="text-sm text-[rgb(var(--text))]">{previewPhone}</span>
+                    </div>
+                    <div className="grid gap-1">
+                        <span className="text-xs text-[rgb(var(--muted))]">{ui.customerEmailLabel}</span>
+                        <span className="text-sm text-[rgb(var(--text))]">{previewEmail}</span>
+                    </div>
                 </div>
-                <div className="grid gap-1">
-                    <span className="text-xs text-[rgb(var(--muted))]">{ui.customerPhoneLabel}</span>
-                    <span className="text-sm text-[rgb(var(--text))]">{previewPhone}</span>
-                </div>
-                <div className="grid gap-1">
-                    <span className="text-xs text-[rgb(var(--muted))]">{ui.customerEmailLabel}</span>
-                    <span className="text-sm text-[rgb(var(--text))]">{previewEmail}</span>
-                </div>
-            </div>
+            ) : null}
 
             <input type="hidden" name="customerMode" value={customerMode} />
             <input type="hidden" name="customerId" value={customerMode === "customer" ? customerId : ""} />

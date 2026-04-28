@@ -7,24 +7,56 @@ import { getRegionalReceiptSettings } from "@/lib/services/regional-receipt-sett
 import { listTickets } from "@/lib/services/ticket";
 import { listUsedProducts } from "@/lib/services/used-products.service";
 
-export async function getCheckoutRouteData() {
-    const [customers, tickets, products, activities, usedProducts, businessProfile, regionalReceiptSettings] = await Promise.all([
-        listCompanyCustomers(),
-        listTickets(),
-        listProducts(),
+export async function getCheckoutRouteBaseData() {
+    const [customers, tickets, products] = await Promise.all([listCompanyCustomers(), listTickets(), listProducts()]);
+    return {
+        customers,
+        tickets,
+        products,
+    };
+}
+
+export async function getCheckoutRouteDeferredData() {
+    const [activities, usedProducts, businessProfile, regionalReceiptSettings] = await Promise.all([
         listActivities(),
         listUsedProducts(),
         getBusinessProfile(),
         getRegionalReceiptSettings(),
     ]);
-
     return {
-        customers,
-        tickets,
-        products,
         activeActivities: activities.filter((activity) => activity.status === "active"),
         usedProducts: usedProducts.filter((row) => row.isSellable && row.saleStatus !== "sold" && row.saleStatus !== "archived"),
         businessProfile,
         regionalReceiptSettings,
+    };
+}
+
+export async function getCheckoutDeferredActivitiesData() {
+    const activities = await listActivities();
+    return {
+        activeActivities: activities.filter((activity) => activity.status === "active"),
+    };
+}
+
+export async function getCheckoutDeferredUsedProductsData() {
+    const usedProducts = await listUsedProducts();
+    return {
+        usedProducts: usedProducts.filter((row) => row.isSellable && row.saleStatus !== "sold" && row.saleStatus !== "archived"),
+    };
+}
+
+export async function getCheckoutDeferredReceiptSettingsData() {
+    const [businessProfile, regionalReceiptSettings] = await Promise.all([getBusinessProfile(), getRegionalReceiptSettings()]);
+    return {
+        businessProfile,
+        regionalReceiptSettings,
+    };
+}
+
+export async function getCheckoutRouteData() {
+    const [base, deferred] = await Promise.all([getCheckoutRouteBaseData(), getCheckoutRouteDeferredData()]);
+    return {
+        ...base,
+        ...deferred,
     };
 }

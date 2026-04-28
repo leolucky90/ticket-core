@@ -6,12 +6,22 @@ import { getInvoiceSettings } from "@/lib/services/invoice-settings.service";
 import { getReceiptDocumentById, saveReceiptDocument } from "@/lib/services/receipt-document.service";
 import { createInvoiceEntityId, getInvoiceDb, resolveInvoiceServiceScope } from "@/lib/services/invoice-service.shared";
 import { normalizeReceiptDocumentRecord } from "@/lib/schema/receipt-document.schema";
+import { getSaleByIdWithinCompany } from "@/lib/services/sales";
+import { setTicketStatusById } from "@/lib/services/ticket";
+import { adjustInventoryLevels } from "@/lib/services/inventory";
 
 const memory: Record<string, InvoiceVoidRecord[]> = {};
 
 function upsertMemory(companyId: string, record: InvoiceVoidRecord): void {
     const list = memory[companyId] ?? [];
     memory[companyId] = [record, ...list.filter((item) => item.id !== record.id)];
+}
+
+function resolveRollbackStatus(value: unknown): "new" | "in_progress" | "waiting_customer" | "resolved" {
+    if (value === "new" || value === "in_progress" || value === "waiting_customer" || value === "resolved") {
+        return value;
+    }
+    return "resolved";
 }
 
 export async function voidReceiptDocument(input: {
@@ -26,6 +36,8 @@ export async function voidReceiptDocument(input: {
     const operatorUid = input.operatorUid ?? scope?.uid ?? "system";
     const operatorEmail = input.operatorEmail ?? scope?.email ?? "";
     if (!companyId || !input.documentId) return { document: null, voidRecord: null };
+    const reason = input.reason.trim();
+    if (!reason) return { document: null, voidRecord: null };
 
     const document = await getReceiptDocumentById(input.documentId, companyId);
     const invoiceSettings = await getInvoiceSettings(companyId);
@@ -41,7 +53,7 @@ export async function voidReceiptDocument(input: {
         draftId: document.draftId,
         requestId: createInvoiceEntityId("req"),
         status: "pending",
-        reason: input.reason,
+        reason,
         operatorUid,
         operatorEmail,
         platformRequestPayload: null,
@@ -62,8 +74,8 @@ export async function voidReceiptDocument(input: {
         documentId: document.id,
         voidId: voidRecord.id,
         action: "void_requested",
-        message: `Void requested: ${input.reason}`,
-        payload: { documentNo: document.documentNo, reason: input.reason },
+        message: `Void requested: ${reason}`,
+        payload: { documentNo: document.documentNo, reason },
     });
 
     const adapter = createInvoicePlatformAdapter(document.integrationMode);
@@ -94,7 +106,7 @@ export async function voidReceiptDocument(input: {
         companyId,
         status: result.documentStatus,
         voidedAt: result.documentStatus === "voided" ? new Date().toISOString() : document.voidedAt,
-        voidReason: input.reason,
+        voidReason: reason,
         voidRequestId: result.requestId,
         platformRequestPayload: result.requestPayload,
         platformResponsePayload: result.responsePayload,
@@ -113,6 +125,33 @@ export async function voidReceiptDocument(input: {
         message: result.message,
         payload: { requestId: result.requestId, status: result.documentStatus },
     });
+
+    if (result.documentStatus === "voided" && nextDocument.checkoutId) {
+        const checkoutSale = await getSaleByIdWithinCompany(companyId, nextDocument.checkoutId);
+        const linkedCaseRefs = checkoutSale?.caseRefs ?? [];
+        for (const caseRef of linkedCaseRefs) {
+            if (!caseRef.caseId) continue;
+            const rollbackStatus = resolveRollbackStatus(caseRef.statusBeforeCheckout);
+            await setTicketStatusById(caseRef.caseId, rollbackStatus);
+        }
+        for (const line of checkoutSale?.lineItems ?? []) {
+            const productId = line.productId?.trim();
+            const qty = Math.max(0, Math.round(line.qty));
+            if (!productId || qty <= 0 || line.isUsedProduct) continue;
+            await adjustInventoryLevels({
+                companyId,
+                productId,
+                eventType: "return_in",
+                qty,
+                onHandDelta: qty,
+                reservedDelta: 0,
+                referenceType: "receipt",
+                referenceId: nextDocument.id,
+                note: `receipt void restock ${nextDocument.id}`,
+                enforceAvailable: false,
+            });
+        }
+    }
 
     return { document: nextDocument, voidRecord: nextVoid };
 }

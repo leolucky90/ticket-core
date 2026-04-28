@@ -1,8 +1,15 @@
 // src/lib/types/ticket.ts
 export type KnownTicketStatus = "new" | "in_progress" | "waiting_customer" | "resolved" | "closed";
-export type KnownQuoteStatus = "inspection_estimate" | "quoted" | "rejected" | "accepted";
+export type KnownQuoteStatus = "inspection_estimate" | "quoted" | "requote" | "rejected" | "accepted";
 export type TicketStatus = KnownTicketStatus | (string & {});
 export type QuoteStatus = KnownQuoteStatus | (string & {});
+
+export type TicketRepairPart = {
+    productId: string;
+    productName: string;
+    stockQty: number;
+    usedQty: number;
+};
 
 export type TicketCustomer = {
     name: string;
@@ -31,6 +38,7 @@ export type Ticket = { // Ticket 型別定義
     repairTechnicianName?: string;
     linkedUsedProductId?: string;
     linkedUsedProductName?: string;
+    repairParts?: TicketRepairPart[];
     parentCaseId?: string;
     parentCaseTitle?: string;
     relatedCaseIds?: string[];

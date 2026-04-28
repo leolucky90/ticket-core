@@ -26,6 +26,8 @@ export type SaleCaseRef = {
     caseId: string;
     caseNo: string;
     caseTitle: string;
+    statusBeforeCheckout?: string;
+    statusAfterCheckout?: string;
 };
 
 export type SaleActivityRef = {

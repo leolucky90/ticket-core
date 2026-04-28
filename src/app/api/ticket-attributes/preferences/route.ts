@@ -9,6 +9,9 @@ import {
 type UpdateTicketAttributePreferencesBody = {
     caseStatuses?: unknown;
     quoteStatuses?: unknown;
+    warrantyDurationPreset?: unknown;
+    warrantyCustomValue?: unknown;
+    warrantyCustomUnit?: unknown;
 };
 
 export async function GET() {
@@ -46,7 +49,13 @@ export async function PUT(req: Request) {
         return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    if (body.caseStatuses === undefined && body.quoteStatuses === undefined) {
+    if (
+        body.caseStatuses === undefined &&
+        body.quoteStatuses === undefined &&
+        body.warrantyDurationPreset === undefined &&
+        body.warrantyCustomValue === undefined &&
+        body.warrantyCustomUnit === undefined
+    ) {
         return NextResponse.json({ error: "No updatable fields" }, { status: 400 });
     }
 
@@ -55,6 +64,9 @@ export async function PUT(req: Request) {
         updatedBy: session.uid,
         caseStatuses: body.caseStatuses,
         quoteStatuses: body.quoteStatuses,
+        warrantyDurationPreset: body.warrantyDurationPreset,
+        warrantyCustomValue: body.warrantyCustomValue,
+        warrantyCustomUnit: body.warrantyCustomUnit,
     });
 
     return NextResponse.json({ ok: true, preferences });

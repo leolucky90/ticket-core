@@ -85,9 +85,11 @@ Path: `src/lib/services`
 - relationship sync logic
 - relationship-heavy read pages should prefer shared read-model aggregators over route-local per-entity fan-out queries
 - read-heavy catalog/domain lookups should prefer focused service caching/invalidation helpers over repeated route-load fetches
+- heavy workflow routes should split base data and deferred data; deferred payloads should be segmented by actual UI intent (for example activities vs used products), not one large catch-all payload
 - detail pages that join multiple domains should prefer one focused detail read-model service, then let routes consume that aggregate
 - dashboard / workspace routes should prefer one focused route-data read-model service over page-local service orchestration
 - write-side route actions should prefer focused `merchant/*-write.service.ts` wrappers over direct action imports from `src/lib/services/commerce.ts`
+- case creation that links an existing customer must use company-scoped `customerId` / `existingCustomerId`; name / phone keywords are search inputs only and must not become the unique relationship key
 - account settings / profile pages should prefer one focused read-model service plus one focused write wrapper, instead of parsing auth metadata / settings forms directly inside routes
 - auth account summary、business profile、regional receipt settings 應維持分離；不要再把登入身分、公司主資料、地區單據欄位混成同一份 route-local state
 - checkout / POS 應透過 focused selector / document helper 讀取可結帳案件與地區化單據設定；不要把 TW / AU 欄位、案件 eligibility 判斷寫死在 route 或 page-local string compare
@@ -137,6 +139,9 @@ Path: `src/app`
 
 - important flows must provide visible processing feedback
 - route change / page transition should prefer shared progress/loading baseline over page-local silent waits
+- search/filter/list queries should run on explicit submit or clear actions; avoid pre-query snapshot fetches before user intent
+- heavy list/tab links should prefer `prefetch={false}` when prefetch commonly triggers expensive route-data reads
+- shared merchant shell links and action-link helpers should keep prefetch disabled by default unless a route is proven lightweight
 - save / update / delete / builder save / upload / auth / async settings sync should not be silent
 - spinner / overlay / processing notice should prefer shared helpers in:
   - `src/components/ui/processing-indicator.tsx`
@@ -262,6 +267,8 @@ Company C customer:
 - Firestore collection path 暫時維持 `cases`
 - 新 code 不要再擴散新的 `case*` 主型別
 - UI 中文可顯示為「案件」，英文可顯示為 `Tickets`
+- canonical quote status 包含 `requote`（UI：再次報價）；canonical repair completion status 沿用 `resolved`（UI：完成維修），不要另建語意重複的完成維修 status
+- 維修配件 canonical field 是 Ticket `repairParts[]`，每筆以 inventory product `productId` + `usedQty` 表示；儲存維修資訊時依差額調整庫存，不要用單一 `linkedUsedProduct*` 取代維修配件清單
 
 ### Customer
 
@@ -817,6 +824,7 @@ merchant zone 要重構成 unified page shell system。
 ### Read / Write Optimization
 
 - minimize Firebase reads/writes
+- every new feature/change should include read-cost awareness by default (query scope, timing, prefetch behavior, cache/invalidation), so teams do not rely on later large-scale optimization passes
 - reduce duplicate queries
 - reduce repeated page-load fetches
 - centralize relationship sync logic

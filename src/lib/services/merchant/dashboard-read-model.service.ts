@@ -1,7 +1,7 @@
 import "server-only";
 import { getDashboardBundle } from "@/lib/services/commerce";
 import { getCatalogDimensionBundle, listCatalogSuppliers } from "@/lib/services/merchant/catalog-service";
-import { queryCompanyCustomersPage } from "@/lib/services/merchant/customer-read-model.service";
+import { listCompanyCustomers, queryCompanyCustomersPage } from "@/lib/services/merchant/customer-read-model.service";
 import { queryActivitiesPage } from "@/lib/services/merchant/activity-read-model.service";
 import { listRepairTechnicians } from "@/lib/services/repair-technician.service";
 import { queryTicketsPage } from "@/lib/services/ticket";
@@ -38,7 +38,7 @@ function emptyDimensionBundle(): DimensionPickerBundle {
 
 export async function getMerchantDashboardRouteData(params: DashboardRouteQuery) {
     const needsCaseSupport = params.tab === "cases";
-    const needsInventorySupport = params.tab === "inventory" || params.tab === "marketing";
+    const needsInventorySupport = params.tab === "cases" || params.tab === "inventory" || params.tab === "marketing";
     const needsMarketingSupport = params.tab === "marketing";
     const needsCustomerSupport = params.tab === "customers";
     const needsActivitySupport = params.tab === "activities";
@@ -51,7 +51,16 @@ export async function getMerchantDashboardRouteData(params: DashboardRouteQuery)
         activityKeyword: params.activityKeyword,
         productKeyword: params.productKeyword,
         brandKeyword: params.brandKeyword,
-        scope: params.tab === "dashboard" ? "full" : params.tab === "marketing" ? "marketing" : params.tab === "inventory" ? "inventory" : "basic",
+        scope:
+            params.tab === "dashboard"
+                ? "full"
+                : params.tab === "marketing"
+                  ? "marketing"
+                  : params.tab === "cases"
+                    ? "cases"
+                    : needsInventorySupport
+                      ? "inventory"
+                      : "basic",
     });
 
     const companyId = typeof bundle.companyId === "string" ? bundle.companyId.trim() : "";
@@ -59,6 +68,7 @@ export async function getMerchantDashboardRouteData(params: DashboardRouteQuery)
     const [
         customerPage,
         casePage,
+        caseCustomerLookup,
         activityPage,
         repairTechnicians,
         usedProductTypeSettings,
@@ -83,6 +93,7 @@ export async function getMerchantDashboardRouteData(params: DashboardRouteQuery)
                   cursor: params.caseCursor || undefined,
               })
             : Promise.resolve({ items: [], pageSize: params.casePageSize, nextCursor: "", hasNextPage: false }),
+        needsCaseSupport ? listCompanyCustomers() : Promise.resolve([]),
         needsActivitySupport
             ? queryActivitiesPage({
                   keyword: params.activityKeyword,
@@ -106,6 +117,7 @@ export async function getMerchantDashboardRouteData(params: DashboardRouteQuery)
 
     return {
         bundle,
+        caseCustomerLookup,
         customerPage,
         casePage,
         activityPage,

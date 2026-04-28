@@ -53,6 +53,7 @@ export function SidebarSection({ group, collapsed = false, isActive, onNavigate 
                         <Link
                             key={item.id}
                             href={item.href}
+                            prefetch={false}
                             title={collapsed ? item.label : undefined}
                             onClick={onNavigate}
                             className={cn(

@@ -32,6 +32,8 @@ export async function getReceiptDocumentsRouteData(params?: {
     keyword?: string;
     status?: InvoiceStatus | "all";
     limit?: number;
+    issuedAtFrom?: string;
+    issuedAtTo?: string;
 }): Promise<ReceiptDocumentsRouteData | null> {
     const scope = await resolveCompanySettingsScope();
     if (!scope) return null;
@@ -41,6 +43,8 @@ export async function getReceiptDocumentsRouteData(params?: {
         keyword: params?.keyword,
         status: params?.status,
         limit: params?.limit,
+        issuedAtFrom: params?.issuedAtFrom,
+        issuedAtTo: params?.issuedAtTo,
     });
 
     return {

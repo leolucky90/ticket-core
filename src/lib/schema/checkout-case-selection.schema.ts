@@ -7,6 +7,14 @@ export type CheckoutCaseSelection = {
     caseTitle: string;
     deviceLabel: string;
     status: string;
+    repairAmount: number;
+    inspectionFee: number;
+    pendingFee: number;
+    repairParts: Array<{
+        productId: string;
+        productName: string;
+        usedQty: number;
+    }>;
     updatedAt: number;
 };
 
@@ -31,6 +39,23 @@ export function normalizeCheckoutCaseSelection(input: Partial<CheckoutCaseSelect
         caseTitle: sanitizeText(input.caseTitle, 240),
         deviceLabel: sanitizeText(input.deviceLabel, 240),
         status: sanitizeText(input.status, 80),
+        repairAmount: Math.max(0, Math.round(Number(input.repairAmount ?? 0))),
+        inspectionFee: Math.max(0, Math.round(Number(input.inspectionFee ?? 0))),
+        pendingFee: Math.max(0, Math.round(Number(input.pendingFee ?? 0))),
+        repairParts: Array.isArray(input.repairParts)
+            ? input.repairParts
+                  .map((row) => {
+                      if (!row || typeof row !== "object") return null;
+                      const part = row as Record<string, unknown>;
+                      const productId = sanitizeText(String(part.productId ?? ""), 120);
+                      const productName = sanitizeText(String(part.productName ?? ""), 240) || productId;
+                      const usedQty = Math.max(1, Math.round(Number(part.usedQty ?? 1)));
+                      if (!productId && !productName) return null;
+                      return { productId, productName, usedQty };
+                  })
+                  .filter((row): row is { productId: string; productName: string; usedQty: number } => row !== null)
+                  .slice(0, 30)
+            : [],
         updatedAt,
     };
 }
@@ -42,6 +67,14 @@ export function createCheckoutCaseSelectionFromTicket(ticket: Ticket): CheckoutC
         caseTitle: `${ticket.device.name} ${ticket.device.model}`.trim() || sanitizeText(ticket.title, 240),
         deviceLabel: `${sanitizeText(ticket.device.name, 120)} ${sanitizeText(ticket.device.model, 120)}`.trim(),
         status: sanitizeText(ticket.status, 80),
+        repairAmount: Math.max(0, Math.round(ticket.repairAmount ?? 0)),
+        inspectionFee: Math.max(0, Math.round(ticket.inspectionFee ?? 0)),
+        pendingFee: Math.max(0, Math.round(ticket.pendingFee ?? 0)),
+        repairParts: (ticket.repairParts ?? []).map((part) => ({
+            productId: sanitizeText(part.productId, 120),
+            productName: sanitizeText(part.productName, 240),
+            usedQty: Math.max(1, Math.round(part.usedQty ?? 1)),
+        })),
         updatedAt: ticket.updatedAt,
     });
 }

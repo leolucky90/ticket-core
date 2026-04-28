@@ -17,6 +17,7 @@ type CompanyShellLabels = {
     activities: string;
     consignments: string;
     marketing: string;
+    attributeSettings: string;
     showcaseSettings: string;
     dashboardSettings: string;
     staff: string;
@@ -88,6 +89,7 @@ export function buildCompanySidebarGroups(labels: CompanyShellLabels): MerchantS
             title: labels.storeGroup,
             items: [
                 { id: "marketing", label: labels.marketing, href: "/dashboard?tab=marketing", icon: "building" },
+                { id: "marketing-attributes", label: labels.attributeSettings, href: "/dashboard/marketing/attributes", icon: "settings" },
                 { id: "showcase-builder", label: labels.showcaseSettings, href: "/settings/showcase", icon: "settings" },
                 { id: "dashboard-settings", label: labels.dashboardSettings, href: "/settings/dashboard", icon: "settings" },
             ],

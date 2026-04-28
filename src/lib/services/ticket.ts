@@ -1,6 +1,6 @@
 import "server-only";
 import { FieldPath } from "firebase-admin/firestore";
-import type { KnownTicketStatus, QuoteStatus, Ticket, TicketStatus } from "@/lib/types/ticket";
+import type { KnownTicketStatus, QuoteStatus, Ticket, TicketRepairPart, TicketStatus } from "@/lib/types/ticket";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth-enterprise/session.server";
@@ -12,11 +12,20 @@ import {
     DEFAULT_QUOTE_STATUSES,
     getTicketAttributePreferences,
 } from "@/lib/services/ticketAttributes";
+import { adjustInventory, getInventoryByProductId } from "@/lib/services/inventory";
 import type { CursorPageResult } from "@/lib/types/pagination";
 
 const memory: { ticketsByCompany: Record<string, Ticket[]> } = { ticketsByCompany: {} };
 const READ_CACHE_TTL_MS = 30_000;
+const PAGE_QUERY_CACHE_TTL_MS = 15_000;
 const readCacheTouchedAt: Record<string, number> = {};
+const ticketPageQueryCache: Record<
+    string,
+    {
+        touchedAt: number;
+        page: CursorPageResult<Ticket>;
+    }
+> = {};
 
 const MAX_TEXT = 120;
 const MAX_ADDRESS = 300;
@@ -61,6 +70,8 @@ type TicketPageQuery = {
     cursor?: string;
 };
 
+class TicketInputError extends Error {}
+
 function now() {
     return Date.now();
 }
@@ -71,6 +82,11 @@ function id(prefix = "c") {
 
 function toStr(v: unknown): string {
     return typeof v === "string" ? v.trim() : "";
+}
+
+function toFiniteNumber(value: unknown, fallback = 0): number {
+    const raw = typeof value === "number" ? value : Number(toStr(value));
+    return Number.isFinite(raw) ? raw : fallback;
 }
 
 function safeText(value: string, max: number): string {
@@ -124,6 +140,87 @@ function normalizeCaseIdList(value: unknown): string[] {
         if (ids.length >= 50) break;
     }
     return ids;
+}
+
+function normalizeRepairParts(value: unknown): TicketRepairPart[] {
+    if (!Array.isArray(value)) return [];
+    const seen = new Set<string>();
+    const result: TicketRepairPart[] = [];
+    for (const item of value) {
+        if (!item || typeof item !== "object") continue;
+        const row = item as Record<string, unknown>;
+        const productId = safeText(toStr(row.productId), MAX_ID);
+        if (!productId || seen.has(productId)) continue;
+        seen.add(productId);
+        const productName = safeText(toStr(row.productName), MAX_TEXT) || productId;
+        const stockQty = Math.max(0, Math.round(toFiniteNumber(row.stockQty, 0)));
+        const usedQty = Math.max(1, Math.round(toFiniteNumber(row.usedQty, 1)));
+        result.push({ productId, productName, stockQty, usedQty });
+        if (result.length >= 50) break;
+    }
+    return result;
+}
+
+function normalizeRepairPartsFromForm(formData: FormData): TicketRepairPart[] | undefined {
+    if (!formData.has("repairPartProductId[]")) return undefined;
+    const productIds = formData.getAll("repairPartProductId[]");
+    const productNames = formData.getAll("repairPartProductName[]");
+    const stockQtys = formData.getAll("repairPartStockQty[]");
+    const usedQtys = formData.getAll("repairPartUsedQty[]");
+    return normalizeRepairParts(
+        productIds.map((productId, index) => ({
+            productId,
+            productName: productNames[index],
+            stockQty: stockQtys[index],
+            usedQty: usedQtys[index],
+        })),
+    );
+}
+
+function repairPartQtyMap(parts: TicketRepairPart[] | undefined): Map<string, number> {
+    const map = new Map<string, number>();
+    for (const part of parts ?? []) {
+        map.set(part.productId, (map.get(part.productId) ?? 0) + Math.max(1, Math.round(part.usedQty)));
+    }
+    return map;
+}
+
+async function validateRepairPartInventoryDelta(companyId: string, before: TicketRepairPart[] | undefined, after: TicketRepairPart[] | undefined): Promise<boolean> {
+    const beforeMap = repairPartQtyMap(before);
+    const afterMap = repairPartQtyMap(after);
+    for (const [productId, afterQty] of afterMap.entries()) {
+        const delta = afterQty - (beforeMap.get(productId) ?? 0);
+        if (delta <= 0) continue;
+        const inventory = await getInventoryByProductId(productId, companyId);
+        if (!inventory || inventory.availableQty < delta) return false;
+    }
+    return true;
+}
+
+async function syncRepairPartsInventoryDelta(input: {
+    companyId: string;
+    ticketId: string;
+    before?: TicketRepairPart[];
+    after?: TicketRepairPart[];
+}): Promise<void> {
+    const beforeMap = repairPartQtyMap(input.before);
+    const afterMap = repairPartQtyMap(input.after);
+    const ids = new Set([...beforeMap.keys(), ...afterMap.keys()]);
+    for (const productId of ids) {
+        const delta = (afterMap.get(productId) ?? 0) - (beforeMap.get(productId) ?? 0);
+        if (delta === 0) continue;
+        await adjustInventory({
+            companyId: input.companyId,
+            productId,
+            eventType: delta > 0 ? "sale_out" : "return_in",
+            qty: Math.abs(delta),
+            onHandDelta: delta > 0 ? -delta : Math.abs(delta),
+            referenceType: "manualAdjustment",
+            referenceId: input.ticketId,
+            note: delta > 0 ? `Repair parts used by case ${input.ticketId}` : `Repair parts returned by case ${input.ticketId}`,
+            enforceAvailable: delta > 0,
+        });
+    }
 }
 
 function parseQuoteStatus(value: unknown): QuoteStatus {
@@ -200,6 +297,7 @@ function normalizeTicket(input: Partial<Ticket> & { id: string }): Ticket {
     const repairTechnicianName = safeText(toStr(extra.repairTechnicianName), MAX_TEXT);
     const linkedUsedProductId = safeText(toStr(extra.linkedUsedProductId), MAX_ID);
     const linkedUsedProductName = safeText(toStr(extra.linkedUsedProductName), MAX_TEXT);
+    const repairParts = normalizeRepairParts(extra.repairParts);
     const parentCaseId = safeText(toStr(extra.parentCaseId), MAX_ID);
     const parentCaseTitle = safeText(toStr(extra.parentCaseTitle), MAX_TEXT);
     const relatedCaseIds = normalizeCaseIdList(extra.relatedCaseIds);
@@ -227,6 +325,7 @@ function normalizeTicket(input: Partial<Ticket> & { id: string }): Ticket {
         repairTechnicianName: repairTechnicianName || undefined,
         linkedUsedProductId: linkedUsedProductId || undefined,
         linkedUsedProductName: linkedUsedProductName || undefined,
+        repairParts: repairParts.length > 0 ? repairParts : undefined,
         parentCaseId: parentCaseId || undefined,
         parentCaseTitle: parentCaseTitle || undefined,
         relatedCaseIds: relatedCaseIds.length > 0 ? relatedCaseIds : undefined,
@@ -372,10 +471,31 @@ function touchReadCache(companyId: string): void {
     readCacheTouchedAt[companyId] = Date.now();
 }
 
+function buildTicketPageQueryCacheKey(companyId: string, params: TicketPageQuery, pageSize: number): string {
+    const keyword = safeText(params.keyword ?? "", 120).toLowerCase();
+    const status = safeText(params.status ?? "all", MAX_STATUS);
+    const order = params.order === "earliest" ? "earliest" : "latest";
+    const cursor = safeText(params.cursor ?? "", 240);
+    return [companyId, keyword, status, order, String(pageSize), cursor].join("|");
+}
+
+function hasFreshTicketPageQueryCache(key: string): boolean {
+    const touchedAt = ticketPageQueryCache[key]?.touchedAt ?? 0;
+    return touchedAt > 0 && Date.now() - touchedAt <= PAGE_QUERY_CACHE_TTL_MS;
+}
+
+function clearTicketPageQueryCache(companyId: string): void {
+    const prefix = `${companyId}|`;
+    for (const key of Object.keys(ticketPageQueryCache)) {
+        if (key.startsWith(prefix)) delete ticketPageQueryCache[key];
+    }
+}
+
 function upsertMemoryTicket(companyId: string, ticket: Ticket): void {
     const list = memory.ticketsByCompany[companyId] ?? [];
     memory.ticketsByCompany[companyId] = [ticket, ...list.filter((item) => item.id !== ticket.id)];
     touchReadCache(companyId);
+    clearTicketPageQueryCache(companyId);
 }
 
 function companyCasesRef(db: Awaited<ReturnType<typeof getFirestoreDb>>, companyId: string) {
@@ -512,6 +632,7 @@ async function listFromFirebase(companyId: string): Promise<Ticket[] | null> {
     );
     memory.ticketsByCompany[companyId] = rows;
     touchReadCache(companyId);
+    clearTicketPageQueryCache(companyId);
     return rows;
 }
 
@@ -643,6 +764,36 @@ async function findOrCreateCustomerId(
     return customerId;
 }
 
+async function getExistingCustomerForCase(
+    db: NonNullable<Awaited<ReturnType<typeof getFirestoreDb>>>,
+    companyId: string,
+    customerId: string,
+): Promise<CompanyCustomerDoc> {
+    const normalizedId = safeText(customerId, MAX_ID);
+    if (!normalizedId) throw new TicketInputError("missing customer id");
+
+    const snap = await companyCustomersRef(db, companyId).doc(normalizedId).get();
+    if (!snap.exists) throw new TicketInputError("customer not found");
+    const data = (snap.data() ?? {}) as Partial<CompanyCustomerDoc>;
+    const name = safeText(data.name ?? "", MAX_TEXT);
+    const phone = safeText(data.phone ?? "", MAX_TEXT);
+    if (!name || !phone) throw new TicketInputError("customer profile incomplete");
+
+    return {
+        id: normalizedId,
+        companyId,
+        userUid: safeText(data.userUid ?? "", MAX_ID) || undefined,
+        name,
+        phone,
+        address: safeText(data.address ?? "", MAX_ADDRESS),
+        email: normalizeLowerEmail(data.email ?? ""),
+        emailLower: normalizeLowerEmail(data.emailLower ?? data.email ?? ""),
+        createdAt: typeof data.createdAt === "number" ? data.createdAt : now(),
+        updatedAt: typeof data.updatedAt === "number" ? data.updatedAt : now(),
+        lastCaseAt: typeof data.lastCaseAt === "number" ? data.lastCaseAt : undefined,
+    };
+}
+
 async function createInMemory(
     companyId: string,
     params: {
@@ -650,6 +801,7 @@ async function createInMemory(
         customerPhone: string;
         customerAddress: string;
         customerEmail: string;
+        customerId?: string;
         deviceName: string;
         deviceModel: string;
         repairReason: string;
@@ -659,6 +811,7 @@ async function createInMemory(
         repairTechnicianName?: string;
         linkedUsedProductId?: string;
         linkedUsedProductName?: string;
+        repairParts?: TicketRepairPart[];
         parentCaseId?: string;
         parentCaseTitle?: string;
         relatedCaseIds?: string[];
@@ -702,7 +855,7 @@ async function createInMemory(
         pendingFee: computePendingFee(params.repairAmount, params.inspectionFee),
         quoteStatus: params.quoteStatus,
         companyId,
-        customerId: id("cx"),
+        customerId: params.customerId || id("cx"),
         createdAt: ts,
         updatedAt: ts,
     };
@@ -717,6 +870,7 @@ async function createInFirebase(
         customerPhone: string;
         customerAddress: string;
         customerEmail: string;
+        customerId?: string;
         deviceName: string;
         deviceModel: string;
         repairReason: string;
@@ -726,6 +880,7 @@ async function createInFirebase(
         repairTechnicianName?: string;
         linkedUsedProductId?: string;
         linkedUsedProductName?: string;
+        repairParts?: TicketRepairPart[];
         parentCaseId?: string;
         parentCaseTitle?: string;
         relatedCaseIds?: string[];
@@ -740,24 +895,35 @@ async function createInFirebase(
     const db = await getFirestoreDb();
     if (!db) return null;
 
-    const customerId = await findOrCreateCustomerId(db, companyId, {
-        customerName: params.customerName,
-        customerPhone: params.customerPhone,
-        customerAddress: params.customerAddress,
-        customerEmail: params.customerEmail,
-    });
+    const existingCustomerId = safeText(params.customerId ?? "", MAX_ID);
+    const existingCustomer = existingCustomerId ? await getExistingCustomerForCase(db, companyId, existingCustomerId) : null;
+    const customerId = existingCustomer
+        ? existingCustomer.id
+        : await findOrCreateCustomerId(db, companyId, {
+              customerName: params.customerName,
+              customerPhone: params.customerPhone,
+              customerAddress: params.customerAddress,
+              customerEmail: params.customerEmail,
+          });
+    const ticketCustomer = {
+        name: existingCustomer?.name ?? params.customerName,
+        phone: existingCustomer?.phone ?? params.customerPhone,
+        address: existingCustomer?.address ?? params.customerAddress,
+        email: existingCustomer?.email ?? params.customerEmail,
+        emailLower: existingCustomer?.emailLower ?? params.customerEmail,
+    };
 
     const ts = now();
     const docId = id();
     const ticket: Ticket = {
         id: docId,
-        title: composeTitle(params.customerName, params.deviceName),
+        title: composeTitle(ticketCustomer.name, params.deviceName),
         status: params.status,
         customer: {
-            name: params.customerName,
-            phone: params.customerPhone,
-            address: params.customerAddress,
-            email: params.customerEmail,
+            name: ticketCustomer.name,
+            phone: ticketCustomer.phone,
+            address: ticketCustomer.address,
+            email: ticketCustomer.email,
         },
         device: {
             name: params.deviceName,
@@ -794,17 +960,18 @@ async function createInFirebase(
         {
             id: customerId,
             companyId,
-            name: params.customerName,
-            phone: params.customerPhone,
-            address: params.customerAddress,
-            email: params.customerEmail,
-            emailLower: params.customerEmail,
+            name: ticketCustomer.name,
+            phone: ticketCustomer.phone,
+            address: ticketCustomer.address,
+            email: ticketCustomer.email,
+            emailLower: ticketCustomer.emailLower,
             updatedAt: ts,
             lastCaseAt: ts,
         },
         { merge: true },
     );
     await batch.commit();
+    upsertMemoryTicket(companyId, ticket);
     return ticket;
 }
 
@@ -825,6 +992,7 @@ async function updateInMemory(
         repairTechnicianName?: string;
         linkedUsedProductId?: string;
         linkedUsedProductName?: string;
+        repairParts?: TicketRepairPart[];
         parentCaseId?: string;
         parentCaseTitle?: string;
         relatedCaseIds?: string[];
@@ -856,6 +1024,7 @@ async function updateInMemory(
     if (params.repairTechnicianName !== undefined) target.repairTechnicianName = params.repairTechnicianName;
     if (params.linkedUsedProductId !== undefined) target.linkedUsedProductId = params.linkedUsedProductId;
     if (params.linkedUsedProductName !== undefined) target.linkedUsedProductName = params.linkedUsedProductName;
+    if (params.repairParts !== undefined) target.repairParts = params.repairParts.length > 0 ? params.repairParts : undefined;
     if (params.parentCaseId !== undefined) target.parentCaseId = params.parentCaseId;
     if (params.parentCaseTitle !== undefined) target.parentCaseTitle = params.parentCaseTitle;
     if (params.relatedCaseIds !== undefined) target.relatedCaseIds = params.relatedCaseIds;
@@ -890,6 +1059,7 @@ async function updateInFirebase(
         repairTechnicianName?: string;
         linkedUsedProductId?: string;
         linkedUsedProductName?: string;
+        repairParts?: TicketRepairPart[];
         parentCaseId?: string;
         parentCaseTitle?: string;
         relatedCaseIds?: string[];
@@ -931,6 +1101,7 @@ async function updateInFirebase(
         repairTechnicianName: params.repairTechnicianName !== undefined ? params.repairTechnicianName : current.repairTechnicianName,
         linkedUsedProductId: params.linkedUsedProductId !== undefined ? params.linkedUsedProductId : current.linkedUsedProductId,
         linkedUsedProductName: params.linkedUsedProductName !== undefined ? params.linkedUsedProductName : current.linkedUsedProductName,
+        repairParts: params.repairParts !== undefined ? (params.repairParts.length > 0 ? params.repairParts : undefined) : current.repairParts,
         parentCaseId: params.parentCaseId !== undefined ? params.parentCaseId : current.parentCaseId,
         parentCaseTitle: params.parentCaseTitle !== undefined ? params.parentCaseTitle : current.parentCaseTitle,
         relatedCaseIds: params.relatedCaseIds !== undefined ? params.relatedCaseIds : current.relatedCaseIds,
@@ -948,6 +1119,7 @@ async function updateInFirebase(
     next.title = composeTitle(next.customer.name, next.device.name);
     next.pendingFee = computePendingFee(next.repairAmount, next.inspectionFee);
     await ref.set(toFirestoreData(next), { merge: true });
+    upsertMemoryTicket(companyId, next);
     return next;
 }
 
@@ -978,6 +1150,11 @@ export async function queryTicketsPage(params: TicketPageQuery = {}): Promise<Cu
             nextCursor: "",
             hasNextPage: false,
         };
+    }
+
+    const queryCacheKey = buildTicketPageQueryCacheKey(scope.companyId, params, pageSize);
+    if (hasFreshTicketPageQueryCache(queryCacheKey)) {
+        return ticketPageQueryCache[queryCacheKey].page;
     }
 
     const direction: "asc" | "desc" = params.order === "earliest" ? "asc" : "desc";
@@ -1011,12 +1188,14 @@ export async function queryTicketsPage(params: TicketPageQuery = {}): Promise<Cu
                 items.push(ticket);
                 if (items.length >= pageSize) {
                     const hasNextPage = index < docs.length - 1 || docs.length === batchSize;
-                    return {
+                    const page = {
                         items,
                         pageSize,
                         nextCursor: hasNextPage && lastCursorInBatch ? encodeTicketCursorValue(lastCursorInBatch) : "",
                         hasNextPage,
                     };
+                    ticketPageQueryCache[queryCacheKey] = { touchedAt: Date.now(), page };
+                    return page;
                 }
             }
 
@@ -1024,12 +1203,14 @@ export async function queryTicketsPage(params: TicketPageQuery = {}): Promise<Cu
             query = buildBaseQuery().startAfter(lastCursorInBatch.updatedAt, lastCursorInBatch.id);
         }
 
-        return {
+        const page = {
             items,
             pageSize,
             nextCursor: "",
             hasNextPage: false,
         };
+        ticketPageQueryCache[queryCacheKey] = { touchedAt: Date.now(), page };
+        return page;
     }
 
     const ordered = listFromMemory(scope.companyId)
@@ -1048,12 +1229,14 @@ export async function queryTicketsPage(params: TicketPageQuery = {}): Promise<Cu
     const items = ordered.slice(startIndex, startIndex + pageSize);
     const lastItem = items.at(-1);
     const hasNextPage = startIndex + pageSize < ordered.length;
-    return {
+    const page = {
         items,
         pageSize,
         nextCursor: hasNextPage && lastItem ? encodeTicketCursorValue({ updatedAt: lastItem.updatedAt, id: lastItem.id }) : "",
         hasNextPage,
     };
+    ticketPageQueryCache[queryCacheKey] = { touchedAt: Date.now(), page };
+    return page;
 }
 
 export async function listTicketsByCustomerEmail(email: string, companyId?: string | null): Promise<Ticket[]> {
@@ -1097,6 +1280,56 @@ export async function setTicketStatusById(ticketId: string, status: TicketStatus
     const updatedInMemory = await updateInMemory(scope.companyId, {
         id: cleanedId,
         status,
+    });
+    return Boolean(updatedInMemory);
+}
+
+export async function setTicketQuoteStatusById(ticketId: string, quoteStatus: QuoteStatus): Promise<boolean> {
+    const scope = await resolveSessionScope(true);
+    if (!scope) return false;
+
+    const cleanedId = safeText(ticketId, 80);
+    if (!cleanedId) return false;
+
+    try {
+        const updated = await updateInFirebase(scope.companyId, {
+            id: cleanedId,
+            quoteStatus,
+        });
+        if (updated) return true;
+    } catch {
+        // fallback to memory
+    }
+
+    const updatedInMemory = await updateInMemory(scope.companyId, {
+        id: cleanedId,
+        quoteStatus,
+    });
+    return Boolean(updatedInMemory);
+}
+
+export async function settleTicketPendingFeeById(ticketId: string): Promise<boolean> {
+    const scope = await resolveSessionScope(true);
+    if (!scope) return false;
+
+    const cleanedId = safeText(ticketId, 80);
+    if (!cleanedId) return false;
+    const current = await getTicketByIdInternal(scope.companyId, cleanedId);
+    if (!current) return false;
+
+    try {
+        const updated = await updateInFirebase(scope.companyId, {
+            id: cleanedId,
+            inspectionFee: current.repairAmount,
+        });
+        if (updated) return true;
+    } catch {
+        // fallback to memory
+    }
+
+    const updatedInMemory = await updateInMemory(scope.companyId, {
+        id: cleanedId,
+        inspectionFee: current.repairAmount,
     });
     return Boolean(updatedInMemory);
 }
@@ -1162,6 +1395,7 @@ export async function createWarrantyCaseFromExistingCase(input: { sourceCaseId: 
             );
         }
         await batch.commit();
+        upsertMemoryTicket(scope.companyId, nextTicket);
         return nextTicket;
     }
 
@@ -1185,6 +1419,9 @@ export async function createTicket(formData: FormData): Promise<void> {
     const ticketAttributePreferences = await getTicketAttributePreferences({ tenantId: ensuredScope.companyId });
     const allowedCaseStatuses = ticketAttributePreferences.caseStatuses;
     const allowedQuoteStatuses = ticketAttributePreferences.quoteStatuses;
+    const customerMode = safeText(toStr(formData.get("customerMode")), 20) === "existing" ? "existing" : "new";
+    const existingCustomerId = safeText(toStr(formData.get("existingCustomerId")), MAX_ID);
+    if (customerMode === "existing" && !existingCustomerId) redirectWithFlash("invalid");
 
     const validated = validateInput({
         customerName: toStr(formData.get("customerName")),
@@ -1218,6 +1455,7 @@ export async function createTicket(formData: FormData): Promise<void> {
     const caseType = safeText(toStr(formData.get("caseType")), MAX_STATUS);
     const payload = {
         ...ensuredValidated,
+        customerId: customerMode === "existing" ? existingCustomerId : undefined,
         status: selectedCaseStatus,
         quoteStatus: selectedQuoteStatus,
         repairTechnicianId: repairTechnicianId || undefined,
@@ -1235,7 +1473,8 @@ export async function createTicket(formData: FormData): Promise<void> {
     try {
         createdTicket = await createInFirebase(ensuredScope.companyId, payload);
         if (!createdTicket) createdTicket = await createInMemory(ensuredScope.companyId, payload);
-    } catch {
+    } catch (error) {
+        if (error instanceof TicketInputError) redirectWithFlash("invalid");
         createdTicket = await createInMemory(ensuredScope.companyId, payload);
     }
 
@@ -1286,6 +1525,11 @@ export async function updateTicket(formData: FormData): Promise<void> {
         redirectWithFlash("invalid");
     }
 
+    const currentTicket = await getTicketByIdInternal(ensuredScope.companyId, ticketId);
+    if (!currentTicket || currentTicket.status === "closed") {
+        redirectWithFlash("invalid");
+    }
+
     if (status !== null && !isAllowedStatus(status, allowedCaseStatuses)) {
         redirectWithFlash("invalid");
     }
@@ -1317,6 +1561,7 @@ export async function updateTicket(formData: FormData): Promise<void> {
         repairTechnicianName: getOptional("repairTechnicianName", MAX_TEXT),
         linkedUsedProductId: getOptional("linkedUsedProductId", MAX_ID),
         linkedUsedProductName: getOptional("linkedUsedProductName", MAX_TEXT),
+        repairParts: normalizeRepairPartsFromForm(formData),
         parentCaseId: getOptional("parentCaseId", MAX_ID),
         parentCaseTitle: getOptional("parentCaseTitle", MAX_TEXT),
         relatedCaseIds: formData.has("relatedCaseIds[]") ? normalizeCaseIdList(formData.getAll("relatedCaseIds[]")) : undefined,
@@ -1335,12 +1580,33 @@ export async function updateTicket(formData: FormData): Promise<void> {
         redirectWithFlash("invalid");
     }
 
+    const currentTicketBeforeRepairParts = payload.repairParts !== undefined ? currentTicket : null;
+    if (
+        payload.repairParts !== undefined &&
+        !(await validateRepairPartInventoryDelta(ensuredScope.companyId, currentTicketBeforeRepairParts?.repairParts, payload.repairParts))
+    ) {
+        redirectWithFlash("invalid");
+    }
+
     let updatedTicket: Ticket | null = null;
     try {
         updatedTicket = await updateInFirebase(ensuredScope.companyId, payload);
         if (!updatedTicket) updatedTicket = await updateInMemory(ensuredScope.companyId, payload);
     } catch {
         updatedTicket = await updateInMemory(ensuredScope.companyId, payload);
+    }
+
+    if (updatedTicket && payload.repairParts !== undefined) {
+        try {
+            await syncRepairPartsInventoryDelta({
+                companyId: ensuredScope.companyId,
+                ticketId: updatedTicket.id,
+                before: currentTicketBeforeRepairParts?.repairParts,
+                after: updatedTicket.repairParts,
+            });
+        } catch {
+            // inventory movement failure should not discard the case update
+        }
     }
 
     if (updatedTicket?.linkedUsedProductId && updatedTicket.caseType === "refurbish") {

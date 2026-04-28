@@ -31,6 +31,13 @@ export function TicketAttributesSettingsPanel({ initialPreferences, lang }: Tick
     const ui = getUiText(lang).ticketAttributes;
     const [caseStatuses, setCaseStatuses] = useState<string[]>(initialPreferences.caseStatuses);
     const [quoteStatuses, setQuoteStatuses] = useState<string[]>(initialPreferences.quoteStatuses);
+    const [warrantyDurationPreset, setWarrantyDurationPreset] = useState<"3m" | "6m" | "12m" | "custom">(
+        initialPreferences.warrantyDurationPreset ?? "3m",
+    );
+    const [warrantyCustomValue, setWarrantyCustomValue] = useState<number>(initialPreferences.warrantyCustomValue ?? 3);
+    const [warrantyCustomUnit, setWarrantyCustomUnit] = useState<"week" | "month">(
+        initialPreferences.warrantyCustomUnit ?? "month",
+    );
     const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
     const [saveMessage, setSaveMessage] = useState("");
 
@@ -46,6 +53,9 @@ export function TicketAttributesSettingsPanel({ initialPreferences, lang }: Tick
         const payload = {
             caseStatuses: normalizeClientStatuses(caseStatuses),
             quoteStatuses: normalizeClientStatuses(quoteStatuses),
+            warrantyDurationPreset,
+            warrantyCustomValue,
+            warrantyCustomUnit,
         };
 
         if (payload.caseStatuses.length === 0 || payload.quoteStatuses.length === 0) {
@@ -74,6 +84,9 @@ export function TicketAttributesSettingsPanel({ initialPreferences, lang }: Tick
 
             setCaseStatuses(data.preferences.caseStatuses);
             setQuoteStatuses(data.preferences.quoteStatuses);
+            setWarrantyDurationPreset(data.preferences.warrantyDurationPreset ?? "3m");
+            setWarrantyCustomValue(data.preferences.warrantyCustomValue ?? 3);
+            setWarrantyCustomUnit(data.preferences.warrantyCustomUnit ?? "month");
             setSaveStatus("saved");
             setSaveMessage(ui.saved);
         } catch (error) {
@@ -177,6 +190,59 @@ export function TicketAttributesSettingsPanel({ initialPreferences, lang }: Tick
                         {ui.addQuoteStatus}
                     </Button>
                 </div>
+            </MerchantSectionCard>
+
+            <MerchantSectionCard title={ui.warrantyDurationTitle} bodyClassName="grid gap-3">
+                <label className="grid gap-1">
+                    <span className="text-xs text-[rgb(var(--muted))]">{ui.warrantyDurationLabel}</span>
+                    <select
+                        className="h-10 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 text-sm"
+                        value={warrantyDurationPreset}
+                        onChange={(event) => {
+                            setSaveStatus("idle");
+                            setSaveMessage("");
+                            setWarrantyDurationPreset(event.target.value as "3m" | "6m" | "12m" | "custom");
+                        }}
+                    >
+                        <option value="3m">{ui.warrantyOption3m}</option>
+                        <option value="6m">{ui.warrantyOption6m}</option>
+                        <option value="12m">{ui.warrantyOption12m}</option>
+                        <option value="custom">{ui.warrantyOptionCustom}</option>
+                    </select>
+                </label>
+                {warrantyDurationPreset === "custom" ? (
+                    <div className="grid gap-2 md:grid-cols-2">
+                        <label className="grid gap-1">
+                            <span className="text-xs text-[rgb(var(--muted))]">{ui.warrantyCustomValueLabel}</span>
+                            <Input
+                                type="number"
+                                min={1}
+                                max={120}
+                                value={warrantyCustomValue}
+                                onChange={(event) => {
+                                    setSaveStatus("idle");
+                                    setSaveMessage("");
+                                    setWarrantyCustomValue(Math.max(1, Math.min(120, Number(event.target.value || "1"))));
+                                }}
+                            />
+                        </label>
+                        <label className="grid gap-1">
+                            <span className="text-xs text-[rgb(var(--muted))]">{ui.warrantyCustomUnitLabel}</span>
+                            <select
+                                className="h-10 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--panel2))] px-3 text-sm"
+                                value={warrantyCustomUnit}
+                                onChange={(event) => {
+                                    setSaveStatus("idle");
+                                    setSaveMessage("");
+                                    setWarrantyCustomUnit(event.target.value === "week" ? "week" : "month");
+                                }}
+                            >
+                                <option value="week">{ui.warrantyUnitWeek}</option>
+                                <option value="month">{ui.warrantyUnitMonth}</option>
+                            </select>
+                        </label>
+                    </div>
+                ) : null}
             </MerchantSectionCard>
 
             <div className="flex flex-wrap items-center gap-2">

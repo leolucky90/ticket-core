@@ -4,6 +4,7 @@ import { listActivities } from "@/lib/services/merchant/activity-read-model.serv
 import { listActivityPurchases, listCompanyCustomers } from "@/lib/services/merchant/customer-read-model.service";
 import { listSales } from "@/lib/services/sales";
 import { listTickets } from "@/lib/services/ticket";
+import { getTicketAttributePreferences } from "@/lib/services/ticketAttributes";
 import {
     isActivityPurchaseLinkedToCustomer,
     isSaleLinkedToCustomer,
@@ -25,6 +26,7 @@ import type {
 } from "@/lib/types/entities";
 import type { Sale } from "@/lib/types/sale";
 import type { Ticket } from "@/lib/types/ticket";
+import type { TicketAttributePreferences } from "@/lib/types/ticketAttributes";
 
 type ActivityPurchase = Awaited<ReturnType<typeof listActivityPurchases>>[number];
 type ActivityDoc = Awaited<ReturnType<typeof listActivities>>[number];
@@ -58,6 +60,7 @@ type CustomerRelationshipSourceBundle = {
     sales: Sale[];
     activities: ActivityDoc[];
     purchases: ActivityPurchase[];
+    ticketAttributePreferences: TicketAttributePreferences | null;
 };
 
 function normalizeActivityName(value: string | undefined): string {
@@ -116,8 +119,15 @@ const loadCustomerRelationshipSourceBundle = cache(async (): Promise<CustomerRel
         listActivities(),
         listActivityPurchases(),
     ]);
+    const tenantId =
+        tickets.find((item) => (item.companyId ?? "").trim())?.companyId ??
+        customers.find((item) => (item.companyId ?? "").trim())?.companyId ??
+        "";
+    const ticketAttributePreferences = tenantId
+        ? await getTicketAttributePreferences({ tenantId }).catch(() => null)
+        : null;
 
-    return { customers, tickets, sales, activities, purchases };
+    return { customers, tickets, sales, activities, purchases, ticketAttributePreferences };
 });
 
 function buildCustomerRelationshipSnapshot(params: {
@@ -126,8 +136,9 @@ function buildCustomerRelationshipSnapshot(params: {
     sales: Sale[];
     activities: ActivityDoc[];
     purchases: ActivityPurchase[];
+    ticketAttributePreferences: TicketAttributePreferences | null;
 }): CustomerRelationshipSnapshot {
-    const { customer, tickets, sales, activities, purchases } = params;
+    const { customer, tickets, sales, activities, purchases, ticketAttributePreferences } = params;
     const customerTickets = listTicketsForCustomer(customer, tickets);
     const customerSales = sales.filter((sale) => isSaleLinkedToCustomer(customer, sale));
     const customerPurchases = purchases.filter((purchase) => isActivityPurchaseLinkedToCustomer(customer, purchase));
@@ -244,10 +255,21 @@ function buildCustomerRelationshipSnapshot(params: {
         });
     }
 
-    const warrantyTickets = customerTickets.filter((ticket) => ticket.caseType === "warranty");
+    const warrantyDurationMs = (() => {
+        const preset = ticketAttributePreferences?.warrantyDurationPreset ?? "3m";
+        if (preset === "6m") return 6 * 30 * 24 * 60 * 60 * 1000;
+        if (preset === "12m") return 12 * 30 * 24 * 60 * 60 * 1000;
+        if (preset === "custom") {
+            const value = Math.max(1, Math.round(ticketAttributePreferences?.warrantyCustomValue ?? 3));
+            const unit = ticketAttributePreferences?.warrantyCustomUnit === "week" ? "week" : "month";
+            return unit === "week" ? value * 7 * 24 * 60 * 60 * 1000 : value * 30 * 24 * 60 * 60 * 1000;
+        }
+        return 3 * 30 * 24 * 60 * 60 * 1000;
+    })();
+    const warrantyTickets = customerTickets.filter((ticket) => ticket.caseType === "warranty" || ticket.status === "closed");
     const warranties: Warranty[] = warrantyTickets.map((ticket) => {
-        const status: Warranty["status"] = ticket.status === "closed" ? "expired" : "active";
-        const expiresAt = ticket.updatedAt + 90 * 24 * 60 * 60 * 1000;
+        const expiresAt = ticket.updatedAt + warrantyDurationMs;
+        const status: Warranty["status"] = Date.now() > expiresAt ? "expired" : "active";
         return {
             id: `warranty_${ticket.id}`,
             companyId: ticket.companyId ?? "",
@@ -261,19 +283,7 @@ function buildCustomerRelationshipSnapshot(params: {
         };
     });
 
-    const diagnosticReports: DiagnosticReport[] = customerTickets.map((ticket) => ({
-        id: `diag_${ticket.id}`,
-        companyId: ticket.companyId ?? "",
-        customerId: customer.id,
-        ticketId: ticket.id,
-        reportNo: `DG-${ticket.id.replace(/[^a-zA-Z0-9]/g, "").slice(-8).toUpperCase()}`,
-        summary: ticket.repairSuggestion || ticket.repairReason || "",
-        status: ticket.status === "closed" ? "published" : "draft",
-        reportUrl: undefined,
-        insuranceClaimExportUrl: undefined,
-        createdAt: ticket.createdAt,
-        updatedAt: ticket.updatedAt,
-    }));
+    const diagnosticReports: DiagnosticReport[] = [];
 
     const campaigns: Campaign[] = activities.map((activity) => ({
         id: activity.id,
@@ -373,6 +383,7 @@ function buildCustomerRelationshipRecord(customer: CustomerProfile, source: Cust
             sales: source.sales,
             activities: source.activities,
             purchases: source.purchases,
+            ticketAttributePreferences: source.ticketAttributePreferences,
         }),
     };
 }

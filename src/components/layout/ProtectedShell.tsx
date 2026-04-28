@@ -142,7 +142,6 @@ export async function ProtectedShell({ children }: ProtectedShellProps) {
         { id: "account-security", label: labels.accountSecurity, href: "/account/security" },
         ...(shellAccountType === "company"
             ? [
-                  { id: "account-attributes", label: labels.attributeSettings, href: "/settings/account/attributes" },
                   { id: "role-settings", label: labels.roleSettings, href: "/settings/staff/roles" },
                   { id: "delete-control", label: labels.deleteControl, href: "/settings/security/delete-control" },
                   { id: "delete-logs", label: labels.deleteLogs, href: "/settings/security/delete-logs" },

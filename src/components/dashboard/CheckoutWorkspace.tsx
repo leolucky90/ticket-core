@@ -27,6 +27,7 @@ import { getCheckoutEligibleCasesForCustomer } from "@/lib/services/merchant/che
 import type { CustomerProfile } from "@/lib/types/customer";
 import type { Product } from "@/lib/types/merchant-product";
 import type { Activity } from "@/lib/types/promotion";
+import type { Sale } from "@/lib/types/sale";
 import type { Ticket } from "@/lib/types/ticket";
 import type { PredictiveSearchSuggestion } from "@/lib/types/search";
 import {
@@ -49,7 +50,12 @@ type CheckoutWorkspaceProps = {
     flash: string;
     actionTs: string;
     initialCustomerId?: string;
+    initialCaseId?: string;
     initialUsedProductId?: string;
+    initialSaleSnapshot?: Sale | null;
+    deferredActivitiesUrl?: string;
+    deferredUsedProductsUrl?: string;
+    deferredReceiptSettingsUrl?: string;
 };
 
 function formatDateTimeLocal(ts: number): string {
@@ -145,39 +151,86 @@ export function CheckoutWorkspace({
     flash,
     actionTs,
     initialCustomerId,
+    initialCaseId,
     initialUsedProductId,
+    initialSaleSnapshot,
+    deferredActivitiesUrl,
+    deferredUsedProductsUrl,
+    deferredReceiptSettingsUrl,
 }: CheckoutWorkspaceProps) {
     const lang = useUiLanguage();
     const ui = getUiText(lang).checkoutWorkspace;
+    const [deferredUsedProducts, setDeferredUsedProducts] = useState<UsedProduct[]>(usedProducts);
+    const [deferredActiveActivities, setDeferredActiveActivities] = useState<Activity[]>(activeActivities);
+    const [deferredBusinessProfile, setDeferredBusinessProfile] = useState<BusinessProfile | null>(businessProfile);
+    const [deferredReceiptSettings, setDeferredReceiptSettings] = useState<RegionalReceiptSettings | null>(regionalReceiptSettings);
+    const activitiesLoadingRef = useRef(false);
+    const usedProductsLoadingRef = useRef(false);
+    const receiptSettingsLoadingRef = useRef(false);
+    const activitiesLoadedRef = useRef(activeActivities.length > 0);
+    const usedProductsLoadedRef = useRef(usedProducts.length > 0);
+    const receiptSettingsLoadedRef = useRef(businessProfile !== null || regionalReceiptSettings !== null);
     const resolvedReceiptSettings = useMemo(
         () =>
-            regionalReceiptSettings ??
-            createEmptyRegionalReceiptSettings(businessProfile?.companyId || "company", "system"),
-        [regionalReceiptSettings, businessProfile?.companyId],
+            deferredReceiptSettings ??
+            createEmptyRegionalReceiptSettings(deferredBusinessProfile?.companyId || "company", "system"),
+        [deferredReceiptSettings, deferredBusinessProfile?.companyId],
     );
 
-    const hasInitialCustomer = Boolean(initialCustomerId && customers.some((item) => item.id === initialCustomerId));
+    const saleInitialCustomerId = initialSaleSnapshot?.customerId && customers.some((item) => item.id === initialSaleSnapshot.customerId)
+        ? initialSaleSnapshot.customerId
+        : "";
+    const resolvedInitialCustomerId = saleInitialCustomerId || initialCustomerId || "";
+    const hasInitialCustomer = Boolean(resolvedInitialCustomerId && customers.some((item) => item.id === resolvedInitialCustomerId));
     const initialCustomerQuery = hasInitialCustomer
         ? (() => {
-              const hit = customers.find((item) => item.id === initialCustomerId) ?? null;
+              const hit = customers.find((item) => item.id === resolvedInitialCustomerId) ?? null;
               if (!hit) return "";
               return `${hit.name} / ${hit.phone || "-"} / ${hit.email || "-"}`;
           })()
         : "";
     const [customerMode, setCustomerMode] = useState<CheckoutCustomerMode>(hasInitialCustomer ? "customer" : "walkin");
-    const [customerId, setCustomerId] = useState(hasInitialCustomer ? initialCustomerId ?? "" : "");
+    const [customerId, setCustomerId] = useState(hasInitialCustomer ? resolvedInitialCustomerId : "");
     const [customerQuery, setCustomerQuery] = useState(initialCustomerQuery);
-    const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
+    const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>(() => {
+        const fromSale = (initialSaleSnapshot?.caseRefs ?? []).map((row) => row.caseId).filter((id) => id.length > 0);
+        if (fromSale.length > 0) return fromSale;
+        return initialCaseId ? [initialCaseId] : [];
+    });
     const [selectedPromotions, setSelectedPromotions] = useState<CheckoutPromotionSelectionDraft[]>([]);
     const [closeCase, setCloseCase] = useState(false);
-    const [paymentMethod, setPaymentMethod] = useState<"cash" | "card">("cash");
-    const [paymentStatus, setPaymentStatus] = useState<"unpaid" | "paid" | "deposit" | "installment">("paid");
+    const [paymentMethod, setPaymentMethod] = useState<"cash" | "card">(initialSaleSnapshot?.paymentMethod === "card" ? "card" : "cash");
+    const [paymentStatus, setPaymentStatus] = useState<"unpaid" | "paid" | "deposit" | "installment">(
+        initialSaleSnapshot?.paymentStatus === "unpaid" ||
+            initialSaleSnapshot?.paymentStatus === "deposit" ||
+            initialSaleSnapshot?.paymentStatus === "installment"
+            ? initialSaleSnapshot.paymentStatus
+            : "paid",
+    );
     const [checkoutAt, setCheckoutAt] = useState("");
     const [usedProductQuery, setUsedProductQuery] = useState("");
     const [usedPickerOpen, setUsedPickerOpen] = useState(false);
     const [promotionsPickerOpen, setPromotionsPickerOpen] = useState(false);
+    const appendLineNonceRef = useRef(0);
     const [lines, setLines] = useState<CheckoutLineDraft[]>(() => {
-        if (initialUsedProductId && usedProducts.some((row) => row.id === initialUsedProductId)) {
+        const saleLines = (initialSaleSnapshot?.lineItems ?? [])
+            .filter((row) => row.productName && row.qty > 0)
+            .map((row, index) => ({
+                id: `line_restore_${index}`,
+                productId: row.productId || "",
+                qty: Math.max(1, row.qty),
+                snapshotProductName: row.productName,
+                snapshotCategoryId: row.categoryId,
+                snapshotCategoryName: row.categoryName,
+                snapshotUnitPrice: row.unitPrice,
+                activityPromotionId: row.activityPromotionId,
+                activityPromotionName: row.activityPromotionName,
+                isUsedProduct: row.isUsedProduct === true,
+                usedProductId: row.usedProductId,
+            }));
+        if (saleLines.length > 0) return saleLines;
+
+        if (initialUsedProductId && deferredUsedProducts.some((row) => row.id === initialUsedProductId)) {
             return [
                 {
                     id: "line_init_used",
@@ -189,15 +242,7 @@ export function CheckoutWorkspace({
             ];
         }
 
-        return [
-            {
-                id: "line_init_0",
-                productId: products[0]?.id ?? "",
-                qty: 1,
-                isUsedProduct: false,
-                usedProductId: undefined,
-            },
-        ];
+        return [];
     });
     const [casesLoading, setCasesLoading] = useState(false);
     const caseLoadingTimeoutRef = useRef<number | null>(null);
@@ -209,8 +254,9 @@ export function CheckoutWorkspace({
         if (seen === "1") return;
         window.sessionStorage.setItem(key, "1");
         if (flash === "created") window.alert(ui.flashCreated);
+        if (flash === "rebuild") window.alert(ui.flashRebuildReady);
         if (flash === "invalid") window.alert(ui.flashInvalid);
-    }, [flash, actionTs, ui.flashCreated, ui.flashInvalid]);
+    }, [flash, actionTs, ui.flashCreated, ui.flashInvalid, ui.flashRebuildReady]);
 
     useEffect(() => {
         const frame = window.requestAnimationFrame(() => {
@@ -245,19 +291,101 @@ export function CheckoutWorkspace({
         };
     }, []);
 
+    const loadDeferredActivities = useCallback(async () => {
+        if (!deferredActivitiesUrl) return;
+        if (activitiesLoadedRef.current || activitiesLoadingRef.current) return;
+        activitiesLoadingRef.current = true;
+        try {
+            const response = await fetch(deferredActivitiesUrl, { method: "GET", cache: "no-store" });
+            if (!response.ok) return;
+            const payload = (await response.json()) as { activeActivities?: Activity[] };
+            setDeferredActiveActivities(Array.isArray(payload.activeActivities) ? payload.activeActivities : []);
+            activitiesLoadedRef.current = true;
+        } finally {
+            activitiesLoadingRef.current = false;
+        }
+    }, [deferredActivitiesUrl]);
+
+    const loadDeferredUsedProducts = useCallback(async () => {
+        if (!deferredUsedProductsUrl) return;
+        if (usedProductsLoadedRef.current || usedProductsLoadingRef.current) return;
+        usedProductsLoadingRef.current = true;
+        try {
+            const response = await fetch(deferredUsedProductsUrl, { method: "GET", cache: "no-store" });
+            if (!response.ok) return;
+            const payload = (await response.json()) as { usedProducts?: UsedProduct[] };
+            setDeferredUsedProducts(Array.isArray(payload.usedProducts) ? payload.usedProducts : []);
+            usedProductsLoadedRef.current = true;
+        } finally {
+            usedProductsLoadingRef.current = false;
+        }
+    }, [deferredUsedProductsUrl]);
+
+    const loadDeferredReceiptSettings = useCallback(async () => {
+        if (!deferredReceiptSettingsUrl) return;
+        if (receiptSettingsLoadedRef.current || receiptSettingsLoadingRef.current) return;
+        receiptSettingsLoadingRef.current = true;
+        try {
+            const response = await fetch(deferredReceiptSettingsUrl, { method: "GET", cache: "no-store" });
+            if (!response.ok) return;
+            const payload = (await response.json()) as {
+                businessProfile?: BusinessProfile | null;
+                regionalReceiptSettings?: RegionalReceiptSettings | null;
+            };
+            setDeferredBusinessProfile(payload.businessProfile ?? null);
+            setDeferredReceiptSettings(payload.regionalReceiptSettings ?? null);
+            receiptSettingsLoadedRef.current = true;
+        } finally {
+            receiptSettingsLoadingRef.current = false;
+        }
+    }, [deferredReceiptSettingsUrl]);
+
+    useEffect(() => {
+        void loadDeferredReceiptSettings();
+    }, [loadDeferredReceiptSettings]);
+
+    useEffect(() => {
+        if (!promotionsPickerOpen) return;
+        void loadDeferredActivities();
+    }, [loadDeferredActivities, promotionsPickerOpen]);
+
+    useEffect(() => {
+        if (!usedPickerOpen && !initialUsedProductId) return;
+        void loadDeferredUsedProducts();
+    }, [initialUsedProductId, loadDeferredUsedProducts, usedPickerOpen]);
+
+    useEffect(() => {
+        if (!initialUsedProductId) return;
+        const exists = lines.some((line) => line.isUsedProduct && line.usedProductId === initialUsedProductId);
+        if (exists) return;
+        if (!deferredUsedProducts.some((row) => row.id === initialUsedProductId)) return;
+        setLines((prev) => [
+            ...prev,
+            {
+                id: "line_init_used",
+                productId: initialUsedProductId,
+                qty: 1,
+                isUsedProduct: true,
+                usedProductId: initialUsedProductId,
+            },
+        ]);
+    }, [deferredUsedProducts, initialUsedProductId, lines]);
+
     const selectedCustomer = useMemo(() => customers.find((item) => item.id === customerId) ?? null, [customers, customerId]);
     const defaultCompanyCustomer = useMemo(
         () => ({
-            name: businessProfile?.displayName || businessProfile?.companyName || ui.walkin,
-            phone: businessProfile?.phone || "",
-            email: businessProfile?.email || "",
+            name: ui.walkinBuyerName,
+            phone: "",
+            email: "",
         }),
-        [businessProfile, ui.walkin],
+        [ui.walkinBuyerName],
     );
     const [checkoutDocument, setCheckoutDocument] = useState<CheckoutDocument>(() =>
         createCheckoutDocumentState({
             settings: resolvedReceiptSettings,
-            buyerName: hasInitialCustomer ? customers.find((item) => item.id === initialCustomerId)?.name ?? "" : defaultCompanyCustomer.name,
+            buyerName: hasInitialCustomer
+                ? customers.find((item) => item.id === resolvedInitialCustomerId)?.name ?? ""
+                : defaultCompanyCustomer.name,
         }),
     );
 
@@ -283,6 +411,11 @@ export function CheckoutWorkspace({
         [customerMode, selectedCustomer, tickets],
     );
     const availableCaseIdSet = useMemo(() => new Set(availableCases.map((ticket) => ticket.caseId)), [availableCases]);
+    const availableCaseMap = useMemo(() => {
+        const map = new Map<string, (typeof availableCases)[number]>();
+        for (const item of availableCases) map.set(item.caseId, item);
+        return map;
+    }, [availableCases]);
     const hasCheckoutEligibleCases = availableCases.length > 0;
     const visibleSelectedCaseIds = useMemo(
         () => selectedCaseIds.filter((caseId) => availableCaseIdSet.has(caseId)),
@@ -342,9 +475,9 @@ export function CheckoutWorkspace({
     }, [products]);
     const usedProductMap = useMemo(() => {
         const map = new Map<string, UsedProduct>();
-        for (const product of usedProducts) map.set(product.id, product);
+        for (const product of deferredUsedProducts) map.set(product.id, product);
         return map;
-    }, [usedProducts]);
+    }, [deferredUsedProducts]);
 
     const ensurePromotionSelection = useCallback((activity: Activity) => {
         setSelectedPromotions((prev) => {
@@ -359,7 +492,7 @@ export function CheckoutWorkspace({
 
     const maybeConvertLineToActivity = useCallback(
         (product: Product): Activity | null => {
-            const matchedActivities = findMatchingActivitiesForProduct(product, activeActivities);
+            const matchedActivities = findMatchingActivitiesForProduct(product, deferredActiveActivities);
             const activity = matchedActivities[0] ?? null;
             if (!activity) return null;
             if (selectedActivityIdSet.has(activity.id)) return activity;
@@ -374,18 +507,24 @@ export function CheckoutWorkspace({
             ensurePromotionSelection(activity);
             return activity;
         },
-        [activeActivities, ensurePromotionSelection, selectedActivityIdSet, ui.activityConvertPrompt],
+        [deferredActiveActivities, ensurePromotionSelection, selectedActivityIdSet, ui.activityConvertPrompt],
     );
 
     const appendLine = useCallback(
         (productId?: string, options?: { isUsedProduct?: boolean; usedProductId?: string }) => {
+            const isManualBlankAdd = !productId && !options;
+            if (isManualBlankAdd) {
+                const nowTs = Date.now();
+                if (nowTs - appendLineNonceRef.current < 220) return;
+                appendLineNonceRef.current = nowTs;
+            }
             const matchedProduct = !options?.isUsedProduct && productId ? productMap.get(productId) ?? null : null;
             const matchedActivity = matchedProduct ? maybeConvertLineToActivity(matchedProduct) : null;
             setLines((prev) => [
                 ...prev,
                 {
                     id: `line_${Date.now()}_${prev.length}`,
-                    productId: productId ?? products[0]?.id ?? "",
+                    productId: productId ?? "",
                     qty: 1,
                     activityPromotionId: matchedActivity?.id,
                     activityPromotionName: matchedActivity?.name,
@@ -394,7 +533,7 @@ export function CheckoutWorkspace({
                 },
             ]);
         },
-        [maybeConvertLineToActivity, productMap, products],
+        [maybeConvertLineToActivity, productMap],
     );
 
     const appendUsedProductLine = useCallback(
@@ -411,17 +550,23 @@ export function CheckoutWorkspace({
             lines.map((line) => {
                 const usedProduct = line.isUsedProduct ? usedProductMap.get(line.usedProductId ?? "") ?? null : null;
                 const product = line.isUsedProduct ? null : productMap.get(line.productId) ?? null;
-                const unitPrice = line.isUsedProduct ? usedProduct?.salePrice ?? usedProduct?.suggestedSalePrice ?? 0 : product?.price ?? 0;
+                const unitPrice = line.isUsedProduct
+                    ? usedProduct?.salePrice ?? usedProduct?.suggestedSalePrice ?? line.snapshotUnitPrice ?? 0
+                    : product?.price ?? line.snapshotUnitPrice ?? 0;
                 const qty = line.isUsedProduct ? 1 : Math.max(0, line.qty);
                 const subtotal = qty * Math.max(0, unitPrice);
-                return { line, product, usedProduct, unitPrice, subtotal };
+                const resolvedName = usedProduct?.name ?? product?.name ?? line.snapshotProductName ?? "";
+                const resolvedId = usedProduct?.id ?? product?.id ?? line.productId ?? "";
+                const resolvedCategoryId = product?.categoryId ?? line.snapshotCategoryId ?? "";
+                const resolvedCategoryName = product?.categoryName ?? line.snapshotCategoryName ?? "";
+                return { line, product, usedProduct, unitPrice, subtotal, resolvedName, resolvedId, resolvedCategoryId, resolvedCategoryName };
             }),
         [lines, productMap, usedProductMap],
     );
     const filteredUsedProducts = useMemo(() => {
         const q = normalizeComparable(usedProductQuery);
-        if (!q) return usedProducts.slice(0, 12);
-        return usedProducts
+        if (!q) return deferredUsedProducts.slice(0, 12);
+        return deferredUsedProducts
             .filter((item) =>
                 [item.name, item.brand, item.model, item.serialNumber ?? "", item.imeiNumber ?? "", item.grade, item.gradeLabel ?? ""]
                     .join(" ")
@@ -429,13 +574,26 @@ export function CheckoutWorkspace({
                     .includes(q),
             )
             .slice(0, 12);
-    }, [usedProductQuery, usedProducts]);
+    }, [usedProductQuery, deferredUsedProducts]);
 
-    const totalAmount = useMemo(() => lineDetails.reduce((sum, row) => sum + row.subtotal, 0), [lineDetails]);
+    const extraLineTotal = useMemo(() => lineDetails.reduce((sum, row) => sum + row.subtotal, 0), [lineDetails]);
+    const caseQuoteTotal = useMemo(
+        () => visibleSelectedCaseIds.reduce((sum, caseId) => sum + Math.max(0, availableCaseMap.get(caseId)?.repairAmount ?? 0), 0),
+        [availableCaseMap, visibleSelectedCaseIds],
+    );
+    const caseInspectionCollectedTotal = useMemo(
+        () => visibleSelectedCaseIds.reduce((sum, caseId) => sum + Math.max(0, availableCaseMap.get(caseId)?.inspectionFee ?? 0), 0),
+        [availableCaseMap, visibleSelectedCaseIds],
+    );
+    const totalAmount = useMemo(
+        () => Math.max(0, caseQuoteTotal + extraLineTotal - caseInspectionCollectedTotal),
+        [caseInspectionCollectedTotal, caseQuoteTotal, extraLineTotal],
+    );
     const hasValidLine = useMemo(
         () => lineDetails.some((row) => (row.product || row.usedProduct) && (row.line.isUsedProduct ? 1 : row.line.qty) > 0),
         [lineDetails],
     );
+    const canSubmitCheckout = hasValidLine || visibleSelectedCaseIds.length > 0;
     const toggleActivitySelection = (activity: Activity, checked: boolean) => {
         setSelectedPromotions((prev) => {
             if (checked) {
@@ -563,7 +721,7 @@ export function CheckoutWorkspace({
                     <CheckoutItemsCard
                         ui={ui}
                         lang={lang}
-                        activeActivities={activeActivities}
+                        activeActivities={deferredActiveActivities}
                         lineDetails={lineDetails}
                         filteredUsedProducts={filteredUsedProducts}
                         selectedPromotions={selectedPromotions}
@@ -627,7 +785,7 @@ export function CheckoutWorkspace({
                     <CheckoutReceiptPreviewCard
                         ui={ui}
                         locale={resolvedReceiptSettings.locale || uiLocale(lang)}
-                        businessProfile={businessProfile}
+                        businessProfile={deferredBusinessProfile}
                         settings={resolvedReceiptSettings}
                         document={checkoutDocument}
                         paymentMethod={paymentMethod}
@@ -636,15 +794,22 @@ export function CheckoutWorkspace({
                     />
 
                     <MerchantSectionCard title={ui.operationSection} description={ui.operationSectionDescription}>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="grid gap-2">
+                            <div className="text-xs text-[rgb(var(--muted))]">
+                                {ui.totalFormulaHint}
+                                {" "}
+                                ({formatMoney(caseQuoteTotal, lang)} + {formatMoney(extraLineTotal, lang)} - {formatMoney(caseInspectionCollectedTotal, lang)} = {formatMoney(totalAmount, lang)})
+                            </div>
+                            <div className="flex flex-wrap gap-2">
                             <IconTextActionButton
                                 icon={ShoppingCart}
                                 type="submit"
                                 label={ui.submitCheckout}
                                 tooltip={ui.submitCheckoutTooltip}
-                                disabled={!hasValidLine}
+                                disabled={!canSubmitCheckout}
                             />
                             <IconTextActionButton icon={Eye} href="/dashboard/receipts" label={ui.receiptsHub} tooltip={ui.receiptsHubTooltip} />
+                            </div>
                         </div>
                     </MerchantSectionCard>
                 </form>

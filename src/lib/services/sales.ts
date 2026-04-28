@@ -30,7 +30,7 @@ import { adjustInventoryLevels } from "@/lib/services/inventory";
 import { createPickupReservationsFromPromotionDrafts } from "@/lib/services/pickupReservations";
 import { evaluateCheckoutPromotions } from "@/lib/services/promotions";
 import { getUserCompanyId, getUserDoc, toAccountType } from "@/lib/services/user.service";
-import { listTickets, setTicketStatusById } from "@/lib/services/ticket";
+import { listTickets, setTicketStatusById, settleTicketPendingFeeById } from "@/lib/services/ticket";
 import { attachUsedProductToReceipt, getUsedProductById } from "@/lib/services/used-products.service";
 import { getRegionalReceiptSettings } from "@/lib/services/regional-receipt-settings.service";
 import { readCheckoutDocumentFromFormData } from "@/lib/services/checkout/document-service";
@@ -114,6 +114,13 @@ function parseOptionalTimestamp(v: unknown): number | undefined {
     const ts = Date.parse(text);
     if (!Number.isFinite(ts)) return undefined;
     return ts;
+}
+
+function parseTicketStatus(value: unknown): "new" | "in_progress" | "waiting_customer" | "resolved" | "closed" | undefined {
+    if (value === "new" || value === "in_progress" || value === "waiting_customer" || value === "resolved" || value === "closed") {
+        return value;
+    }
+    return undefined;
 }
 
 function parsePromotionEffectType(value: unknown): PromotionEffectType {
@@ -257,7 +264,7 @@ function normalizeSale(input: Partial<Sale> & { id: string }): Sale {
               })
               .slice(0, MAX_LINE_ITEMS)
         : [];
-    const caseRefs = Array.isArray(input.caseRefs)
+    const caseRefs: SaleCaseRef[] = Array.isArray(input.caseRefs)
         ? input.caseRefs
               .map((raw) => {
                   const row = raw as Partial<SaleCaseRef>;
@@ -265,9 +272,17 @@ function normalizeSale(input: Partial<Sale> & { id: string }): Sale {
                   const caseNo = safeText(toStr(row.caseNo), 60);
                   const caseTitle = safeText(toStr(row.caseTitle), MAX_TEXT);
                   if (!caseId) return null;
-                  return { caseId, caseNo, caseTitle };
+                  const statusBeforeCheckout = parseTicketStatus(row.statusBeforeCheckout);
+                  const statusAfterCheckout = parseTicketStatus(row.statusAfterCheckout);
+                  return {
+                      caseId,
+                      caseNo,
+                      caseTitle,
+                      ...(statusBeforeCheckout ? { statusBeforeCheckout } : {}),
+                      ...(statusAfterCheckout ? { statusAfterCheckout } : {}),
+                  };
               })
-              .filter((row): row is SaleCaseRef => row !== null)
+              .filter((row): row is NonNullable<typeof row> => row !== null)
               .slice(0, MAX_CASE_REFS)
         : [];
     const activityRefs = Array.isArray(input.activityRefs)
@@ -856,6 +871,23 @@ export async function queryCheckoutSalesPage(params: CheckoutSalesPageQuery = {}
     return listCheckoutSalesPageFromMemory(scope.companyId, params);
 }
 
+export async function getSaleByIdWithinCompany(companyId: string, saleId: string): Promise<Sale | null> {
+    const resolvedCompanyId = safeText(companyId, 120);
+    const resolvedSaleId = safeText(saleId, 120);
+    if (!resolvedCompanyId || !resolvedSaleId) return null;
+
+    const cached = (memory.salesByCompany[resolvedCompanyId] ?? []).find((sale) => sale.id === resolvedSaleId);
+    if (cached) return normalizeSale(cached);
+
+    const db = await getFirestoreDb();
+    if (!db) return null;
+    const snap = await companySalesRef(db, resolvedCompanyId).doc(resolvedSaleId).get();
+    if (!snap.exists) return null;
+    const next = normalizeSale({ id: snap.id, ...(snap.data() as Partial<Sale>) });
+    upsertMemorySale(resolvedCompanyId, next);
+    return next;
+}
+
 function buildReceiptNo(ts: number): string {
     const d = new Date(ts);
     const yyyy = d.getFullYear();
@@ -1141,12 +1173,15 @@ export async function createCheckoutSale(formData: FormData): Promise<void> {
         .slice(0, MAX_CASE_REFS);
     const selectedCaseIdSet = new Set(selectedCaseIds);
     const tickets = selectedCaseIds.length > 0 ? await listTickets() : [];
+    const selectedTickets = tickets.filter((ticket) => selectedCaseIdSet.has(ticket.id));
     const caseRefs: SaleCaseRef[] = tickets
         .filter((ticket) => selectedCaseIdSet.has(ticket.id))
         .map((ticket) => ({
             caseId: ticket.id,
             caseNo: buildCaseNoFromTicket(ticket),
             caseTitle: `${ticket.device.name} ${ticket.device.model}`.trim() || ticket.title,
+            statusBeforeCheckout: ticket.status,
+            statusAfterCheckout: closeCase ? "closed" : ticket.status,
         }))
         .slice(0, MAX_CASE_REFS);
     const primaryCase = caseRefs[0];
@@ -1155,7 +1190,7 @@ export async function createCheckoutSale(formData: FormData): Promise<void> {
     const lineItems = parseCheckoutLineItems(formData);
     const usedLineItems = lineItems.filter((row) => row.isUsedProduct && row.usedProductId);
 
-    if (lineItems.length === 0) {
+    if (lineItems.length === 0 && caseRefs.length === 0) {
         redirect(`/dashboard/checkout?flash=invalid&ts=${Date.now()}`);
     }
 
@@ -1170,6 +1205,8 @@ export async function createCheckoutSale(formData: FormData): Promise<void> {
     }
 
     const subtotal = lineItems.reduce((sum, row) => sum + row.subtotal, 0);
+    const caseQuoteTotal = selectedTickets.reduce((sum, ticket) => sum + Math.max(0, ticket.repairAmount), 0);
+    const caseInspectionFeeCollectedTotal = selectedTickets.reduce((sum, ticket) => sum + Math.max(0, ticket.inspectionFee), 0);
     const receiptNo = buildReceiptNo(checkoutAt);
     const receiptSettings = (await getRegionalReceiptSettings()) ?? createEmptyRegionalReceiptSettings(scope.companyId, "system");
     const checkoutDocument = readCheckoutDocumentFromFormData({
@@ -1183,12 +1220,17 @@ export async function createCheckoutSale(formData: FormData): Promise<void> {
         sourceId: receiptNo,
     });
     const pricingAdjustmentTotal = evaluatedPromotion.pricingAdjustments.reduce((sum, row) => sum + Math.max(0, row.amount), 0);
-    const amount = Math.max(0, subtotal - pricingAdjustmentTotal);
+    const amount = Math.max(0, caseQuoteTotal + subtotal - caseInspectionFeeCollectedTotal - pricingAdjustmentTotal);
     if (!Number.isFinite(amount) || amount < 0) {
         redirect(`/dashboard/checkout?flash=invalid&ts=${Date.now()}`);
     }
 
-    const title = lineItems.length === 1 ? lineItems[0].productName : `${lineItems[0].productName} 等 ${lineItems.length} 項`;
+    const title =
+        lineItems.length === 0
+            ? (primaryCase?.caseTitle || "案件結帳")
+            : lineItems.length === 1
+              ? lineItems[0].productName
+              : `${lineItems[0].productName} 等 ${lineItems.length} 項`;
     const payload: CreateSaleParams = {
         item: title,
         amount,
@@ -1229,6 +1271,11 @@ export async function createCheckoutSale(formData: FormData): Promise<void> {
     if (closeCase && caseRefs.length > 0) {
         for (const row of caseRefs) {
             await setTicketStatusById(row.caseId, "closed");
+        }
+    }
+    if (caseRefs.length > 0) {
+        for (const row of caseRefs) {
+            await settleTicketPendingFeeById(row.caseId);
         }
     }
 

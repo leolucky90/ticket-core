@@ -38,6 +38,7 @@ export function PageTabs({ tabs, className, ariaLabel = "頁面子導覽" }: Pag
                         <Link
                             key={tab.id}
                             href={tab.href}
+                            prefetch={false}
                             className={cn(
                                 "rounded-lg px-3 py-2 text-sm transition",
                                 active

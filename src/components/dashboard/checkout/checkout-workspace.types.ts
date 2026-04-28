@@ -6,6 +6,10 @@ export type CheckoutLineDraft = {
     id: string;
     productId: string;
     qty: number;
+    snapshotProductName?: string;
+    snapshotCategoryId?: string;
+    snapshotCategoryName?: string;
+    snapshotUnitPrice?: number;
     activityPromotionId?: string;
     activityPromotionName?: string;
     isUsedProduct: boolean;

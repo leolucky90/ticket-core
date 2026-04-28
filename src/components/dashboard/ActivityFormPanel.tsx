@@ -11,6 +11,7 @@ import type { Activity } from "@/lib/types/promotion";
 type ActivityEntitlementType = "replacement" | "gift" | "discount" | "service";
 type ActivityScopeType = "category" | "product";
 type ActivityEditorEffectChoice = "discount_amount" | "discount_percentage" | "gift_item" | "bundle_price" | "pickup_reservation" | "entitlement";
+type ActivityDateMode = "limited" | "unlimited";
 
 type HiddenField = {
     name: string;
@@ -192,6 +193,12 @@ function formatMoney(value: number, lang: UiLanguage) {
     return new Intl.NumberFormat(uiLocale(lang)).format(value);
 }
 
+function toActivityDateMode(value: ActivityFormValue): ActivityDateMode {
+    if (!value.endAt) return "limited";
+    if (value.endAt >= "9999-12-31") return "unlimited";
+    return "limited";
+}
+
 export function ActivityFormPanel({
     lang,
     formAction,
@@ -204,6 +211,7 @@ export function ActivityFormPanel({
     const customerCaseUi = getUiText(lang).dashboardCustomerCaseWorkspace;
     const activityUi = customerCaseUi.activities;
     const [formValue, setFormValue] = useState<ActivityFormValue>(initialValue);
+    const [dateMode, setDateMode] = useState<ActivityDateMode>(() => toActivityDateMode(initialValue));
     const effectChoice = toEffectChoice(formValue);
     const usesTarget = formValue.effectType !== "gift_item";
     const targetIsCategory = formValue.scopeType === "category";
@@ -243,6 +251,7 @@ export function ActivityFormPanel({
             {hiddenFields?.map((field) => <input key={`${field.name}:${field.value}`} type="hidden" name={field.name} value={field.value} />)}
             <input type="hidden" name="activityEffectType" value={formValue.effectType} />
             <input type="hidden" name="activityDiscountMode" value={formValue.discountMode} />
+            <input type="hidden" name="activityDateMode" value={dateMode} />
             <div className="grid gap-2 md:grid-cols-3">
                 <div className="grid gap-1">
                     <FieldLabel htmlFor={`${formIdPrefix}-activity-name`} label={activityUi.nameLabel} />
@@ -261,6 +270,25 @@ export function ActivityFormPanel({
                     />
                 </div>
                 <div className="grid gap-1">
+                    <FieldLabel htmlFor={`${formIdPrefix}-activity-date-mode`} label={activityUi.dateModeLabel} />
+                    <Select
+                        id={`${formIdPrefix}-activity-date-mode`}
+                        value={dateMode}
+                        onChange={(event) => {
+                            const nextMode = event.target.value === "unlimited" ? "unlimited" : "limited";
+                            setDateMode(nextMode);
+                            if (nextMode === "unlimited") {
+                                updateField("endAt", "");
+                            }
+                        }}
+                    >
+                        <option value="limited">{activityUi.dateModeLimited}</option>
+                        <option value="unlimited">{activityUi.dateModeUnlimited}</option>
+                    </Select>
+                </div>
+            </div>
+            {dateMode === "limited" ? (
+                <div className="grid gap-1 md:max-w-sm">
                     <FieldLabel htmlFor={`${formIdPrefix}-activity-end-at`} label={activityUi.endDateLabel} />
                     <Input
                         id={`${formIdPrefix}-activity-end-at`}
@@ -272,7 +300,7 @@ export function ActivityFormPanel({
                         required
                     />
                 </div>
-            </div>
+            ) : null}
 
             <div className="grid gap-2 md:grid-cols-3">
                 <div className="grid gap-1">

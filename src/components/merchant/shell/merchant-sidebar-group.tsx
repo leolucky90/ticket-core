@@ -51,6 +51,7 @@ export function MerchantSidebarGroup({ group, isActive }: MerchantSidebarGroupPr
                         <Link
                             key={item.id}
                             href={item.href}
+                            prefetch={false}
                             className={cn(
                                 "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition",
                                 active

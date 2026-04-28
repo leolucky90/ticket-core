@@ -21,6 +21,16 @@ type CustomerSummaryCursor = {
     id: string;
 };
 
+const CUSTOMER_SUMMARY_CACHE_TTL_MS = 15_000;
+let customerSummaryRowsCache: { touchedAt: number; rows: CompanyCustomerListRow[] } | null = null;
+const customerSummaryPageCache: Record<
+    string,
+    {
+        touchedAt: number;
+        page: CursorPageResult<CompanyCustomerListRow>;
+    }
+> = {};
+
 function toText(value: unknown, max = 160): string {
     if (typeof value !== "string") return "";
     return value.replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, max);
@@ -87,9 +97,12 @@ function compareRows(left: CompanyCustomerListRow, right: CompanyCustomerListRow
 }
 
 const loadCustomerSummaryRows = cache(async (): Promise<CompanyCustomerListRow[]> => {
+    if (customerSummaryRowsCache && Date.now() - customerSummaryRowsCache.touchedAt <= CUSTOMER_SUMMARY_CACHE_TTL_MS) {
+        return customerSummaryRowsCache.rows;
+    }
     const [customers, tickets, sales] = await Promise.all([listCompanyCustomers(), listTickets(), listSales()]);
 
-    return customers.map((customer) => {
+    const rows = customers.map((customer) => {
         const customerTickets = tickets.filter((ticket) => isTicketLinkedToCustomer(customer, ticket));
         const customerSales = sales.filter((sale) => isSaleLinkedToCustomer(customer, sale));
         const openCaseCount = customerTickets.filter((ticket) => ticket.status !== "closed").length;
@@ -105,6 +118,11 @@ const loadCustomerSummaryRows = cache(async (): Promise<CompanyCustomerListRow[]
             activitySpend: customerSales.reduce((sum, sale) => sum + Math.max(0, sale.amount), 0),
         } satisfies CompanyCustomerListRow;
     });
+    customerSummaryRowsCache = {
+        touchedAt: Date.now(),
+        rows,
+    };
+    return rows;
 });
 
 export async function listCustomerSummaryRows(params: Omit<CustomerPageQuery, "pageSize" | "cursor"> = {}): Promise<CompanyCustomerListRow[]> {
@@ -119,6 +137,17 @@ export async function listCustomerSummaryRows(params: Omit<CustomerPageQuery, "p
 export async function queryCompanyCustomersPage(params: CustomerPageQuery = {}): Promise<CursorPageResult<CompanyCustomerListRow>> {
     const pageSize = normalizePageSize(params.pageSize, 10);
     const order = params.order ?? "updated_latest";
+    const pageCacheKey = [
+        toText(params.keyword, 120).toLowerCase(),
+        params.caseState ?? "all",
+        order,
+        String(pageSize),
+        toText(params.cursor, 240),
+    ].join("|");
+    const cachedPage = customerSummaryPageCache[pageCacheKey];
+    if (cachedPage && Date.now() - cachedPage.touchedAt <= CUSTOMER_SUMMARY_CACHE_TTL_MS) {
+        return cachedPage.page;
+    }
     const decodedCursor = decodeCursor(params.cursor);
     const rows = await listCustomerSummaryRows(params);
     const startIndex = decodedCursor
@@ -131,10 +160,15 @@ export async function queryCompanyCustomersPage(params: CustomerPageQuery = {}):
     const lastItem = items.at(-1);
     const hasNextPage = startIndex + pageSize < rows.length;
 
-    return {
+    const page = {
         items,
         pageSize,
         nextCursor: hasNextPage && lastItem ? encodeCursor({ id: lastItem.customer.id, orderValue: getSortValue(lastItem, order) }) : "",
         hasNextPage,
     };
+    customerSummaryPageCache[pageCacheKey] = {
+        touchedAt: Date.now(),
+        page,
+    };
+    return page;
 }

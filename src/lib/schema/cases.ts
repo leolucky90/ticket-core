@@ -11,6 +11,12 @@ export type CaseRecord = {
     repairTechnicianName?: string;
     linkedUsedProductId?: string;
     linkedUsedProductName?: string;
+    repairParts?: Array<{
+        productId: string;
+        productName: string;
+        stockQty: number;
+        usedQty: number;
+    }>;
     parentCaseId?: string;
     parentCaseTitle?: string;
     relatedCaseIds?: string[];
@@ -51,6 +57,25 @@ function normalizeCaseIds(value: unknown): string[] {
     return ids;
 }
 
+function normalizeRepairParts(value: unknown): CaseRecord["repairParts"] {
+    if (!Array.isArray(value)) return undefined;
+    const seen = new Set<string>();
+    const rows: NonNullable<CaseRecord["repairParts"]> = [];
+    for (const item of value) {
+        if (!item || typeof item !== "object") continue;
+        const row = item as Record<string, unknown>;
+        const productId = toText(row.productId, 120);
+        if (!productId || seen.has(productId)) continue;
+        seen.add(productId);
+        const productName = toText(row.productName, 240) || productId;
+        const stockQty = Math.max(0, Math.round(Number(row.stockQty ?? 0)));
+        const usedQty = Math.max(1, Math.round(Number(row.usedQty ?? 1)));
+        rows.push({ productId, productName, stockQty, usedQty });
+        if (rows.length >= 50) break;
+    }
+    return rows.length > 0 ? rows : undefined;
+}
+
 export function normalizeCaseRecord(input: Partial<CaseRecord> & Pick<CaseRecord, "id">): CaseRecord {
     const now = Date.now();
     const createdAt = toMs(input.createdAt, now);
@@ -64,6 +89,7 @@ export function normalizeCaseRecord(input: Partial<CaseRecord> & Pick<CaseRecord
         repairTechnicianName: toText(input.repairTechnicianName, 120) || undefined,
         linkedUsedProductId: toText(input.linkedUsedProductId, 120) || undefined,
         linkedUsedProductName: toText(input.linkedUsedProductName, 240) || undefined,
+        repairParts: normalizeRepairParts(input.repairParts),
         parentCaseId: toText(input.parentCaseId, 120) || undefined,
         parentCaseTitle: toText(input.parentCaseTitle, 240) || undefined,
         relatedCaseIds: normalizeCaseIds(input.relatedCaseIds),

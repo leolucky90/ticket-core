@@ -47,7 +47,7 @@ export function IconTextActionButton(props: IconTextActionButtonProps) {
 
         return (
             <span className="group relative inline-flex">
-                <Link href={href} aria-label={label} aria-describedby={tooltipId} className={cn(BASE_CLASS, className)} {...linkProps}>
+                <Link href={href} prefetch={false} aria-label={label} aria-describedby={tooltipId} className={cn(BASE_CLASS, className)} {...linkProps}>
                     <Icon className={cn("h-4 w-4", iconClassName)} aria-hidden="true" />
                     <span>{children ?? label}</span>
                 </Link>

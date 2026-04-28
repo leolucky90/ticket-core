@@ -89,7 +89,7 @@
 | `components/merchant/search/` | 商家預測／搜尋輸入；dropdown loading / empty / error copy 已收斂到 `lib/i18n/ui-text.ts` |
 | `components/merchant/catalog/` | 目錄維度選擇等共用 UI；`DimensionPicker` 已走 shared i18n，並支援主分類／第一層子分類（第二層分類）／第二層子分類（第三層分類）／品牌／品牌分類／型號六欄選擇；brand / productType / model options 依 catalog relation 做 category-aware cascade，不在 page / form 內各自硬編欄位文案 |
 | `components/layout/` | `ProtectedShell`、`ui-language-provider`、`navigation-progress`、shared `SignOutButton` 等全站版面；跨 dashboard / showcase / shop 的登出 CTA 應優先延續 shared appearance variant；右上角帳戶選單的 `帳戶設定` 由此集中組裝 |
-| `components/dashboard/` | 儀表板大型 workspace（結帳、營銷設定、BossAdmin、品項等）；`ActivityFormPanel` 已作為 activities tab 的 shared create / edit / restart helper，`components/dashboard/checkout/` 已拆出 checkout customer / case selector / items / document settings / preview cards，checkout line item 可直接掛活動商品關聯並沿用既有 promotion / pickup reservation flow |
+| `components/dashboard/` | 儀表板大型 workspace（結帳、營銷設定、BossAdmin、品項等）；`CaseCustomerSelector` 承接 cases tab 新增案件時的「新增客戶／加入現有客戶」切換與 existing customer lookup；cases 展開列目前有案件資訊／維修資訊分頁，維修資訊固定顯示，未 accepted quote 進入時會先顯示報價狀態 gate；repair edit mode 只暴露維修人員、維修狀態、維修配件、備註、歷史摘要與報價狀態，維修配件由庫存商品搜尋加入多筆 `repairParts[]` 並可調整使用數量；`ActivityFormPanel` 已作為 activities tab 的 shared create / edit / restart helper，`components/dashboard/checkout/` 已拆出 checkout customer / case selector / items / document settings / preview cards，checkout line item 可直接掛活動商品關聯並沿用既有 promotion / pickup reservation flow |
 | `components/staff/` | 員工列表、表單、軟刪／保險庫區塊等 |
 | `components/settings/` | 刪除控制、刪除紀錄、**操作稽核**（`AuditLogsPanel`）、票務屬性、密碼表單、dashboard appearance-only `SecuritySettingsPanel` / `ThemeModeToggle` 等 |
 | `components/account/` | 帳戶／安全相關面板；`AccountSummaryCard`、`BusinessProfileForm`、`RegionalReceiptSettingsCard`、`ReceiptTemplatePreview` 已將登入摘要、公司主資料、地區單據設定分離 |
@@ -143,7 +143,7 @@ Firestore／資料形狀與 bridge；例如 `cases.ts`（ticket legacy）、`del
 | 區域 | 說明 |
 | --- | --- |
 | 根層各 `*.service.ts` / 模組 | 跨域或尚未下沉之服務（`user`、`staff`、`delete-log`、`ticket`、`sales`、`business-profile`、`regional-receipt-settings`、compat sync 等） |
-| `services/merchant/` | **商家 read-model／catalog／write wrapper** 優先入口（`*-read-model.service.ts`、`*-write.service.ts`、`catalog-service.ts`、`product-service.ts`、`purchase-order-draft.service.ts` 採購草稿 Firestore 等）；`account-settings-read-model.service.ts` / `account-settings-write.service.ts` 已作為 `/settings/account` 的 canonical route-data / write 入口；`invoice-admin-read-model.service.ts` / `invoice-admin-write.service.ts` 已作為 `/settings/account/invoices`、`/settings/account/invoice-tracks`、`/dashboard/receipts*` 的 canonical route-data / write 入口；`checkout-route-data.service.ts` / `checkout-case-selector.service.ts` 已作為 `/dashboard/checkout` 的 canonical route-data / case eligibility 入口；`inventory-write.service.ts` 另 re-export 多倉調貨／倉別 log／IMEI／AI 補貨建議（實作於 `services/inventory/*`、`services/ai/reorder-service`）；**`audit-log-read-model.service.ts`** 讀取 `auditLogs`；customer/activity linkage 與 activity purchase read-model 也優先集中在此層，避免 route/page 直接用名稱比對資料流 |
+| `services/merchant/` | **商家 read-model／catalog／write wrapper** 優先入口（`*-read-model.service.ts`、`*-write.service.ts`、`catalog-service.ts`、`product-service.ts`、`purchase-order-draft.service.ts` 採購草稿 Firestore 等）；`dashboard-read-model.service.ts` 在 cases tab 額外載入 customer lookup 供 `CaseCustomerSelector` 綁定現有客戶；`account-settings-read-model.service.ts` / `account-settings-write.service.ts` 已作為 `/settings/account` 的 canonical route-data / write 入口；`invoice-admin-read-model.service.ts` / `invoice-admin-write.service.ts` 已作為 `/settings/account/invoices`、`/settings/account/invoice-tracks`、`/dashboard/receipts*` 的 canonical route-data / write 入口；`checkout-route-data.service.ts` / `checkout-case-selector.service.ts` 已作為 `/dashboard/checkout` 的 canonical route-data / case eligibility 入口；`inventory-write.service.ts` 另 re-export 多倉調貨／倉別 log／IMEI／AI 補貨建議（實作於 `services/inventory/*`、`services/ai/reorder-service`）；**`audit-log-read-model.service.ts`** 讀取 `auditLogs`；customer/activity linkage 與 activity purchase read-model 也優先集中在此層，避免 route/page 直接用名稱比對資料流 |
 | `invoice-*.service.ts`、`receipt-document.service.ts` | 單據核心流程：settings / tracks / drafts / issue / void / carriers / logs / platform adapter / receipt document persistence |
 | `services/documents/` | 收據 intake、Po 確認／更新（`intake-document`、`save-document`、`confirm-po`、`update-po-draft`） |
 | `services/ocr/`、`services/ai/` | Google Vision OCR、`extract-po-draft`（OpenAI JSON） |
@@ -185,7 +185,7 @@ Firestore／資料形狀與 bridge；例如 `cases.ts`（ticket legacy）、`del
 
 ## 開發時快速對照
 
-1. **改列表／工具列／分頁**：`components/merchant/shell`、`lib/pagination`、`lib/ui/list-display`。
+1. **改列表／工具列／分頁**：`components/merchant/shell`、`lib/pagination`、`lib/ui/list-display`；shared merchant shell links / tabs 預設關閉 prefetch，避免高成本 route-data 被可見導航提前讀取。
 2. **改 Firestore 規則或寫入路徑**：對應 `lib/services`（優先 `merchant/*-write.service.ts`）；若是單據模組則先看 `invoice-*.service.ts` / `receipt-document.service.ts`，並檢查 cache invalidation（若有 warm cache）。
 3. **改展示頁 builder**：`features/showcase/`。
 4. **改員工／刪除紀錄**：`staff.service.ts`、`delete-log.service.ts`、`app/(merchant)/staff/**`、`components/staff/**`。

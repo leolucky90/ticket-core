@@ -9,6 +9,46 @@ import {
 import { getInvoiceDb, resolveInvoiceServiceScope } from "@/lib/services/invoice-service.shared";
 
 const memory: Record<string, ReceiptDocumentRecord[]> = {};
+const READ_QUERY_CACHE_TTL_MS = 20_000;
+const queryCache: Record<string, { touchedAt: number; rows: ReceiptDocumentRecord[] }> = {};
+
+function buildListQueryCacheKey(input: {
+    companyId: string;
+    keyword: string;
+    status: InvoiceStatus | "all";
+    limit: number;
+    issuedAtFrom: string;
+    issuedAtTo: string;
+}): string {
+    return [
+        input.companyId,
+        input.keyword,
+        input.status,
+        String(input.limit),
+        input.issuedAtFrom,
+        input.issuedAtTo,
+    ].join("|");
+}
+
+function hasFreshQueryCache(key: string): boolean {
+    const touchedAt = queryCache[key]?.touchedAt ?? 0;
+    return touchedAt > 0 && Date.now() - touchedAt <= READ_QUERY_CACHE_TTL_MS;
+}
+
+function clearCompanyQueryCache(companyId: string): void {
+    const prefix = `${companyId}|`;
+    for (const key of Object.keys(queryCache)) {
+        if (key.startsWith(prefix)) {
+            delete queryCache[key];
+        }
+    }
+}
+
+function shouldFallbackToBroadDocumentQuery(error: unknown): boolean {
+    const code = typeof error === "object" && error !== null && "code" in error ? String((error as { code?: unknown }).code ?? "") : "";
+    const message = error instanceof Error ? error.message.toLowerCase() : "";
+    return code === "failed-precondition" || message.includes("index");
+}
 
 function listFromMemory(companyId: string): ReceiptDocumentRecord[] {
     return [...(memory[companyId] ?? [])].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
@@ -21,6 +61,7 @@ function upsertMemory(companyId: string, record: ReceiptDocumentRecord): void {
 
 export async function saveReceiptDocument(record: ReceiptDocumentRecord): Promise<ReceiptDocumentRecord> {
     upsertMemory(record.companyId, record);
+    clearCompanyQueryCache(record.companyId);
     const db = await getInvoiceDb();
     if (db) {
         await db.doc(receiptDocumentDocPath(record.companyId, record.id)).set(record, { merge: true });
@@ -55,6 +96,8 @@ export async function listReceiptDocuments(params?: {
     keyword?: string;
     status?: InvoiceStatus | "all";
     limit?: number;
+    issuedAtFrom?: string;
+    issuedAtTo?: string;
 }): Promise<ReceiptDocumentRecord[]> {
     const scope = params?.companyId ? null : await resolveInvoiceServiceScope();
     const companyId = params?.companyId ?? scope?.companyId ?? "";
@@ -63,27 +106,64 @@ export async function listReceiptDocuments(params?: {
     const limit = Math.max(1, Math.min(200, params?.limit ?? 100));
     const keyword = (params?.keyword ?? "").trim().toLowerCase();
     const status = params?.status ?? "all";
+    const issuedAtFrom = (params?.issuedAtFrom ?? "").trim();
+    const issuedAtTo = (params?.issuedAtTo ?? "").trim();
+    const queryCacheKey = buildListQueryCacheKey({
+        companyId,
+        keyword,
+        status,
+        limit,
+        issuedAtFrom,
+        issuedAtTo,
+    });
+
+    if (hasFreshQueryCache(queryCacheKey)) {
+        return [...(queryCache[queryCacheKey]?.rows ?? [])];
+    }
+
     const db = await getInvoiceDb();
-    const rows =
-        db
-            ? (
-                  await db
-                      .collection(receiptDocumentsCollectionPath(companyId))
-                      .orderBy("updatedAt", "desc")
-                      .limit(limit * 2)
-                      .get()
-              ).docs.map((doc) =>
-                  normalizeReceiptDocumentRecord({
-                      id: doc.id,
-                      companyId,
-                      ...(doc.data() as Partial<ReceiptDocumentRecord>),
-                  }),
-              )
-            : listFromMemory(companyId);
+    let rows: ReceiptDocumentRecord[];
+    if (db) {
+        const collection = db.collection(receiptDocumentsCollectionPath(companyId));
+        let snap;
+        if (status !== "all") {
+            try {
+                snap = await collection
+                    .where("status", "==", status)
+                    .where("issuedAt", ">=", issuedAtFrom || "0000-01-01T00:00:00.000Z")
+                    .where("issuedAt", "<", issuedAtTo || "9999-12-31T23:59:59.999Z")
+                    .orderBy("issuedAt", "desc")
+                    .limit(limit * 2 + 40)
+                    .get();
+            } catch (error) {
+                if (!shouldFallbackToBroadDocumentQuery(error)) throw error;
+            }
+        }
+        snap ??= await collection
+            .where("issuedAt", ">=", issuedAtFrom || "0000-01-01T00:00:00.000Z")
+            .where("issuedAt", "<", issuedAtTo || "9999-12-31T23:59:59.999Z")
+            .orderBy("issuedAt", "desc")
+            .limit(limit * 2 + 40)
+            .get();
+        rows = snap.docs.map((doc) =>
+            normalizeReceiptDocumentRecord({
+                id: doc.id,
+                companyId,
+                ...(doc.data() as Partial<ReceiptDocumentRecord>),
+            }),
+        );
+    } else {
+        rows = listFromMemory(companyId);
+    }
 
     memory[companyId] = rows;
 
-    return rows
+    const result = rows
+        .filter((item) => {
+            if (issuedAtFrom && item.issuedAt < issuedAtFrom) return false;
+            if (issuedAtTo && item.issuedAt >= issuedAtTo) return false;
+            return true;
+        })
         .filter((item) => (status === "all" ? true : item.status === status))
         .filter((item) => {
             if (!keyword) return true;
@@ -103,4 +183,11 @@ export async function listReceiptDocuments(params?: {
             return haystack.includes(keyword);
         })
         .slice(0, limit);
+
+    queryCache[queryCacheKey] = {
+        touchedAt: Date.now(),
+        rows: result,
+    };
+
+    return result;
 }
